@@ -1,7 +1,7 @@
 import type { Ruleset } from "./types.js";
 
 /** The classic house rules. Frozen: lobbies spread it, they never mutate it. */
-export const DEFAULT_RULESET: Ruleset = Object.freeze({
+export const DEFAULT_RULESET: Readonly<Ruleset> = Object.freeze({
   targetScore: 10_000,
   entryThreshold: 500,
   finalRound: true,
@@ -29,7 +29,7 @@ export const DEFAULT_RULESET: Ruleset = Object.freeze({
  * Ones, fives and n-of-a-kind only. The smallest ruleset the game supports,
  * and the baseline the probability invariants are measured against.
  */
-export const MINIMAL_RULESET: Ruleset = Object.freeze({
+export const MINIMAL_RULESET: Readonly<Ruleset> = Object.freeze({
   ...DEFAULT_RULESET,
   straight: null,
   threePairs: null,
