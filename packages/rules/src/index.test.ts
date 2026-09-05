@@ -88,8 +88,10 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
 });
 
 describe("enabling a rule never makes a roll bust more often", () => {
-  it("holds across all six-dice rolls", () => {
-    const generous: Ruleset = { ...DEFAULT_RULESET, fourPlusPair: 1500 };
+  const nullableRules = ["straight", "threePairs", "twoTriplets", "fourPlusPair"] as const;
+
+  it.each(nullableRules)("holds across all six-dice rolls when enabling %s", (rule) => {
+    const generous: Ruleset = { ...DEFAULT_RULESET, [rule]: 1500 };
     for (const dice of allRolls(6)) {
       if (hasAnyScore(dice, DEFAULT_RULESET)) {
         expect(hasAnyScore(dice, generous)).toBe(true);
