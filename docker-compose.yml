@@ -5,8 +5,12 @@
 # Then open http://localhost:3001 — in production the server serves the built
 # client itself, so there is no separate web container and no CORS to arrange.
 #
-# Everything in .env is optional. With none of it set the game still runs:
-# guests type a name and play, and nothing is kept between restarts.
+# Nearly everything in .env is optional. With none of it set the game still
+# runs: guests type a name and play, and nothing is kept between restarts.
+#
+# The one exception is SESSION_SECRET. This stack runs with NODE_ENV=production,
+# and the server will refuse to start without one rather than sign cookies with
+# the development default, which is published in this repository.
 
 services:
   mongo:

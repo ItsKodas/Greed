@@ -95,7 +95,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     botDelayMs = null,
     store = new MemoryStore(),
     auth = readAuthConfig(process.env),
-    sessionSecret = process.env["SESSION_SECRET"] ?? "greed-development-secret",
+    sessionSecret = resolveSessionSecret(process.env["SESSION_SECRET"]),
     sessionStore,
     identify,
   } = options;
@@ -774,6 +774,31 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   }
 
   return { http, io, rooms, store, close };
+}
+
+/**
+ * The key that signs session cookies, and therefore the thing standing between
+ * a stranger and someone else's chips.
+ *
+ * There is a fixed development default so a local restart does not sign
+ * everyone out mid-game, but that value is in a public repository, so anyone
+ * could forge a cookie with it. In production a real secret is required and the
+ * server refuses to start without one — failing loudly beats running with a
+ * key the whole internet can read.
+ */
+export function resolveSessionSecret(provided: string | undefined): string {
+  if (provided !== undefined && provided.length > 0) {
+    return provided;
+  }
+  if (process.env["NODE_ENV"] === "production") {
+    throw new Error(
+      "SESSION_SECRET must be set in production. Generate one with " +
+        "`node -e \"console.log(require('node:crypto').randomBytes(32).toString('hex'))\"` " +
+        "and put it in .env — without it, session cookies would be signed with a " +
+        "key published in this repository.",
+    );
+  }
+  return "greed-development-secret";
 }
 
 function requireHost(room: Room, seatId: string, what: string): void {

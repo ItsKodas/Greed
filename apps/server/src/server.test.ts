@@ -4,7 +4,7 @@ import type { Ack, ClientToServer, RoomView, ServerToClient } from "@greed/share
 import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createGreedServer } from "./server.js";
+import { createGreedServer, resolveSessionSecret } from "./server.js";
 import type { GreedServer } from "./server.js";
 
 /**
@@ -491,5 +491,30 @@ describe("chat", () => {
       host.emit("chat:send", { text: `spam ${index}` });
     }
     expect(await complaint).toMatch(/chat/i);
+  });
+});
+
+describe("the session secret", () => {
+  const was = process.env["NODE_ENV"];
+  afterEach(() => {
+    process.env["NODE_ENV"] = was;
+  });
+
+  it("uses a real secret when one is given", () => {
+    process.env["NODE_ENV"] = "production";
+    expect(resolveSessionSecret("a-real-secret")).toBe("a-real-secret");
+  });
+
+  it("falls back to the development default off production", () => {
+    process.env["NODE_ENV"] = "development";
+    expect(resolveSessionSecret(undefined)).toBe("greed-development-secret");
+  });
+
+  it("refuses to start in production without one", () => {
+    process.env["NODE_ENV"] = "production";
+    // The default is published in this repository, so signing production
+    // cookies with it would let anyone forge a session.
+    expect(() => resolveSessionSecret(undefined)).toThrow(/SESSION_SECRET/);
+    expect(() => resolveSessionSecret("")).toThrow(/SESSION_SECRET/);
   });
 });

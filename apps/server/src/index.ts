@@ -61,4 +61,9 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+main().catch((error: unknown) => {
+  // A misconfigured server should say what is wrong in one line, not bury it
+  // in an unhandled-rejection stack.
+  console.error(`greed: ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+});
