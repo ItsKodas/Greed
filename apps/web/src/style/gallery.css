@@ -76,15 +76,15 @@
 }
 
 .specimen__sample--display {
-  font-size: var(--gr-text-2xl);
+  font-size: var(--gr-text-xl);
 }
 
 .specimen__sample--ui {
-  font-size: var(--gr-text-lg);
+  font-size: var(--gr-text-base);
 }
 
 .specimen__sample--data {
-  font-size: var(--gr-text-lg);
+  font-size: var(--gr-text-base);
 }
 
 .specimen__label {
