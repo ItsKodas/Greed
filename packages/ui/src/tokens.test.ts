@@ -1,0 +1,86 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { color, font } from "./tokens.js";
+
+const cssPath = fileURLToPath(new URL("./tokens.css", import.meta.url));
+const css = readFileSync(cssPath, "utf8");
+
+/** Turn `walnutLit` into `--gr-color-walnut-lit`. */
+function cssName(key: string): string {
+  return "--gr-color-" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+}
+
+describe("color", () => {
+  it("carries the twelve approved palette entries", () => {
+    expect(Object.keys(color).sort()).toEqual([
+      "baize",
+      "baizeLit",
+      "bone",
+      "boneDim",
+      "brass",
+      "brassDim",
+      "brassHi",
+      "leather",
+      "oxblood",
+      "walnut",
+      "walnutDeep",
+      "walnutLit",
+    ]);
+  });
+
+  it("uses the exact approved values", () => {
+    expect(color.walnut).toBe("#241811");
+    expect(color.baize).toBe("#16241c");
+    expect(color.brass).toBe("#c08a2e");
+    expect(color.bone).toBe("#e8dcc4");
+    expect(color.oxblood).toBe("#7e2b22");
+  });
+
+  it("is written in lowercase hex throughout", () => {
+    for (const value of Object.values(color)) {
+      expect(value).toMatch(/^#[0-9a-f]{6}$/);
+    }
+  });
+
+  it("is frozen", () => {
+    expect(Object.isFrozen(color)).toBe(true);
+  });
+});
+
+describe("tokens.css", () => {
+  it("defines a custom property for every colour, with the same value", () => {
+    for (const [key, value] of Object.entries(color)) {
+      const property = cssName(key);
+      const match = css.match(new RegExp(`${property}\\s*:\\s*([^;]+);`));
+      expect(match, `${property} missing from tokens.css`).not.toBeNull();
+      expect(match?.[1]?.trim().toLowerCase()).toBe(value);
+    }
+  });
+
+  it("defines no colour property that the token object does not know about", () => {
+    const declared = [...css.matchAll(/--gr-color-([a-z-]+)\s*:/g)].map((m) => m[1]);
+    const known = Object.keys(color).map((key) =>
+      key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()),
+    );
+    for (const name of declared) {
+      expect(known, `--gr-color-${name} has no entry in tokens.ts`).toContain(name);
+    }
+  });
+
+  it("declares the three typefaces", () => {
+    expect(css).toContain("--gr-font-display");
+    expect(css).toContain("--gr-font-ui");
+    expect(css).toContain("--gr-font-data");
+  });
+});
+
+describe("font", () => {
+  it("names the approved families with real fallbacks", () => {
+    expect(font.display).toContain("Bevan");
+    expect(font.display).toContain("serif");
+    expect(font.ui).toContain("IBM Plex Sans");
+    expect(font.data).toContain("IBM Plex Mono");
+    expect(font.data).toContain("monospace");
+  });
+});
