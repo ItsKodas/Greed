@@ -8,7 +8,6 @@ export function encodeSvg(svg: string): string {
   return svg
     .replace(/\s+/g, " ")
     .trim()
-    .replace(/ +(?=<\/)/g, "")
     .replace(/%/g, "%25")
     .replace(/"/g, "'")
     .replace(/</g, "%3C")

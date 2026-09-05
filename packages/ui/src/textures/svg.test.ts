@@ -25,7 +25,7 @@ describe("encodeSvg", () => {
   });
 
   it("collapses whitespace and trims", () => {
-    expect(encodeSvg("  <a>\n\n  <b/>\t</a>  ")).toBe("%3Ca%3E %3Cb/%3E%3C/a%3E");
+    expect(encodeSvg("  <a>\n\n  <b/>\t</a>  ")).toBe("%3Ca%3E %3Cb/%3E %3C/a%3E");
   });
 
   it("encodes braces", () => {
