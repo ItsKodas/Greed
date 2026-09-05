@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { color } from "@greed/ui";
+import { SURFACES, color } from "@greed/ui";
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Gallery } from "./Gallery.js";
@@ -31,7 +31,7 @@ describe("Gallery", () => {
   it("renders a tile for every surface plus the vignette", () => {
     render(<Gallery />);
     const textures = screen.getByRole("region", { name: /texture/i });
-    for (const name of ["wood", "felt", "leather", "brass", "paper", "vignette"]) {
+    for (const name of [...SURFACES, "vignette"]) {
       // getAllByText, not getByText: wood appears twice, once per seed.
       expect(within(textures).getAllByText(name).length).toBeGreaterThan(0);
     }
