@@ -91,7 +91,16 @@ export class MongoStore implements Store {
   }
 
   static async connect(url: string): Promise<MongoStore> {
-    const connection = await mongoose.createConnection(url).asPromise();
+    const connection = await mongoose
+      .createConnection(url, {
+        // Mongoose waits thirty seconds by default before admitting it cannot
+        // find a server. The caller treats an unreachable database as a reason
+        // to run in memory rather than to stop, and a server that will not
+        // answer for half a minute is not available either way — so give up
+        // quickly and get on with dealing the cards.
+        serverSelectionTimeoutMS: 5_000,
+      })
+      .asPromise();
     return new MongoStore(connection);
   }
 
