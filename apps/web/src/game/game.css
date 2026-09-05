@@ -651,3 +651,100 @@
   display: flex;
   gap: var(--gr-space-2);
 }
+
+/* ------------------------------------------------- printed on the felt */
+
+/*
+ * The scoring, screen-printed on the baize the way a real table carries it.
+ * Soft yellow rather than the metal brass, sunk slightly into the cloth with a
+ * dark shadow, and never bright enough to compete with the dice.
+ */
+.card {
+  margin-top: var(--gr-space-5);
+  padding-top: var(--gr-space-4);
+  border-top: 1px solid rgb(217 196 122 / 0.18);
+  color: var(--gr-color-chalk);
+  opacity: 0.82;
+  text-shadow: 0 1px 0 rgb(0 0 0 / 0.45);
+}
+
+.card__grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.card__grid th,
+.card__grid td {
+  padding: 2px var(--gr-space-2);
+  text-align: right;
+  font-weight: 400;
+}
+
+.card__grid thead th {
+  color: rgb(217 196 122 / 0.6);
+  border-bottom: 1px solid rgb(217 196 122 / 0.2);
+}
+
+.card__corner {
+  text-align: left !important;
+}
+
+.card__how {
+  font-family: var(--gr-font-ui);
+  letter-spacing: 0.08em;
+  font-size: 0.66rem;
+}
+
+.card__grid tbody th {
+  text-align: left;
+}
+
+.card__face {
+  display: inline-block;
+  min-width: 1.4em;
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-chalk);
+}
+
+/*
+ * The palette's red and green are sized for a dark ground and go muddy on the
+ * felt, so they are lifted toward the printed yellow rather than replaced by
+ * fresh literals. Still one edit in tokens.css to re-theme.
+ */
+.card__face--red {
+  color: color-mix(in srgb, var(--gr-color-oxblood) 45%, var(--gr-color-chalk));
+}
+
+.card__face--green {
+  color: color-mix(in srgb, var(--gr-color-emerald) 45%, var(--gr-color-chalk));
+}
+
+.card__none {
+  color: rgb(217 196 122 / 0.28);
+}
+
+.card__extras {
+  list-style: none;
+  margin: var(--gr-space-3) 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 2px var(--gr-space-4);
+  font-size: var(--gr-text-xs);
+}
+
+.card__extras li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gr-space-3);
+}
+
+.card__extras b {
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}

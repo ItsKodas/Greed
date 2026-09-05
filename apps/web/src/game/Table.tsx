@@ -1,6 +1,7 @@
 import type { RoomView } from "@greed/shared";
 import { useEffect, useState } from "react";
 import { Die } from "./Die.js";
+import { ScoreCard } from "./ScoreCard.js";
 import { useRollAnimation } from "./useRollAnimation.js";
 import type { RoomActions } from "./useRoom.js";
 
@@ -103,6 +104,7 @@ export function Table({ room, seatId, actions }: TableProps) {
                     : "Click the dice you want to keep."
                 : ""}
           </p>
+          <ScoreCard rules={room.ruleset} />
         </div>
       </div>
 

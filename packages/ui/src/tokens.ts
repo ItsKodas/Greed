@@ -21,6 +21,8 @@ export const color = Object.freeze({
   // The green E of the letter dice. Distinguishing the two E faces is a rule,
   // not decoration: $GREED needs one of each colour.
   emerald: "#1f7a45",
+  // Screen-printed lettering on the felt: a soft yellow, not a metal.
+  chalk: "#d9c47a",
   leather: "#4a3225",
   leatherLit: "#5b3e2c",
   leatherDeep: "#33221a",
