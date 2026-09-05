@@ -9,15 +9,18 @@ export const color = Object.freeze({
   walnutDeep: "#170f0a",
   baize: "#16241c",
   baizeLit: "#1e3227",
+  baizeDeep: "#101a14",
   brass: "#c08a2e",
   brassHi: "#e8c168",
   brassDim: "#7a5a21",
   bone: "#e8dcc4",
   boneLit: "#f3ead6",
   boneDim: "#a2957d",
+  boneDeep: "#cfc1a4",
   oxblood: "#7e2b22",
   leather: "#4a3225",
   leatherLit: "#5b3e2c",
+  leatherDeep: "#33221a",
 });
 
 export type ColorName = keyof typeof color;

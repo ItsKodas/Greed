@@ -49,14 +49,14 @@ describe("wood", () => {
 
 describe("felt", () => {
   it("defaults to the baize palette", () => {
-    expect(felt()).toContain(color.baize);
+    expect(felt()).toContain(color.baizeDeep);
   });
 });
 
 describe("leather", () => {
   it("defaults to the leather palette and mottles radially", () => {
     const value = leather();
-    expect(value).toContain(color.leather);
+    expect(value).toContain(color.leatherDeep);
     expect(value).toContain("radial-gradient");
   });
 });
@@ -71,7 +71,7 @@ describe("brass", () => {
 
 describe("paper", () => {
   it("defaults to the bone palette", () => {
-    expect(paper()).toContain(color.bone);
+    expect(paper()).toContain(color.boneDeep);
   });
 });
 
