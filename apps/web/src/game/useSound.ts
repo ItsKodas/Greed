@@ -4,6 +4,20 @@ import { play, unlock } from "./audio.js";
 import { ROLL_SETTLE_MS } from "./useRollAnimation.js";
 
 /**
+ * One of every face, in a game where that actually pays. The celebration is a
+ * display concern, so it is read off the dice rather than given its own field
+ * in the protocol — but it still checks the ruleset, because a straight is
+ * worth nothing under rules that do not have one.
+ */
+export function isScoringStraight(dice: readonly number[], room: RoomView): boolean {
+  const straight = room.ruleset.straight;
+  if (straight === null || straight <= 0) {
+    return false;
+  }
+  return dice.length === 6 && new Set(dice).size === 6;
+}
+
+/**
  * Turns changes in room state into sound.
  *
  * Everything is derived from comparing the previous state to the new one
@@ -50,6 +64,8 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
       window.setTimeout(() => play("land"), ROLL_SETTLE_MS);
       if (turn.phase === "farkled") {
         window.setTimeout(() => play("farkle"), ROLL_SETTLE_MS + 260);
+      } else if (isScoringStraight(turn.dice, room)) {
+        window.setTimeout(() => play("greed"), ROLL_SETTLE_MS + 60);
       } else if (was !== null && turn.kept > was.kept && turn.dice.length === 6) {
         window.setTimeout(() => play("hotDice"), ROLL_SETTLE_MS + 120);
       }

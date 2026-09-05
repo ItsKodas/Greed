@@ -1,5 +1,6 @@
 import type { ClientToServer, RoomView, ServerToClient } from "@greed/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
 
 const SERVER_URL =
@@ -71,6 +72,7 @@ export interface RoomHook {
 }
 
 export function useRoom(): RoomHook {
+  const navigate = useNavigate();
   const socketRef = useRef<GameSocket | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
   const [seatId, setSeatId] = useState<string | null>(null);
@@ -169,7 +171,10 @@ export function useRoom(): RoomHook {
     socketRef.current?.emit("lobby:leave");
     setRoom(null);
     setSeatId(null);
-  }, []);
+    // Clearing the address too, so leaving does not drop the player back on
+    // the table's own URL — which reads as an invitation to rejoin it.
+    navigate("/");
+  }, [navigate]);
 
   return {
     room,

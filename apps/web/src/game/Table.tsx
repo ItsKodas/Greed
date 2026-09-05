@@ -2,10 +2,15 @@ import type { RoomView } from "@greed/shared";
 import { useEffect, useState } from "react";
 import { Die } from "./Die.js";
 import { ScoreCard } from "./ScoreCard.js";
-import { useRollAnimation } from "./useRollAnimation.js";
+import { ROLL_SETTLE_MS, useRollAnimation } from "./useRollAnimation.js";
+import { isScoringStraight } from "./useSound.js";
 import type { RoomActions } from "./useRoom.js";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+
+function greedLine(skin: string): string {
+  return skin === "letters" ? "$GREED — one of every face." : "A straight — one of every face.";
+}
 
 /** Seconds left on the turn clock, ticking locally off the server's deadline. */
 function useCountdown(endsAt: number | null): number | null {
@@ -41,6 +46,24 @@ export function Table({ room, seatId, actions }: TableProps) {
   const left = useCountdown(over ? null : (turn?.endsAt ?? null));
   const { rolling, faces } = useRollAnimation(turn?.dice ?? [], turn?.rollSeq ?? 0);
 
+  // The rarest thing in the game — 720 of the 46,656 six-dice rolls — so it
+  // gets a moment of its own once the dice have settled.
+  const [celebrating, setCelebrating] = useState(false);
+  const greeded = turn !== null && isScoringStraight(turn.dice, room);
+  const seq = turn?.rollSeq ?? 0;
+  useEffect(() => {
+    if (!greeded) {
+      setCelebrating(false);
+      return;
+    }
+    const begin = window.setTimeout(() => setCelebrating(true), ROLL_SETTLE_MS);
+    const end = window.setTimeout(() => setCelebrating(false), ROLL_SETTLE_MS + 1800);
+    return () => {
+      window.clearTimeout(begin);
+      window.clearTimeout(end);
+    };
+  }, [seq, greeded]);
+
   return (
     <div className="table">
       <div className="table__rail">
@@ -69,7 +92,7 @@ export function Table({ room, seatId, actions }: TableProps) {
       </div>
 
       <div className="table__main">
-        <div className="tray">
+        <div className={`tray${celebrating ? " tray--greed" : ""}`}>
           <div className="tray__stage">
           {turn === null || turn.dice.length === 0 ? (
             <p className="tray__empty">
@@ -86,6 +109,7 @@ export function Table({ room, seatId, actions }: TableProps) {
                   dead={!rolling && turn.dead[index] === true}
                   rolling={rolling}
                   index={index}
+                  celebrating={celebrating}
                   interactive={!rolling && yours && turn.phase === "selecting"}
                   onClick={() => actions.toggle(index)}
                 />
@@ -96,7 +120,9 @@ export function Table({ room, seatId, actions }: TableProps) {
           <p className="tray__note">
             {rolling
               ? "Rolling…"
-              : turn?.phase === "farkled"
+              : celebrating
+                ? greedLine(room.ruleset.skin)
+                : turn?.phase === "farkled"
               ? "Farkle — nothing scores. The turn is lost."
               : yours && turn?.phase === "selecting"
                 ? turn.selectionValid

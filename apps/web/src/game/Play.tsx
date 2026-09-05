@@ -30,11 +30,6 @@ export function Play() {
     }
   }, [room, urlCode, navigate]);
 
-  const leave = () => {
-    actions.leave();
-    navigate("/");
-  };
-
   if (raw.length > 0 && !looksLikeCode) {
     return <p className="not-found">No table with that code.</p>;
   }
@@ -46,7 +41,7 @@ export function Play() {
           GRE<em>E</em>D
         </h1>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
-        {room !== null ? <LeaveButton room={room} onLeave={leave} /> : null}
+        {room !== null ? <LeaveButton room={room} onLeave={actions.leave} /> : null}
         <Volume />
         <span className={`play__link${connected ? " play__link--up" : ""}`}>
           {connected ? "connected" : "offline"}

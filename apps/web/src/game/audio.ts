@@ -14,6 +14,7 @@ export type Cue =
   | "drop"
   | "bank"
   | "farkle"
+  | "greed"
   | "hotDice"
   | "yourTurn"
   | "win";
@@ -262,6 +263,18 @@ export function play(cue: Cue): void {
       tone({ frequency: 220, to: 70, duration: 0.5, type: "sawtooth", gain: 0.14 });
       noise(0.25, 260, 0.2);
       break;
+    case "greed": {
+      // One note per letter, climbing, timed to the dice revealing in turn —
+      // then a bell over the top once the word is complete.
+      const ladder = [392, 494, 587, 659, 784, 988];
+      ladder.forEach((frequency, step) => {
+        tone({ frequency, duration: 0.5, type: "triangle", gain: 0.16, delay: step * 0.11 });
+        tone({ frequency: frequency * 2, duration: 0.3, gain: 0.05, delay: step * 0.11 });
+      });
+      tone({ frequency: 1568, duration: 1.1, gain: 0.09, delay: 0.68 });
+      tone({ frequency: 2350, duration: 0.9, gain: 0.04, delay: 0.7 });
+      break;
+    }
     case "hotDice":
       [523, 659, 784, 1046].forEach((frequency, step) => {
         tone({ frequency, duration: 0.16, type: "triangle", gain: 0.13, delay: step * 0.07 });

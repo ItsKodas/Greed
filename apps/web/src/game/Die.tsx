@@ -76,20 +76,33 @@ interface DieProps {
   dead: boolean;
   /** True while the dice are tumbling and the faces shown are not real yet. */
   rolling: boolean;
-  /** Position in the tray, used to stagger the tumble. */
+  /** Position in the tray, used to stagger the tumble and the reveal. */
   index: number;
+  /** True during the $GREED celebration. */
+  celebrating: boolean;
   /** False for spectators and when it is not your turn. */
   interactive: boolean;
   onClick: () => void;
 }
 
-export function Die({ face, skin, held, dead, rolling, index, interactive, onClick }: DieProps) {
+export function Die({
+  face,
+  skin,
+  held,
+  dead,
+  rolling,
+  index,
+  celebrating,
+  interactive,
+  onClick,
+}: DieProps) {
   const letters = skin === "letters";
   const classes = [
     "die",
     held ? "die--held" : "",
     dead ? "die--dead" : "",
     rolling ? "die--rolling" : "",
+    celebrating ? "die--greed" : "",
   ]
     .filter((name) => name.length > 0)
     .join(" ");
@@ -108,8 +121,12 @@ export function Die({ face, skin, held, dead, rolling, index, interactive, onCli
           ? "Rolling"
           : `Die showing ${shown}${held ? ", set aside" : ""}${dead ? ", cannot score" : ""}`
       }
-      // Each die lands a beat after the one before it.
-      style={rolling ? { animationDelay: `${index * 40}ms` } : undefined}
+      // Each die lands, and later reveals, a beat after the one before it.
+      style={
+        rolling || celebrating
+          ? { animationDelay: `${index * (celebrating ? 110 : 40)}ms` }
+          : undefined
+      }
     >
       {letters ? (
         <span
