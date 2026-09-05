@@ -1652,7 +1652,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
   });
 
   it("never reports an option that scoreSelection disagrees with", () => {
-    for (const dice of rolls.slice(0, 2000)) {
+    for (const dice of rolls.filter((_, index) => index % 24 === 0)) {
       const best = enumerateOptions(dice, DEFAULT_RULESET)[0];
       if (best === undefined) {
         continue;
@@ -1670,7 +1670,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
   });
 
   it("never scores a selection above the best enumerated option", () => {
-    for (const dice of rolls.slice(0, 2000)) {
+    for (const dice of rolls.filter((_, index) => index % 24 === 0)) {
       const options = enumerateOptions(dice, DEFAULT_RULESET);
       const best = options[0];
       if (best === undefined) {
