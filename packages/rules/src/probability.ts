@@ -75,5 +75,5 @@ export function bustProbability(diceRemaining: number, rules: Ruleset): number {
   if (!Number.isInteger(diceRemaining) || diceRemaining < 1 || diceRemaining > 6) {
     throw new RangeError(`diceRemaining must be 1 to 6, got ${diceRemaining}`);
   }
-  return bustProbabilities(rules)[diceRemaining - 1] as number;
+  return bustProbabilities(rules)[diceRemaining - 1];
 }

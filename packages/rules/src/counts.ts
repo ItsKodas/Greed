@@ -77,7 +77,7 @@ export function combinations<T>(items: readonly T[], k: number): T[][] {
       return;
     }
     for (let index = start; index < items.length; index += 1) {
-      chosen.push(items[index] as T);
+      chosen.push(items[index]);
       build(index + 1, chosen);
       chosen.pop();
     }

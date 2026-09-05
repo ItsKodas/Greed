@@ -97,7 +97,7 @@ describe("bustProbabilities", () => {
   it("rises monotonically as dice run out", () => {
     const table = bustProbabilities(DEFAULT_RULESET);
     for (let index = 0; index < 5; index += 1) {
-      expect(table[index]).toBeGreaterThan(table[index + 1] as number);
+      expect(table[index]).toBeGreaterThan(table[index + 1]);
     }
   });
 

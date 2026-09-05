@@ -63,7 +63,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
       }
       const kept: Die[] = [];
       for (let index = 0; index < 6; index += 1) {
-        for (let n = 0; n < (best.counts[index] as number); n += 1) {
+        for (let n = 0; n < best.counts[index]; n += 1) {
           kept.push((index + 1) as Die);
         }
       }
