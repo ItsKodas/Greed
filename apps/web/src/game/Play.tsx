@@ -160,16 +160,45 @@ function Lobby({ room, seatId, actions }: { room: RoomView; seatId: string | nul
                   {seat.name}
                   {seat.id === seatId ? " (you)" : ""}
                 </div>
-                <div className="seat__state">{seat.isHost ? "Host" : "Ready"}</div>
+                <div className="seat__state">
+                  {seat.isBot ? "Bot" : seat.isHost ? "Host" : "Ready"}
+                </div>
               </div>
+              {you?.isHost === true && seat.id !== seatId ? (
+                <button
+                  type="button"
+                  className="seat__drop"
+                  aria-label={`Remove ${seat.name}`}
+                  onClick={() => actions.removeSeat(seat.id)}
+                >
+                  ×
+                </button>
+              ) : null}
             </div>
           ))}
         </div>
 
         {you?.isHost === true ? (
-          <button type="button" className="btn btn--wide" onClick={actions.start}>
-            {solo ? "Practise on your own" : "Deal the first turn"}
-          </button>
+          <>
+            <div className="bots">
+              <span className="bots__label">Add an opponent</span>
+              <div className="bots__row">
+                {(["easy", "normal", "hard"] as const).map((skill) => (
+                  <button
+                    key={skill}
+                    type="button"
+                    className="btn btn--ghost btn--small"
+                    onClick={() => actions.addBot(skill)}
+                  >
+                    {skill}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button type="button" className="btn btn--wide" onClick={actions.start}>
+              {solo ? "Practise on your own" : "Deal the first turn"}
+            </button>
+          </>
         ) : (
           <p className="panel__note">Waiting for the host to start.</p>
         )}

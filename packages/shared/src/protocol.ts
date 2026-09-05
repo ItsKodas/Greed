@@ -5,6 +5,9 @@ export type Phase = "awaiting_roll" | "selecting" | "farkled" | "over";
 
 export type RoomStatus = "lobby" | "playing" | "over";
 
+/** How hard a bot plays. */
+export type BotSkill = "easy" | "normal" | "hard";
+
 export interface SeatView {
   id: string;
   name: string;
@@ -14,6 +17,7 @@ export interface SeatView {
   onBoard: boolean;
   connected: boolean;
   isHost: boolean;
+  isBot: boolean;
 }
 
 export interface TurnView {
@@ -66,6 +70,8 @@ export interface ClientToServer {
   ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
   "lobby:resume": (payload: { seatId: string; code: string }, ack: (result: Ack) => void) => void;
+  "lobby:addBot": (payload: { skill: BotSkill }) => void;
+  "lobby:removeSeat": (payload: { seatId: string }) => void;
   "game:start": () => void;
   "game:roll": () => void;
   "game:toggle": (payload: { index: number }) => void;

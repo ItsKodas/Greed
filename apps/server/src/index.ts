@@ -8,6 +8,9 @@ import type { Die } from "@greed/rules";
 import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
 import type { ClientToServer, ServerToClient } from "@greed/shared";
+import { comboGateKeyFor } from "./gatekey.js";
+import { decide, thinkingTime } from "./bot.js";
+import type { BotSkill } from "./bot.js";
 import { Room, RoomError } from "./room.js";
 
 /**
@@ -31,6 +34,16 @@ const RECONNECT_GRACE_MS = 90 * 1000;
 const rooms = new Map<string, Room>();
 /** One inactivity clock per room, re-armed on every state change. */
 const turnClocks = new Map<string, NodeJS.Timeout>();
+/** One pending bot move per room, so a bot can never queue two at once. */
+const botMoves = new Map<string, NodeJS.Timeout>();
+
+const BOT_NAMES = ["Skint Alice", "Pockets", "Old Ned", "Bess", "Cutter", "Tumble", "Ivy"];
+
+function botName(room: Room): string {
+  const taken = new Set(room.seats.map((seat) => seat.name));
+  const free = BOT_NAMES.find((name) => !taken.has(name));
+  return free ?? `Bot ${room.seats.length + 1}`;
+}
 /** socket.id -> which room and seat it is sitting in. */
 const sockets = new Map<string, { code: string; seatId: string }>();
 
@@ -94,6 +107,12 @@ function armClock(room: Room): void {
   }
 
   const seatId = view.turn.seatId;
+  // No clock on a bot: it moves in a second or two and can never stall.
+  const active = room.activeSeat();
+  if (active?.isBot === true) {
+    room.endsAt = null;
+    return;
+  }
   room.endsAt = Date.now() + seconds * 1000;
   turnClocks.set(
     room.code,
@@ -116,6 +135,93 @@ function broadcast(code: string): void {
   }
   armClock(room);
   io.to(code).emit("room:state", room.view());
+  scheduleBot(room);
+}
+
+/**
+ * Books the active bot's next move, if the active seat is one.
+ *
+ * The bot goes through the very same Room methods a socket handler calls, so
+ * there is no privileged path for it to cheat down and nothing to keep in sync
+ * with the human rules.
+ */
+function scheduleBot(room: Room): void {
+  const pending = botMoves.get(room.code);
+  if (pending !== undefined) {
+    clearTimeout(pending);
+    botMoves.delete(room.code);
+  }
+
+  const seat = room.activeSeat();
+  if (seat === null || !seat.isBot || seat.skill === null) {
+    return;
+  }
+  const view = room.view();
+  if (view.turn === null || view.turn.phase === "farkled" || view.turn.phase === "over") {
+    return; // the farkle pause will move play along
+  }
+
+  const skill = seat.skill;
+  botMoves.set(
+    room.code,
+    setTimeout(() => {
+      botMoves.delete(room.code);
+      const still = rooms.get(room.code);
+      if (still === undefined) {
+        return;
+      }
+      try {
+        playBotTurn(still, seat.id, skill);
+      } catch (error) {
+        console.error("bot move failed", error);
+      }
+      broadcast(room.code);
+    }, thinkingTime(skill)),
+  );
+}
+
+/** One bot action: either the opening roll, or a keep-then-roll-or-bank. */
+function playBotTurn(room: Room, seatId: string, skill: BotSkill): void {
+  const view = room.view();
+  const turn = view.turn;
+  if (turn === null || turn.seatId !== seatId) {
+    return;
+  }
+
+  if (turn.phase === "awaiting_roll") {
+    room.doRoll(seatId);
+    return;
+  }
+  if (turn.phase !== "selecting") {
+    return;
+  }
+
+  const seat = room.seats.find((candidate) => candidate.id === seatId);
+  if (seat === undefined) {
+    return;
+  }
+
+  const decision = decide({
+    dice: turn.dice,
+    kept: room.keptThisTurn,
+    onBoard: seat.onBoard,
+    mustBeat: room.deficitOnFinalTurn(),
+    rules: room.ruleset,
+    gateKey: comboGateKeyFor(room.ruleset),
+    skill,
+  });
+  if (decision === null) {
+    return;
+  }
+
+  for (const index of decision.keep) {
+    room.toggle(seatId, index);
+  }
+  if (decision.action === "bank") {
+    room.bank(seatId);
+  } else {
+    room.doRoll(seatId);
+  }
 }
 
 /** Wraps a handler so RoomError becomes a message instead of a crash. */
@@ -193,6 +299,25 @@ io.on("connection", (socket) => {
     } catch (error) {
       ack({ ok: false, error: error instanceof RoomError ? error.message : "Could not rejoin." });
     }
+  });
+
+  socket.on("lobby:addBot", ({ skill }) => {
+    guard(socket.id, (room, seatId) => {
+      if (seatId !== room.hostId) {
+        throw new RoomError("Only the host can add players.");
+      }
+      const chosen: BotSkill = skill === "easy" || skill === "hard" ? skill : "normal";
+      room.addBot(`bot:${randomInt(1, 1_000_000)}`, botName(room), chosen);
+    });
+  });
+
+  socket.on("lobby:removeSeat", ({ seatId: target }) => {
+    guard(socket.id, (room, seatId) => {
+      if (seatId !== room.hostId) {
+        throw new RoomError("Only the host can remove players.");
+      }
+      room.removeSeat(target);
+    });
   });
 
   socket.on("game:start", () => {

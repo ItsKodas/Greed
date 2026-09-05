@@ -52,6 +52,8 @@ function writeSeat(seat: StoredSeat | null): void {
 export interface RoomActions {
   create: (name: string, ruleset: string) => void;
   join: (name: string, code: string) => void;
+  addBot: (skill: "easy" | "normal" | "hard") => void;
+  removeSeat: (seatId: string) => void;
   start: () => void;
   roll: () => void;
   toggle: (index: number) => void;
@@ -149,6 +151,14 @@ export function useRoom(): RoomHook {
     });
   }, []);
 
+  const addBot = useCallback(
+    (skill: "easy" | "normal" | "hard") => socketRef.current?.emit("lobby:addBot", { skill }),
+    [],
+  );
+  const removeSeat = useCallback(
+    (seatId: string) => socketRef.current?.emit("lobby:removeSeat", { seatId }),
+    [],
+  );
   const start = useCallback(() => socketRef.current?.emit("game:start"), []);
   const roll = useCallback(() => socketRef.current?.emit("game:roll"), []);
   const bank = useCallback(() => socketRef.current?.emit("game:bank"), []);
@@ -169,6 +179,6 @@ export function useRoom(): RoomHook {
     error,
     connected,
     busy,
-    actions: { create, join, start, roll, toggle, bank, leave },
+    actions: { create, join, addBot, removeSeat, start, roll, toggle, bank, leave },
   };
 }

@@ -4,6 +4,7 @@ export {
   MAX_SEATS,
   MIN_SEATS,
   type Ack,
+  type BotSkill,
   type ClientToServer,
   type Phase,
   type RoomStatus,

@@ -500,3 +500,48 @@
   font-size: var(--gr-text-xs);
   color: var(--gr-color-bone-dim);
 }
+
+/* ------------------------------------------------------------- bots */
+
+.bots {
+  margin-bottom: var(--gr-space-3);
+}
+
+.bots__label {
+  display: block;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-brass);
+  margin-bottom: var(--gr-space-2);
+}
+
+.bots__row {
+  display: flex;
+  gap: var(--gr-space-2);
+}
+
+.bots__row .btn {
+  flex: 1;
+  text-transform: capitalize;
+}
+
+.seat__drop {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: transparent;
+  color: var(--gr-color-bone-dim);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.seat__drop:hover {
+  color: var(--gr-color-oxblood);
+  border-color: var(--gr-color-oxblood);
+}
+
+.seat__drop:focus-visible {
+  outline: 2px solid var(--gr-color-brass-hi);
+  outline-offset: 2px;
+}

@@ -8,6 +8,7 @@ import {
 import type { Die, Ruleset } from "@greed/rules";
 import { MAX_SEATS, MIN_SEATS } from "@greed/shared";
 import type { Phase, RoomStatus, RoomView, SeatView, TurnView } from "@greed/shared";
+import type { BotSkill } from "./bot.js";
 
 /** Thrown for anything a client did wrong. The socket layer turns it into room:error. */
 export class RoomError extends Error {}
@@ -21,6 +22,9 @@ export interface Seat {
   score: number;
   onBoard: boolean;
   connected: boolean;
+  /** Bots never disconnect and are driven by the server, not a socket. */
+  isBot: boolean;
+  skill: BotSkill | null;
 }
 
 interface Turn {
@@ -89,10 +93,69 @@ export class Room {
     if (trimmed.length === 0) {
       throw new RoomError("Pick a name first.");
     }
-    const seat: Seat = { id, name: trimmed, score: 0, onBoard: false, connected: true };
+    const seat: Seat = {
+      id,
+      name: trimmed,
+      score: 0,
+      onBoard: false,
+      connected: true,
+      isBot: false,
+      skill: null,
+    };
     this.seats.push(seat);
     this.lastEvent = `${trimmed} sat down`;
     return seat;
+  }
+
+  /** Seats a bot. Host-gated by the socket layer; the engine only checks room. */
+  addBot(id: string, name: string, skill: BotSkill): Seat {
+    if (this.status !== "lobby") {
+      throw new RoomError("That game has already started.");
+    }
+    if (this.seats.length >= MAX_SEATS) {
+      throw new RoomError("That table is full.");
+    }
+    const seat: Seat = {
+      id,
+      name,
+      score: 0,
+      onBoard: false,
+      connected: true,
+      isBot: true,
+      skill,
+    };
+    this.seats.push(seat);
+    this.lastEvent = `${name} sat down`;
+    return seat;
+  }
+
+  /** The seat whose turn it is, or null outside a running game. */
+  activeSeat(): Seat | null {
+    if (this.status !== "playing" || this.turn === null) {
+      return null;
+    }
+    return this.seats[this.turn.seatIndex] ?? null;
+  }
+
+  /** Points already set aside in the turn under way. */
+  get keptThisTurn(): number {
+    return this.turn?.kept ?? 0;
+  }
+
+  /**
+   * How far the active seat is behind the leader when this is its last turn,
+   * or null. A bot that would still lose by banking should keep rolling.
+   */
+  deficitOnFinalTurn(): number | null {
+    if (this.finalRoundTrigger === null) {
+      return null;
+    }
+    const seat = this.activeSeat();
+    if (seat === null) {
+      return null;
+    }
+    const best = Math.max(...this.seats.map((other) => other.score));
+    return Math.max(0, best - seat.score);
   }
 
   /**
@@ -405,6 +468,7 @@ export class Room {
       onBoard: seat.onBoard,
       connected: seat.connected,
       isHost: seat.id === host,
+      isBot: seat.isBot,
     }));
     return {
       code: this.code,
