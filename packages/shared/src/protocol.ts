@@ -76,6 +76,7 @@ export interface ClientToServer {
   ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
   "lobby:resume": (payload: { seatId: string; code: string }, ack: (result: Ack) => void) => void;
+  "lobby:leave": () => void;
   "lobby:addBot": (payload: { skill: BotSkill }) => void;
   "lobby:removeSeat": (payload: { seatId: string }) => void;
   "game:start": () => void;

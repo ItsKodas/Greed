@@ -1,16 +1,43 @@
 import { RULESETS } from "@greed/rules";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
 import { useSound } from "./useSound.js";
 import { Table } from "./Table.js";
 import { useRoom } from "./useRoom.js";
 import type { RoomActions } from "./useRoom.js";
+import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
 import type { RoomView } from "@greed/shared";
 import "./game.css";
 
 export function Play() {
+  const params = useParams();
+  const navigate = useNavigate();
+  const raw = (params["code"] ?? "").toUpperCase();
+  // Only something shaped like a table code gets treated as one; anything else
+  // is just a wrong address.
+  const looksLikeCode =
+    raw.length === CODE_LENGTH && [...raw].every((letter) => CODE_ALPHABET.includes(letter));
+  const urlCode = looksLikeCode ? raw : "";
   const { room, seatId, error, connected, busy, actions } = useRoom();
   useSound(room, seatId);
+
+  // The address bar follows the table, so a link can be shared and a refresh
+  // lands back in the right place.
+  useEffect(() => {
+    if (room !== null && room.code !== urlCode) {
+      navigate(`/${room.code}`, { replace: true });
+    }
+  }, [room, urlCode, navigate]);
+
+  const leave = () => {
+    actions.leave();
+    navigate("/");
+  };
+
+  if (raw.length > 0 && !looksLikeCode) {
+    return <p className="not-found">No table with that code.</p>;
+  }
 
   return (
     <main className="play">
@@ -19,6 +46,7 @@ export function Play() {
           GRE<em>E</em>D
         </h1>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
+        {room !== null ? <LeaveButton room={room} onLeave={leave} /> : null}
         <Volume />
         <span className={`play__link${connected ? " play__link--up" : ""}`}>
           {connected ? "connected" : "offline"}
@@ -31,13 +59,46 @@ export function Play() {
       ) : null}
 
       {room === null ? (
-        <Join actions={actions} busy={busy} connected={connected} />
+        <Join actions={actions} busy={busy} connected={connected} invited={urlCode} />
       ) : room.status === "lobby" ? (
         <Lobby room={room} seatId={seatId} actions={actions} />
       ) : (
         <Table room={room} seatId={seatId ?? ""} actions={actions} />
       )}
     </main>
+  );
+}
+
+/**
+ * Leaving mid-game forfeits the turn, so a running game asks twice. In the
+ * lobby there is nothing to lose, so one click is enough.
+ */
+function LeaveButton({ room, onLeave }: { room: RoomView; onLeave: () => void }) {
+  const [arming, setArming] = useState(false);
+  const risky = room.status === "playing";
+
+  useEffect(() => {
+    if (!arming) {
+      return;
+    }
+    const timer = setTimeout(() => setArming(false), 3000);
+    return () => clearTimeout(timer);
+  }, [arming]);
+
+  return (
+    <button
+      type="button"
+      className={`btn btn--ghost btn--small${arming ? " btn--warn" : ""}`}
+      onClick={() => {
+        if (!risky || arming) {
+          onLeave();
+          return;
+        }
+        setArming(true);
+      }}
+    >
+      {arming ? "Leave — sure?" : "Leave table"}
+    </button>
   );
 }
 
@@ -66,11 +127,59 @@ function Volume() {
   );
 }
 
-function Join({ actions, busy, connected }: { actions: RoomActions; busy: boolean; connected: boolean }) {
+function Join({
+  actions,
+  busy,
+  connected,
+  invited,
+}: {
+  actions: RoomActions;
+  busy: boolean;
+  connected: boolean;
+  /** A table code from the address bar, when someone followed a link. */
+  invited: string;
+}) {
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(invited);
   const [ruleset, setRuleset] = useState(RULESETS[0]?.name ?? "Classic");
   const ready = name.trim().length > 0 && connected && !busy;
+
+  if (invited.length > 0) {
+    return (
+      <div className="join">
+        <p className="join__pitch">
+          You have been invited to table <strong>{invited}</strong>. Put in a name and sit down.
+        </p>
+        <label className="field">
+          <span className="field__label">Your name</span>
+          <input
+            className="field__input"
+            value={name}
+            maxLength={20}
+            placeholder="Ada"
+            autoFocus
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && ready) {
+                actions.join(name, invited);
+              }
+            }}
+          />
+        </label>
+        <div className="join__invited">
+          <button
+            type="button"
+            className="btn"
+            disabled={!ready}
+            onClick={() => actions.join(name, invited)}
+          >
+            Take a seat
+          </button>
+        </div>
+        {!connected ? <p className="join__warn">Waiting for the server…</p> : null}
+      </div>
+    );
+  }
 
   return (
     <div className="join">
@@ -170,9 +279,11 @@ function Lobby({ room, seatId, actions }: { room: RoomView; seatId: string | nul
         <button
           type="button"
           className="btn btn--ghost btn--small"
-          onClick={() => void navigator.clipboard?.writeText(room.code)}
+          onClick={() =>
+            void navigator.clipboard?.writeText(`${window.location.origin}/${room.code}`)
+          }
         >
-          Copy code
+          Copy link
         </button>
       </div>
 

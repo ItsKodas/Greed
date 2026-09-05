@@ -166,11 +166,9 @@ export function useRoom(): RoomHook {
 
   const leave = useCallback(() => {
     writeSeat(null);
+    socketRef.current?.emit("lobby:leave");
     setRoom(null);
     setSeatId(null);
-    // Reconnecting drops the old seat server-side via the disconnect handler.
-    socketRef.current?.disconnect();
-    socketRef.current?.connect();
   }, []);
 
   return {

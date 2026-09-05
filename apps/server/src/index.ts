@@ -87,6 +87,20 @@ const clientDist = join(here, "../../web/dist");
 app.use(express.static(clientDist));
 
 /**
+ * Anything that is not a file and not an API path is a client route — a table
+ * code, say — so hand back the app and let the router sort it out. Without
+ * this a shared link like /6PMKG would 404 on a real deployment, even though
+ * it works in dev where Vite does the same thing for us.
+ */
+app.get(/^(?!\/(?:healthz|socket\.io)).*/, (_request, response) => {
+  response.sendFile(join(clientDist, "index.html"), (error) => {
+    if (error !== undefined && error !== null) {
+      response.status(404).end();
+    }
+  });
+});
+
+/**
  * Re-arms the inactivity clock for a room.
  *
  * This is an inactivity timer, not a hard per-turn limit: any action by the
@@ -148,6 +162,23 @@ function broadcast(code: string): void {
  * through a socket handler — it calls the room directly. Scheduling it there
  * meant a bot that farkled froze the table for good.
  */
+/** Clears a table once nobody has been sitting at it for a while. */
+function reapWhenEmpty(code: string): void {
+  const room = rooms.get(code);
+  if (room === undefined || !room.isEmpty) {
+    return;
+  }
+  setTimeout(() => {
+    const still = rooms.get(code);
+    if (still !== undefined && still.isEmpty) {
+      turnClocks.delete(code);
+      farklePauses.delete(code);
+      botMoves.delete(code);
+      rooms.delete(code);
+    }
+  }, EMPTY_ROOM_TTL_MS);
+}
+
 function scheduleFarklePause(room: Room): void {
   const phase = room.view().turn?.phase;
   if (phase !== "farkled") {
@@ -333,6 +364,29 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("lobby:leave", () => {
+    const seat = sockets.get(socket.id);
+    if (seat === undefined) {
+      return;
+    }
+    sockets.delete(socket.id);
+    void socket.leave(seat.code);
+
+    const room = rooms.get(seat.code);
+    if (room === undefined) {
+      return;
+    }
+    // Deliberate, so the seat goes now rather than being held for a
+    // reconnection that is not coming.
+    if (room.status === "lobby") {
+      room.removeSeat(seat.seatId);
+    } else {
+      room.disconnect(seat.seatId);
+    }
+    broadcast(seat.code);
+    reapWhenEmpty(seat.code);
+  });
+
   socket.on("lobby:addBot", ({ skill }) => {
     guard(socket.id, (room, seatId) => {
       if (seatId !== room.hostId) {
@@ -396,17 +450,7 @@ io.on("connection", (socket) => {
       broadcast(seat.code);
     }, RECONNECT_GRACE_MS);
 
-    if (room.isEmpty) {
-      setTimeout(() => {
-        const still = rooms.get(seat.code);
-        if (still !== undefined && still.isEmpty) {
-          turnClocks.delete(seat.code);
-          farklePauses.delete(seat.code);
-          botMoves.delete(seat.code);
-          rooms.delete(seat.code);
-        }
-      }, EMPTY_ROOM_TTL_MS);
-    }
+    reapWhenEmpty(seat.code);
   });
 });
 

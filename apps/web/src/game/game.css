@@ -627,3 +627,22 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------ leave */
+
+.btn--warn {
+  border-color: var(--gr-color-oxblood);
+  color: var(--gr-color-bone);
+  background: rgb(126 43 34 / 0.3);
+}
+
+.btn--warn:hover:not(:disabled) {
+  border-color: var(--gr-color-oxblood);
+  background: rgb(126 43 34 / 0.45);
+  color: var(--gr-color-bone);
+}
+
+.join__invited {
+  display: flex;
+  gap: var(--gr-space-2);
+}
