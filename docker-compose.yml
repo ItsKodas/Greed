@@ -30,7 +30,11 @@ services:
     ports:
       - "3001:3001"
     environment:
-      # Overridden by anything in .env, which is loaded below.
+      # These win over .env: compose gives `environment` precedence over
+      # `env_file`, which is what this stack needs. Inside the network the
+      # database answers to `mongo`, not to whatever localhost URL a
+      # developer has in .env, and the server serves the client itself so
+      # the origin is its own port. Everything else in .env passes through.
       MONGO_URL: mongodb://mongo:27017/greed
       CLIENT_ORIGIN: http://localhost:3001
       PORT: "3001"

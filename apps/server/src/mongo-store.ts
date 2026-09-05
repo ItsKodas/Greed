@@ -108,7 +108,7 @@ export class MongoStore implements Store {
         // Only on insert, so signing in again never resets a balance.
         $setOnInsert: { chips: STARTING_CHIPS, lastDailyClaim: null, stats: emptyStats() },
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: "after" },
     );
     return toProfile(doc);
   }
@@ -149,7 +149,7 @@ export class MongoStore implements Store {
         $or: [{ lastDailyClaim: null }, { lastDailyClaim: { $lte: cutoff } }],
       },
       { $inc: { chips: DAILY_GRANT }, $set: { lastDailyClaim: new Date() } },
-      { new: true },
+      { returnDocument: "after" },
     );
     if (doc !== null) {
       return { ok: true, granted: DAILY_GRANT, chips: doc.chips };
