@@ -11,16 +11,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --build",
-    "dev": "npm run dev -w @greed/web",
-    "build": "npm run build -w @greed/web"
+    "dev": "concurrently -n server,web -c yellow,cyan \"npm:dev:server\" \"npm:dev:web\"",
+    "build": "npm run build -w @greed/web",
+    "dev:server": "npm run dev -w @greed/server",
+    "dev:web": "npm run dev -w @greed/web"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
+    "@types/express": "^4.17.25",
     "@types/node": "^26.4.1",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
     "jsdom": "^29.1.1",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"

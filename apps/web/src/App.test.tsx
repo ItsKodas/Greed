@@ -13,14 +13,9 @@ function renderAt(path: string) {
 }
 
 describe("App", () => {
-  it("renders the gallery at /style", () => {
+  it("renders the design gallery at /style", () => {
     renderAt("/style");
-    expect(screen.getByRole("heading", { name: /greed/i, level: 1 })).toBeDefined();
-  });
-
-  it("redirects the root path to the gallery", () => {
-    renderAt("/");
-    expect(screen.getByRole("heading", { name: /greed/i, level: 1 })).toBeDefined();
+    expect(screen.getByRole("region", { name: /palette/i })).toBeDefined();
   });
 
   it("shows a not-found message for an unknown path", () => {
