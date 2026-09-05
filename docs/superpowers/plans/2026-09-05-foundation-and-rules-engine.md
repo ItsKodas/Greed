@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-05-greed-multiplayer-design.md`
 
+> **Status: executed.** The whole-branch review after Task 7 hardened several
+> things this plan's code blocks predate — `readonly` types on everything the
+> package returns, a uniform `points > 0` gate on every combination, and a
+> bust-cache key derived from the combo gates rather than raw field values.
+> Git history is authoritative; read these blocks as the plan of record, not
+> as the current source.
+
 ## Global Constraints
 
 - `packages/rules` must have **zero runtime dependencies**. Dev dependencies are fine. The server, browser client and bot all import it.
@@ -1652,7 +1659,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
   });
 
   it("never reports an option that scoreSelection disagrees with", () => {
-    for (const dice of rolls.filter((_, index) => index % 24 === 0)) {
+    for (const dice of rolls) {
       const best = enumerateOptions(dice, DEFAULT_RULESET)[0];
       if (best === undefined) {
         continue;
@@ -1670,7 +1677,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
   });
 
   it("never scores a selection above the best enumerated option", () => {
-    for (const dice of rolls.filter((_, index) => index % 24 === 0)) {
+    for (const dice of rolls) {
       const options = enumerateOptions(dice, DEFAULT_RULESET);
       const best = options[0];
       if (best === undefined) {
