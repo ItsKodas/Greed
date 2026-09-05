@@ -43,6 +43,16 @@ These exact values come from the mockups the client signed off. They are not sug
 | `bone-dim` | `#A2957D` | secondary text |
 | `oxblood` | `#7E2B22` | farkle, bust, loss |
 | `leather` | `#4A3225` | tray rail, seat backs |
+| `bone-lit` | `#F3EAD6` | paper/dice highlight |
+| `leather-lit` | `#5B3E2C` | leather highlight |
+
+> **Amended during execution.** This table and Task 1's code blocks originally
+> listed twelve entries, and Task 3's `leather` and `paper` generators carried
+> `#5b3e2c` and `#f3ead6` as bare hex literals. That broke the system's own
+> rule that the game re-themes from the token file alone. Both values come from
+> the approved mockups, so they were promoted to tokens rather than removed —
+> the palette is fourteen entries, and Task 1's membership assertion says
+> fourteen. Git history is authoritative for the exact code.
 
 Typefaces: **Bevan** (display), **IBM Plex Sans** (UI), **IBM Plex Mono** (codes, scores, odds).
 
