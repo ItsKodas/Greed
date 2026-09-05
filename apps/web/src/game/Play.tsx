@@ -3,10 +3,13 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
 import { useSound } from "./useSound.js";
+import { Chat } from "./Chat.js";
+import { HouseRulesEditor } from "./HouseRulesEditor.js";
 import { Table } from "./Table.js";
 import { useRoom } from "./useRoom.js";
 import type { RoomActions } from "./useRoom.js";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
+import type { ChatMessage } from "@greed/shared";
 import type { RoomView } from "@greed/shared";
 import "./game.css";
 
@@ -19,7 +22,7 @@ export function Play() {
   const looksLikeCode =
     raw.length === CODE_LENGTH && [...raw].every((letter) => CODE_ALPHABET.includes(letter));
   const urlCode = looksLikeCode ? raw : "";
-  const { room, seatId, error, connected, busy, actions } = useRoom();
+  const { room, chat, seatId, error, connected, busy, actions } = useRoom();
   useSound(room, seatId);
 
   // The address bar follows the table, so a link can be shared and a refresh
@@ -56,9 +59,12 @@ export function Play() {
       {room === null ? (
         <Join actions={actions} busy={busy} connected={connected} invited={urlCode} />
       ) : room.status === "lobby" ? (
-        <Lobby room={room} seatId={seatId} actions={actions} />
+        <Lobby room={room} seatId={seatId} actions={actions} chat={chat} />
       ) : (
-        <Table room={room} seatId={seatId ?? ""} actions={actions} />
+        <>
+          <Table room={room} seatId={seatId ?? ""} actions={actions} />
+          <Chat log={chat} seatId={seatId} onSay={actions.say} />
+        </>
       )}
     </main>
   );
@@ -262,7 +268,17 @@ function Join({
   );
 }
 
-function Lobby({ room, seatId, actions }: { room: RoomView; seatId: string | null; actions: RoomActions }) {
+function Lobby({
+  room,
+  seatId,
+  actions,
+  chat,
+}: {
+  room: RoomView;
+  seatId: string | null;
+  actions: RoomActions;
+  chat: ChatMessage[];
+}) {
   const you = room.seats.find((seat) => seat.id === seatId);
   const solo = room.seats.length === 1;
 
@@ -337,6 +353,15 @@ function Lobby({ room, seatId, actions }: { room: RoomView; seatId: string | nul
         ) : (
           <p className="panel__note">Waiting for the host to start.</p>
         )}
+      </div>
+
+      <div className="lobby__wide">
+        <HouseRulesEditor
+          room={room}
+          editable={you?.isHost === true}
+          onChange={actions.setRules}
+        />
+        <Chat log={chat} seatId={seatId} onSay={actions.say} />
       </div>
     </div>
   );

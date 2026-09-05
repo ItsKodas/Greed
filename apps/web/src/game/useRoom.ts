@@ -1,4 +1,4 @@
-import type { ClientToServer, RoomView, ServerToClient } from "@greed/shared";
+import type { ChatMessage, ClientToServer, HouseRules, RoomView, ServerToClient } from "@greed/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
@@ -59,11 +59,14 @@ export interface RoomActions {
   roll: () => void;
   toggle: (index: number) => void;
   bank: () => void;
+  say: (text: string) => void;
+  setRules: (changes: Partial<HouseRules>) => void;
   leave: () => void;
 }
 
 export interface RoomHook {
   room: RoomView | null;
+  chat: ChatMessage[];
   seatId: string | null;
   error: string | null;
   connected: boolean;
@@ -78,6 +81,7 @@ export function useRoom(): RoomHook {
   const [seatId, setSeatId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -102,6 +106,11 @@ export function useRoom(): RoomHook {
     socket.on("disconnect", () => setConnected(false));
     socket.on("room:state", (state) => setRoom(state));
     socket.on("room:error", (message) => setError(message));
+    // Kept client-side rather than in room state: the table broadcasts on
+    // every roll, and shipping the backlog each time would be waste.
+    socket.on("chat:message", (message) => {
+      setChat((log) => [...log.slice(-60), message]);
+    });
     socket.on("connect_error", () => setError("Cannot reach the server. Is it running?"));
 
     return () => {
@@ -161,6 +170,15 @@ export function useRoom(): RoomHook {
     (seatId: string) => socketRef.current?.emit("lobby:removeSeat", { seatId }),
     [],
   );
+  const say = useCallback((text: string) => {
+    if (text.trim().length > 0) {
+      socketRef.current?.emit("chat:send", { text });
+    }
+  }, []);
+  const setRules = useCallback(
+    (changes: Partial<HouseRules>) => socketRef.current?.emit("lobby:setRules", changes),
+    [],
+  );
   const start = useCallback(() => socketRef.current?.emit("game:start"), []);
   const roll = useCallback(() => socketRef.current?.emit("game:roll"), []);
   const bank = useCallback(() => socketRef.current?.emit("game:bank"), []);
@@ -171,6 +189,7 @@ export function useRoom(): RoomHook {
     socketRef.current?.emit("lobby:leave");
     setRoom(null);
     setSeatId(null);
+    setChat([]);
     // Clearing the address too, so leaving does not drop the player back on
     // the table's own URL — which reads as an invitation to rejoin it.
     navigate("/");
@@ -178,10 +197,11 @@ export function useRoom(): RoomHook {
 
   return {
     room,
+    chat,
     seatId,
     error,
     connected,
     busy,
-    actions: { create, join, addBot, removeSeat, start, roll, toggle, bank, leave },
+    actions: { create, join, addBot, removeSeat, setRules, say, start, roll, toggle, bank, leave },
   };
 }
