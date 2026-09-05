@@ -18,6 +18,9 @@ export const color = Object.freeze({
   boneDim: "#a2957d",
   boneDeep: "#cfc1a4",
   oxblood: "#7e2b22",
+  // The green E of the letter dice. Distinguishing the two E faces is a rule,
+  // not decoration: $GREED needs one of each colour.
+  emerald: "#1f7a45",
   leather: "#4a3225",
   leatherLit: "#5b3e2c",
   leatherDeep: "#33221a",

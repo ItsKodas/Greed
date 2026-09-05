@@ -60,6 +60,20 @@ fixed order — with two-triplets enabled, `1,1,1,5,5,5` is worth 2,500 as two
 triplets, not 1,500 as two triples, and no fixed ordering gets every configuration
 right.
 
+### The letter edition
+
+The host can instead pick the retail version, whose faces read **`$ G R E E D`**
+with the two E dice in different colours. `D` scores 100 alone and 1,000 for four
+of a kind; `G` scores 50; the triples run 600 / 500 / 400 / 300 / 300 down the
+other faces; six of a kind is 5,000, and so is the target.
+
+Scoring is a per-face table — for each face, what N of that face is worth — so the
+colour rules need no special handling at all. A die is one of six *distinct* faces,
+which makes `$GREED` simply the straight (one of every face, hence one E of each
+colour), and an of-a-kind already requires the same face, which is the same thing
+as requiring the E's to match. See
+[docs/reference/letter-dice-edition.md](docs/reference/letter-dice-edition.md).
+
 ## Layout
 
 ```

@@ -12,7 +12,7 @@ function cssName(key: string): string {
 }
 
 describe("color", () => {
-  it("carries the seventeen approved palette entries", () => {
+  it("carries the approved palette entries", () => {
     expect(Object.keys(color).sort()).toEqual([
       "baize",
       "baizeDeep",
@@ -24,6 +24,7 @@ describe("color", () => {
       "brass",
       "brassDim",
       "brassHi",
+      "emerald",
       "leather",
       "leatherDeep",
       "leatherLit",
@@ -108,6 +109,7 @@ describe("tokens.css", () => {
         "--gr-color-brass",
         "--gr-color-brass-dim",
         "--gr-color-brass-hi",
+        "--gr-color-emerald",
         "--gr-color-leather",
         "--gr-color-leather-deep",
         "--gr-color-leather-lit",

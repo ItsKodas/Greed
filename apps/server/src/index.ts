@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import express from "express";
 import { Server } from "socket.io";
 import type { Die } from "@greed/rules";
+import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
 import type { ClientToServer, ServerToClient } from "@greed/shared";
 import { Room, RoomError } from "./room.js";
@@ -99,10 +100,11 @@ function guard(socketId: string, run: (room: Room, seatId: string) => void): voi
 }
 
 io.on("connection", (socket) => {
-  socket.on("lobby:create", ({ name }, ack) => {
+  socket.on("lobby:create", ({ name, ruleset }, ack) => {
     try {
+      const chosen = RULESETS.find((candidate) => candidate.name === ruleset) ?? DEFAULT_RULESET;
       const code = makeCode();
-      const room = new Room(code, rollDice);
+      const room = new Room(code, rollDice, chosen);
       rooms.set(code, room);
       room.join(socket.id, name);
       sockets.set(socket.id, { code, seatId: socket.id });

@@ -9,7 +9,7 @@ const SERVER_URL =
 type GameSocket = Socket<ServerToClient, ClientToServer>;
 
 export interface RoomActions {
-  create: (name: string) => void;
+  create: (name: string, ruleset: string) => void;
   join: (name: string, code: string) => void;
   start: () => void;
   roll: () => void;
@@ -60,13 +60,13 @@ export function useRoom(): RoomHook {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const create = useCallback((name: string) => {
+  const create = useCallback((name: string, ruleset: string) => {
     const socket = socketRef.current;
     if (socket === null) {
       return;
     }
     setBusy(true);
-    socket.emit("lobby:create", { name }, (result) => {
+    socket.emit("lobby:create", { name, ruleset }, (result) => {
       setBusy(false);
       if (result.ok) {
         setSeatId(result.seatId);

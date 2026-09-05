@@ -59,6 +59,7 @@ export function Table({ room, seatId, actions }: TableProps) {
                 <Die
                   key={index}
                   face={face}
+                  skin={room.ruleset.skin}
                   held={turn.held[index] === true}
                   dead={turn.dead[index] === true}
                   interactive={yours && turn.phase === "selecting"}
@@ -133,8 +134,8 @@ export function Table({ room, seatId, actions }: TableProps) {
             <b>{fmt(room.ruleset.targetScore)}</b>
           </div>
           <div className="stat">
-            <span>Table</span>
-            <b>{room.code}</b>
+            <span>Rules</span>
+            <b>{room.ruleset.name}</b>
           </div>
         </div>
       </div>

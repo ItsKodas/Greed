@@ -1,4 +1,4 @@
-export { DEFAULT_RULESET, MINIMAL_RULESET } from "./rulesets.js";
+export { DEFAULT_RULESET, LETTER_RULESET, MINIMAL_RULESET, RULESETS } from "./rulesets.js";
 export { scoreSelection } from "./score.js";
 export { enumerateOptions } from "./enumerate.js";
 export {
@@ -13,9 +13,11 @@ export type {
   ComboKind,
   Counts,
   Die,
+  DiceSkin,
+  FaceScores,
   FarklePenalty,
-  NOfAKindMode,
   Option,
+  ReadonlyCounts,
   Ruleset,
   ScoreResult,
 } from "./types.js";

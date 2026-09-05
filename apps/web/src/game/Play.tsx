@@ -1,3 +1,4 @@
+import { RULESETS } from "@greed/rules";
 import { useState } from "react";
 import { Table } from "./Table.js";
 import { useRoom } from "./useRoom.js";
@@ -39,6 +40,7 @@ export function Play() {
 function Join({ actions, busy, connected }: { actions: RoomActions; busy: boolean; connected: boolean }) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [ruleset, setRuleset] = useState(RULESETS[0]?.name ?? "Classic");
   const ready = name.trim().length > 0 && connected && !busy;
 
   return (
@@ -86,10 +88,37 @@ function Join({ actions, busy, connected }: { actions: RoomActions; busy: boolea
 
         <div className="panel">
           <p className="panel__label">Open your own</p>
+
+          <div className="variants" role="radiogroup" aria-label="Which dice">
+            {RULESETS.map((option) => (
+              <button
+                key={option.name}
+                type="button"
+                role="radio"
+                aria-checked={option.name === ruleset}
+                className={`variant${option.name === ruleset ? " variant--on" : ""}`}
+                onClick={() => setRuleset(option.name)}
+              >
+                <span className="variant__name">{option.name}</span>
+                <span className="variant__note">
+                  {option.skin === "letters"
+                    ? "$ G R E E D faces. First to 5,000."
+                    : "Ordinary pips. First to 10,000."}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <p className="panel__note">
-            You get a five-character code to share. Up to eight players, or start alone to practise. First to 10,000 wins.
+            You get a five-character code to share. Up to eight players, or start alone to
+            practise.
           </p>
-          <button type="button" className="btn btn--ghost btn--wide" disabled={!ready} onClick={() => actions.create(name)}>
+          <button
+            type="button"
+            className="btn btn--ghost btn--wide"
+            disabled={!ready}
+            onClick={() => actions.create(name, ruleset)}
+          >
             Open a table
           </button>
         </div>

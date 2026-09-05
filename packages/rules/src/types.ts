@@ -1,4 +1,4 @@
-/** A single die face. */
+/** A single die face, by index. What it *looks* like is the skin's business. */
 export type Die = 1 | 2 | 3 | 4 | 5 | 6;
 
 /**
@@ -7,20 +7,18 @@ export type Die = 1 | 2 | 3 | 4 | 5 | 6;
  */
 export type Counts = [number, number, number, number, number, number];
 
-/**
- * A count vector as handed back to a caller. Internal working vectors stay
- * mutable `Counts`; anything returned from the public surface uses this so
- * a caller cannot corrupt state another result still references.
- */
+/** Read-only view of a count vector, for values handed back to callers. */
 export type ReadonlyCounts = readonly [number, number, number, number, number, number];
 
+/**
+ * What N of one face is worth. Index 0 is a single die, index 5 is all six.
+ * Zero means "no combination" — those dice cannot be set aside as a group,
+ * though they may still score individually if index 0 is non-zero.
+ */
+export type FaceScores = readonly [number, number, number, number, number, number];
+
 export type ComboKind =
-  | "single-one"
-  | "single-five"
-  | "triple"
-  | "four-kind"
-  | "five-kind"
-  | "six-kind"
+  | "of-a-kind"
   | "straight"
   | "three-pairs"
   | "two-triplets"
@@ -31,6 +29,8 @@ export interface Combo {
   readonly kind: ComboKind;
   /** The face this combo is built from, or null when it spans faces. */
   readonly face: Die | null;
+  /** How many dice it consumes. */
+  readonly size: number;
   readonly points: number;
   readonly counts: ReadonlyCounts;
 }
@@ -51,34 +51,46 @@ export interface Option {
   readonly breakdown: readonly Combo[];
 }
 
-export type NOfAKindMode = "double" | "flat";
-
 export interface FarklePenalty {
-  consecutive: number;
-  points: number;
+  readonly consecutive: number;
+  readonly points: number;
 }
 
+/** How the faces are drawn. Presentation only; scoring never reads this. */
+export type DiceSkin = "pips" | "letters";
+
 export interface Ruleset {
-  targetScore: number;
-  entryThreshold: number;
-  finalRound: boolean;
-  turnTimerSeconds: number | null;
+  /** Shown in the lobby, e.g. "Classic" or "Letter dice". */
+  readonly name: string;
+  readonly skin: DiceSkin;
 
-  singleOne: number;
-  singleFive: number;
-  tripleOne: number;
-  /** Three of a kind of face N scores N * this, except face 1 (see tripleOne). */
-  tripleMultiplier: number;
+  readonly targetScore: number;
+  readonly entryThreshold: number;
+  readonly finalRound: boolean;
+  readonly turnTimerSeconds: number | null;
 
-  nOfAKind: NOfAKindMode;
-  flatFour: number;
-  flatFive: number;
-  flatSix: number;
+  /**
+   * Per face, indexed 0..5 for faces 1..6: what N of that face scores.
+   *
+   * This replaces the old singleOne/singleFive/tripleMultiplier scheme, which
+   * could not express the letter edition — its two E faces must both score 300
+   * as triples while being genuinely different faces, and no `face x multiplier`
+   * formula allows that.
+   */
+  readonly faces: readonly [
+    FaceScores,
+    FaceScores,
+    FaceScores,
+    FaceScores,
+    FaceScores,
+    FaceScores,
+  ];
 
-  straight: number | null;
-  threePairs: number | null;
-  twoTriplets: number | null;
-  fourPlusPair: number | null;
+  /** One of every face. In the letter edition this is `$GREED`. */
+  readonly straight: number | null;
+  readonly threePairs: number | null;
+  readonly twoTriplets: number | null;
+  readonly fourPlusPair: number | null;
 
-  farklePenalty: FarklePenalty | null;
+  readonly farklePenalty: FarklePenalty | null;
 }

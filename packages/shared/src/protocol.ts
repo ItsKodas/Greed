@@ -54,7 +54,10 @@ export type Ack =
   | { ok: false; error: string };
 
 export interface ClientToServer {
-  "lobby:create": (payload: { name: string }, ack: (result: Ack) => void) => void;
+  "lobby:create": (
+    payload: { name: string; ruleset?: string },
+    ack: (result: Ack) => void,
+  ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
   "lobby:resume": (payload: { seatId: string; code: string }, ack: (result: Ack) => void) => void;
   "game:start": () => void;

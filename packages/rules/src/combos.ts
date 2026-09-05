@@ -1,50 +1,21 @@
 import { combinations, contains, emptyCounts, facesWithAtLeast } from "./counts.js";
-import type { Combo, ComboKind, Counts, Die, Ruleset } from "./types.js";
+import type { Combo, Counts, Die, ReadonlyCounts, Ruleset } from "./types.js";
 
-const STRAIGHT: Counts = [1, 1, 1, 1, 1, 1];
+const STRAIGHT: ReadonlyCounts = Object.freeze([1, 1, 1, 1, 1, 1] as const);
 
-function singleCombo(face: 1 | 5, points: number): Combo {
+function ofAKind(face: Die, size: number, points: number): Combo {
   const counts = emptyCounts();
-  counts[face - 1] = 1;
-  return {
-    kind: face === 1 ? "single-one" : "single-five",
-    face,
-    points,
-    counts,
-  };
+  counts[face - 1] = size;
+  return Object.freeze({ kind: "of-a-kind", face, size, points, counts });
 }
 
-function nOfAKindPoints(face: Die, n: number, rules: Ruleset): number {
-  const triple = face === 1 ? rules.tripleOne : face * rules.tripleMultiplier;
-  if (n === 3) {
-    return triple;
-  }
-  if (rules.nOfAKind === "flat") {
-    if (n === 4) return rules.flatFour;
-    if (n === 5) return rules.flatFive;
-    return rules.flatSix;
-  }
-  if (n === 4) return triple * 2;
-  if (n === 5) return triple * 4;
-  return triple * 8;
-}
-
-function nOfAKindKind(n: number): ComboKind {
-  if (n === 3) return "triple";
-  if (n === 4) return "four-kind";
-  if (n === 5) return "five-kind";
-  return "six-kind";
-}
-
-function nOfAKindCombo(face: Die, n: number, rules: Ruleset): Combo {
-  const counts = emptyCounts();
-  counts[face - 1] = n;
-  return {
-    kind: nOfAKindKind(n),
-    face,
-    points: nOfAKindPoints(face, n, rules),
-    counts,
-  };
+function spanning(
+  kind: "straight" | "three-pairs" | "two-triplets" | "four-plus-pair",
+  counts: Counts,
+  points: number,
+): Combo {
+  const size = counts.reduce((total, n) => total + n, 0);
+  return Object.freeze({ kind, face: null, size, points, counts });
 }
 
 /**
@@ -57,19 +28,17 @@ function nOfAKindCombo(face: Die, n: number, rules: Ruleset): Combo {
 export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
   const combos: Combo[] = [];
 
-  if (rules.singleOne > 0 && counts[0] >= 1) {
-    combos.push(singleCombo(1, rules.singleOne));
-  }
-  if (rules.singleFive > 0 && counts[4] >= 1) {
-    combos.push(singleCombo(5, rules.singleFive));
-  }
-
+  // Of-a-kind, straight from the per-face table. A zero means that many of
+  // that face is not a combination — three D in the letter edition, say, which
+  // instead scores as three separate singles.
   for (let index = 0; index < 6; index += 1) {
     const face = (index + 1) as Die;
-    for (let n = 3; n <= counts[index]; n += 1) {
-      const combo = nOfAKindCombo(face, n, rules);
-      if (combo.points > 0) {
-        combos.push(combo);
+    const scores = rules.faces[index];
+    const available = counts[index];
+    for (let size = 1; size <= available; size += 1) {
+      const points = scores[size - 1] ?? 0;
+      if (points > 0) {
+        combos.push(ofAKind(face, size, points));
       }
     }
   }
@@ -77,21 +46,19 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
   const { straight, threePairs, twoTriplets, fourPlusPair } = rules;
 
   if (straight !== null && straight > 0 && contains(counts, STRAIGHT)) {
-    combos.push({ kind: "straight", face: null, points: straight, counts: [...STRAIGHT] });
+    combos.push(spanning("straight", [1, 1, 1, 1, 1, 1], straight));
   }
 
   if (threePairs !== null && threePairs > 0) {
     // Exactly three distinct faces showing exactly two each. A face showing
-    // four or more is not two pairs; that is what fourPlusPair is for. At six
-    // dice this filter is defensive and unreachable: three faces at >=4 would
-    // need at least 4+2+2 = 8 dice, so it never actually excludes anything.
+    // four or more is not two pairs; that is what fourPlusPair is for.
     const paired = facesWithAtLeast(counts, 2).filter((face) => counts[face - 1] < 4);
     for (const trio of combinations(paired, 3)) {
       const comboCounts = emptyCounts();
       for (const face of trio) {
         comboCounts[face - 1] = 2;
       }
-      combos.push({ kind: "three-pairs", face: null, points: threePairs, counts: comboCounts });
+      combos.push(spanning("three-pairs", comboCounts, threePairs));
     }
   }
 
@@ -102,7 +69,7 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
       for (const face of pair) {
         comboCounts[face - 1] = 3;
       }
-      combos.push({ kind: "two-triplets", face: null, points: twoTriplets, counts: comboCounts });
+      combos.push(spanning("two-triplets", comboCounts, twoTriplets));
     }
   }
 
@@ -115,12 +82,7 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
         const comboCounts = emptyCounts();
         comboCounts[quad - 1] = 4;
         comboCounts[pair - 1] = 2;
-        combos.push({
-          kind: "four-plus-pair",
-          face: null,
-          points: fourPlusPair,
-          counts: comboCounts,
-        });
+        combos.push(spanning("four-plus-pair", comboCounts, fourPlusPair));
       }
     }
   }
@@ -129,29 +91,18 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
 }
 
 /**
- * The cache key `bustProbabilities` uses to memoize its bust table.
+ * A key covering exactly what decides whether a roll scores at all.
  *
- * Whether a roll busts depends only on which combo types can ever fire, not
- * on their point values — so this mirrors exactly the gates above (each
- * `> 0` / `!== null` check that guards a push) rather than joining the raw
- * ruleset fields. Two rulesets whose gates agree produce bit-identical bust
- * tables, so they must collide on this key; if a gate above changes, update
- * this function alongside it or the two will silently drift apart.
+ * Bust chance depends only on which combinations *can* fire, not on what they
+ * pay, so two rulesets differing only in point values share one table. Lives
+ * here, beside the gates it mirrors, so the two cannot drift apart.
  */
 export function comboGateKey(rules: Ruleset): string {
-  const flat = rules.nOfAKind === "flat";
+  const faceGates = rules.faces
+    .map((scores) => scores.map((points) => (points > 0 ? "1" : "0")).join(""))
+    .join(",");
   return [
-    rules.singleOne > 0,
-    rules.singleFive > 0,
-    rules.tripleOne > 0,
-    rules.tripleMultiplier > 0,
-    rules.nOfAKind,
-    // In "double" mode these follow from the triple gates above, so they
-    // carry no extra information and are held constant to avoid splitting
-    // otherwise-identical tables.
-    flat && rules.flatFour > 0,
-    flat && rules.flatFive > 0,
-    flat && rules.flatSix > 0,
+    faceGates,
     rules.straight !== null && rules.straight > 0,
     rules.threePairs !== null && rules.threePairs > 0,
     rules.twoTriplets !== null && rules.twoTriplets > 0,

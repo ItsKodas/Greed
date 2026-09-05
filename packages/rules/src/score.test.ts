@@ -24,7 +24,18 @@ describe("validity", () => {
 
   it("rejects a triple worth zero points instead of scoring it at zero", () => {
     // Face 2 has no single-die score, so this isolates the n-of-a-kind gate.
-    const zeroed: Ruleset = { ...DEFAULT_RULESET, tripleMultiplier: 0 };
+    // Strip every of-a-kind value, leaving only the singles on 1 and 5.
+    const zeroed: Ruleset = {
+      ...DEFAULT_RULESET,
+      faces: [
+        [100, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [50, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+      ],
+    };
     const result = scoreSelection([2, 2, 2], zeroed);
     expect(result.valid).toBe(false);
     expect(result.points).toBe(0);
@@ -94,7 +105,7 @@ describe("breakdown", () => {
     const result = scoreSelection([1, 1, 1, 5], DEFAULT_RULESET);
     expect(result.points).toBe(1050);
     const kinds = result.breakdown.map((combo) => combo.kind).sort();
-    expect(kinds).toEqual(["single-five", "triple"]);
+    expect(kinds).toEqual(["of-a-kind", "of-a-kind"]);
   });
 
   it("produces a breakdown consuming exactly the selected dice", () => {

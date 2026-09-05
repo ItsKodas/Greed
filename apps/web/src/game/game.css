@@ -433,3 +433,70 @@
     transition: none;
   }
 }
+
+/* ------------------------------------------------------- letter dice */
+
+.die__letter {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  place-self: center;
+  font-family: var(--gr-font-display);
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--gr-color-walnut);
+}
+
+/*
+ * The green E. Not decoration: $GREED needs one E of each colour, and an
+ * of-a-kind needs them to match, so the two faces must never look alike.
+ */
+.die__letter--green {
+  color: var(--gr-color-emerald);
+}
+
+/* ---------------------------------------------------- variant picker */
+
+.variants {
+  display: grid;
+  gap: var(--gr-space-2);
+  margin-bottom: var(--gr-space-3);
+}
+
+.variant {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--gr-space-2) var(--gr-space-3);
+  border-radius: var(--gr-radius-sm);
+  background: rgb(0 0 0 / 0.28);
+  border: var(--gr-edge-soft);
+  color: var(--gr-color-bone);
+  font-family: var(--gr-font-ui);
+  cursor: pointer;
+}
+
+.variant:hover {
+  border-color: var(--gr-color-brass-dim);
+}
+
+.variant--on {
+  border-color: var(--gr-color-brass);
+  background: rgb(192 138 46 / 0.13);
+}
+
+.variant:focus-visible {
+  outline: 2px solid var(--gr-color-brass-hi);
+  outline-offset: 2px;
+}
+
+.variant__name {
+  display: block;
+  font-size: var(--gr-text-sm);
+  font-weight: 500;
+}
+
+.variant__note {
+  display: block;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-bone-dim);
+}

@@ -36,7 +36,18 @@ describe("hasAnyScore", () => {
 
   it("is false for a triple worth zero points, rather than a zero-point score", () => {
     // Face 2 has no single-die score, so this isolates the n-of-a-kind gate.
-    const zeroed: Ruleset = { ...DEFAULT_RULESET, tripleMultiplier: 0 };
+    // Strip every of-a-kind value, leaving only the singles on 1 and 5.
+    const zeroed: Ruleset = {
+      ...DEFAULT_RULESET,
+      faces: [
+        [100, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [50, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+      ],
+    };
     expect(hasAnyScore([2, 2, 2], zeroed)).toBe(false);
   });
 });
@@ -118,10 +129,21 @@ describe("bustProbabilities", () => {
   });
 
   it("ignores a point-value change that does not cross zero when caching", () => {
-    // tripleMultiplier 100 vs 101 gates identically (both > 0), so the two
+    // A triple worth 200 vs 201 gates identically (both > 0), so the two
     // rulesets must share one bust table even though the raw field differs.
     const first = bustProbabilities(DEFAULT_RULESET);
-    const second = bustProbabilities({ ...DEFAULT_RULESET, tripleMultiplier: 101 });
+    const nudged: Ruleset = {
+      ...DEFAULT_RULESET,
+      faces: [
+        DEFAULT_RULESET.faces[0],
+        [0, 0, 201, 402, 804, 1608],
+        DEFAULT_RULESET.faces[2],
+        DEFAULT_RULESET.faces[3],
+        DEFAULT_RULESET.faces[4],
+        DEFAULT_RULESET.faces[5],
+      ],
+    };
+    const second = bustProbabilities(nudged);
     expect(second).toBe(first);
   });
 
