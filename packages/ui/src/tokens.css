@@ -1,0 +1,59 @@
+/*
+ * The single source of truth for colour. tokens.ts mirrors this file and a
+ * test fails if the two disagree — never change one without the other.
+ *
+ * Deliberately one theme. The game is a dim back room; there is no light
+ * palette by design, not by omission.
+ */
+:root {
+  --gr-color-walnut: #241811;
+  --gr-color-walnut-lit: #3a281c;
+  --gr-color-walnut-deep: #170f0a;
+  --gr-color-baize: #16241c;
+  --gr-color-baize-lit: #1e3227;
+  --gr-color-baize-deep: #101a14;
+  --gr-color-brass: #c08a2e;
+  --gr-color-brass-hi: #e8c168;
+  --gr-color-brass-dim: #7a5a21;
+  --gr-color-bone: #e8dcc4;
+  --gr-color-bone-lit: #f3ead6;
+  --gr-color-bone-dim: #a2957d;
+  --gr-color-bone-deep: #cfc1a4;
+  --gr-color-oxblood: #7e2b22;
+  --gr-color-leather: #4a3225;
+  --gr-color-leather-lit: #5b3e2c;
+  --gr-color-leather-deep: #33221a;
+
+  --gr-font-display: "Bevan", Georgia, serif;
+  --gr-font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --gr-font-data: "IBM Plex Mono", ui-monospace, monospace;
+
+  --gr-text-xs: 0.74rem;
+  --gr-text-sm: 0.86rem;
+  --gr-text-base: 0.95rem;
+  --gr-text-lg: 1.14rem;
+  --gr-text-xl: 1.5rem;
+  --gr-text-2xl: 1.9rem;
+  --gr-text-3xl: 2.7rem;
+
+  --gr-space-1: 4px;
+  --gr-space-2: 8px;
+  --gr-space-3: 12px;
+  --gr-space-4: 16px;
+  --gr-space-5: 22px;
+  --gr-space-6: 30px;
+  --gr-space-7: 44px;
+  --gr-space-8: 64px;
+
+  --gr-radius-sm: 2px;
+  --gr-radius-md: 4px;
+  --gr-radius-die: 9px;
+
+  --gr-edge-hair: 1px solid color-mix(in srgb, var(--gr-color-brass) 28%, transparent);
+  --gr-edge-soft: 1px solid color-mix(in srgb, var(--gr-color-bone) 14%, transparent);
+  --gr-edge-hard: 1px solid rgb(0 0 0 / 0.5);
+
+  --gr-lift-low: 0 2px 6px rgb(0 0 0 / 0.5);
+  --gr-lift-high: 0 24px 60px -18px rgb(0 0 0 / 0.85);
+  --gr-well: inset 0 3px 18px rgb(0 0 0 / 0.7);
+}
