@@ -7,24 +7,32 @@ Play chips only. No real-money wagering, no purchase path.
 
 ## Status
 
-Under construction. What works today:
+**Playable.** Open a table, share the code, play.
 
 | | |
 |---|---|
 | **Rules engine** | Complete. 111 tests. |
 | **Design system** | Complete. Tokens + procedural textures + a live gallery. |
-| Server | Not started |
-| Client | Not started |
-| Discord login, chips | Not started |
+| **Server** | Rooms, turns, server-authoritative dice. 29 tests. |
+| **Client** | Join, lobby and table screens. |
+| Discord login, chips, persistence | Not started |
 | Bot opponent | Not started |
+| Sound | Not started |
 
 ```bash
 npm install
-npm test        # 198 tests
-npm run dev     # design-system gallery at /style
+npm run dev
 ```
 
-There is no playable game yet.
+That starts the game server on `:3001` and the client on `:5173`. Open
+<http://localhost:5173>, put in a name, and open a table — then send the
+five-character code to whoever you want to play against. Two to eight players.
+
+`npm run dev` also serves the design-system gallery at `/style`, and `npm test`
+runs all 226 tests.
+
+Games live in memory, so restarting the server ends them. There are no accounts
+and no chips yet — you type a name and sit down.
 
 ## How the game works
 
