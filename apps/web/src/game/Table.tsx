@@ -197,6 +197,12 @@ export function Table({ room, seatId, actions }: TableProps) {
             <span>Rules</span>
             <b>{room.ruleset.name}</b>
           </div>
+          {room.buyIn > 0 ? (
+            <div className="stat">
+              <span>Pot</span>
+              <b className="stat--good">{fmt(room.pot)}</b>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

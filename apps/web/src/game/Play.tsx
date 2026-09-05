@@ -6,6 +6,8 @@ import { useSound } from "./useSound.js";
 import { Chat } from "./Chat.js";
 import { HouseRulesEditor } from "./HouseRulesEditor.js";
 import { Table } from "./Table.js";
+import { useAccount } from "./useAccount.js";
+import type { Account } from "./useAccount.js";
 import { useRoom } from "./useRoom.js";
 import type { RoomActions } from "./useRoom.js";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
@@ -23,6 +25,7 @@ export function Play() {
     raw.length === CODE_LENGTH && [...raw].every((letter) => CODE_ALPHABET.includes(letter));
   const urlCode = looksLikeCode ? raw : "";
   const { room, chat, seatId, error, connected, busy, actions } = useRoom();
+  const account = useAccount();
   useSound(room, seatId);
 
   // The address bar follows the table, so a link can be shared and a refresh
@@ -45,6 +48,7 @@ export function Play() {
         </h1>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
         {room !== null ? <LeaveButton room={room} onLeave={actions.leave} /> : null}
+        <Account account={account} />
         <Volume />
         <span className={`play__link${connected ? " play__link--up" : ""}`}>
           {connected ? "connected" : "offline"}
@@ -52,6 +56,9 @@ export function Play() {
       </header>
 
       {error !== null ? <p className="play__error">{error}</p> : null}
+      {account.dailyMessage !== null ? (
+        <p className="play__event">{account.dailyMessage}</p>
+      ) : null}
       {room?.lastEvent != null && room.status !== "lobby" ? (
         <p className="play__event">{room.lastEvent}</p>
       ) : null}
@@ -59,7 +66,7 @@ export function Play() {
       {room === null ? (
         <Join actions={actions} busy={busy} connected={connected} invited={urlCode} />
       ) : room.status === "lobby" ? (
-        <Lobby room={room} seatId={seatId} actions={actions} chat={chat} />
+        <Lobby room={room} seatId={seatId} actions={actions} chat={chat} account={account} />
       ) : (
         <>
           <Table room={room} seatId={seatId ?? ""} actions={actions} />
@@ -100,6 +107,98 @@ function LeaveButton({ room, onLeave }: { room: RoomView; onLeave: () => void })
     >
       {arming ? "Leave — sure?" : "Leave table"}
     </button>
+  );
+}
+
+/**
+ * Who you are, if anyone. Guests see an invitation to sign in only when the
+ * server actually has Discord configured — offering a button that answers 503
+ * would be worse than offering nothing.
+ */
+function Account({ account }: { account: Account }) {
+  if (account.loading) {
+    return null;
+  }
+  if (account.profile === null) {
+    return account.available ? (
+      <a className="btn btn--ghost btn--small" href="/auth/discord">
+        Sign in
+      </a>
+    ) : (
+      <span className="account__guest">playing as a guest</span>
+    );
+  }
+  const low = account.profile.chips < 2000;
+  return (
+    <span className="account">
+      <span className="account__name">{account.profile.name}</span>
+      <span className="account__chips">{account.profile.chips.toLocaleString("en-US")}</span>
+      {low ? (
+        <button type="button" className="btn btn--ghost btn--small" onClick={account.claimDaily}>
+          Top up
+        </button>
+      ) : null}
+      <button type="button" className="account__out" onClick={account.signOut}>
+        sign out
+      </button>
+    </span>
+  );
+}
+
+/**
+ * The stake. Only offered when everyone at the table is signed in and there
+ * are no bots — a bot has no balance to lose and no account to pay, so letting
+ * one into a pot would mint or destroy chips.
+ */
+function BuyIn({
+  room,
+  editable,
+  signedIn,
+  chips,
+  onSet,
+}: {
+  room: RoomView;
+  editable: boolean;
+  signedIn: boolean;
+  chips: number;
+  onSet: (amount: number) => void;
+}) {
+  const bots = room.seats.some((seat) => seat.isBot);
+  const guests = room.seats.some((seat) => !seat.signedIn);
+  const blocked = bots || guests || !signedIn;
+
+  return (
+    <section className="rules" aria-label="Stake">
+      <p className="panel__label">Stake</p>
+      {blocked ? (
+        <p className="rules__note">
+          {bots
+            ? "Bots play for free. Remove them to play for chips."
+            : "Everyone has to be signed in to play for chips."}
+        </p>
+      ) : (
+        <div className="rules__choices">
+          {[0, 100, 500, 1000].map((amount) => (
+            <button
+              key={amount}
+              type="button"
+              role="radio"
+              aria-checked={room.buyIn === amount}
+              disabled={!editable || amount > chips}
+              className={`rules__choice${room.buyIn === amount ? " rules__choice--on" : ""}`}
+              onClick={() => onSet(amount)}
+            >
+              {amount === 0 ? "for fun" : amount.toLocaleString("en-US")}
+            </button>
+          ))}
+        </div>
+      )}
+      {room.buyIn > 0 ? (
+        <p className="rules__note">
+          Pot of {room.pot.toLocaleString("en-US")} — winner takes it.
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -273,11 +372,13 @@ function Lobby({
   seatId,
   actions,
   chat,
+  account,
 }: {
   room: RoomView;
   seatId: string | null;
   actions: RoomActions;
   chat: ChatMessage[];
+  account: Account;
 }) {
   const you = room.seats.find((seat) => seat.id === seatId);
   const solo = room.seats.length === 1;
@@ -356,11 +457,20 @@ function Lobby({
       </div>
 
       <div className="lobby__wide">
-        <HouseRulesEditor
-          room={room}
-          editable={you?.isHost === true}
-          onChange={actions.setRules}
-        />
+        <div className="lobby__stack">
+          <HouseRulesEditor
+            room={room}
+            editable={you?.isHost === true}
+            onChange={actions.setRules}
+          />
+          <BuyIn
+            room={room}
+            editable={you?.isHost === true}
+            signedIn={account.profile !== null}
+            chips={account.profile?.chips ?? 0}
+            onSet={actions.setBuyIn}
+          />
+        </div>
         <Chat log={chat} seatId={seatId} onSay={actions.say} />
       </div>
     </div>

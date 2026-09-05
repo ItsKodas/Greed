@@ -4,6 +4,7 @@ import type { Server as HttpServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import session from "express-session";
 import { Server } from "socket.io";
 import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
 import type { Die } from "@greed/rules";
@@ -16,6 +17,7 @@ import {
   joinSchema,
   removeSeatSchema,
   resumeSchema,
+  setBuyInSchema,
   setRulesSchema,
   toggleSchema,
 } from "@greed/shared";
@@ -23,6 +25,10 @@ import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
 import { decide, thinkingTime } from "./bot.js";
 import type { BotSkill } from "./bot.js";
 import { comboGateKeyFor } from "./gatekey.js";
+import { mountAuth, readAuthConfig } from "./auth.js";
+import type { AuthConfig } from "./auth.js";
+import { MemoryStore } from "./store.js";
+import type { Store } from "./store.js";
 import { Room, RoomError } from "./room.js";
 
 export interface GreedServerOptions {
@@ -40,10 +46,23 @@ export interface GreedServerOptions {
   serveClient?: boolean;
   /** Range of the bot's fake thinking time. Tests set this to nearly nothing. */
   botDelayMs?: number | null;
+  /** Where profiles and chips live. Defaults to memory, which is a real mode. */
+  store?: Store;
+  /** Null disables sign-in; the game still runs and guests still play. */
+  auth?: AuthConfig | null;
+  sessionSecret?: string;
+  /** Session store, when something better than memory is available. */
+  sessionStore?: session.Store;
+  /**
+   * Who a socket belongs to. Defaults to the session cookie; tests override
+   * it because a real identity would otherwise need a Discord round-trip.
+   */
+  identify?: (socket: { id: string; request: unknown }) => string | null;
 }
 
 export interface GreedServer {
   http: HttpServer;
+  store: Store;
   io: Server<ClientToServer, ServerToClient>;
   /** Rooms currently in memory. Exposed for tests and the health check. */
   rooms: Map<string, Room>;
@@ -73,6 +92,11 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     clientOrigin = "http://localhost:5173",
     serveClient = true,
     botDelayMs = null,
+    store = new MemoryStore(),
+    auth = readAuthConfig(process.env),
+    sessionSecret = process.env["SESSION_SECRET"] ?? "greed-development-secret",
+    sessionStore,
+    identify,
   } = options;
 
   const rooms = new Map<string, Room>();
@@ -81,6 +105,8 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   const farklePauses = new Map<string, NodeJS.Timeout>();
   const botMoves = new Map<string, NodeJS.Timeout>();
   const budgets = new Map<string, Budget>();
+  /** Tables already paid out, so a re-broadcast cannot pay twice. */
+  const settled = new Set<string>();
   const chatBudgets = new Map<string, Budget>();
   /** Every timer we own, so close() can leave no handle behind. */
   const pending = new Set<NodeJS.Timeout>();
@@ -100,8 +126,65 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     cors: { origin: clientOrigin, methods: ["GET", "POST"] },
   });
 
+  const sessions = session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    store: sessionStore,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env["NODE_ENV"] === "production",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    },
+  });
+  app.use(sessions);
+  // The socket handshake carries the same cookie, so a connection knows who it
+  // belongs to without the client asserting anything.
+  io.engine.use(sessions);
+
+  mountAuth(app, store, auth);
+
   app.get("/healthz", (_request, response) => {
-    response.json({ ok: true, rooms: rooms.size });
+    response.json({ ok: true, rooms: rooms.size, store: store.kind, signin: auth !== null });
+  });
+
+  app.get("/api/me", (request, response) => {
+    void (async () => {
+      const id = request.session.userId;
+      const profile = id === undefined ? null : await store.get(id);
+      response.json(
+        profile === null
+          ? { signedIn: false, signinAvailable: auth !== null }
+          : { signedIn: true, signinAvailable: auth !== null, profile },
+      );
+    })();
+  });
+
+  app.post("/auth/logout", (request, response) => {
+    request.session.destroy(() => response.json({ ok: true }));
+  });
+
+  app.post("/api/daily", (request, response) => {
+    void (async () => {
+      const id = request.session.userId;
+      if (id === undefined) {
+        response.status(401).json({ error: "Sign in first." });
+        return;
+      }
+      response.json(await store.claimDaily(id));
+    })();
+  });
+
+  app.get("/api/games", (request, response) => {
+    void (async () => {
+      const id = request.session.userId;
+      if (id === undefined) {
+        response.status(401).json({ error: "Sign in first." });
+        return;
+      }
+      response.json({ games: await store.recentGames(id, 20) });
+    })();
   });
 
   if (serveClient) {
@@ -201,6 +284,10 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     io.to(code).emit("room:state", room.view());
     scheduleFarklePause(room);
     scheduleBot(room);
+    if (room.status === "over" && !settled.has(code)) {
+      settled.add(code);
+      void settle(room).catch((error) => console.error("settling failed", error));
+    }
   }
 
   /**
@@ -356,6 +443,64 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     }
   }
 
+  /** The signed-in profile behind a socket, or null for a guest. */
+  function userIdOf(socket: { id: string; request: unknown }): string | null {
+    if (identify !== undefined) {
+      return identify(socket);
+    }
+    const request = socket.request as { session?: { userId?: string } };
+    return request.session?.userId ?? null;
+  }
+
+  /**
+   * Settles a finished game: the pot goes to the winners, split evenly, with
+   * any remainder to the earliest-seated of them. Recorded either way, so a
+   * friendly game still shows up in a history.
+   */
+  async function settle(room: Room): Promise<void> {
+    const winners = room.seats.filter((seat) => room.winnerIds.includes(seat.id));
+    const share = winners.length > 0 ? Math.floor(room.pot / winners.length) : 0;
+    const remainder = room.pot - share * winners.length;
+
+    for (const [index, seat] of winners.entries()) {
+      if (seat.userId === null) {
+        continue;
+      }
+      const amount = share + (index === 0 ? remainder : 0);
+      if (amount > 0) {
+        await store.adjustChips(seat.userId, amount);
+      }
+    }
+
+    for (const seat of room.seats) {
+      if (seat.userId === null) {
+        continue;
+      }
+      const won = room.winnerIds.includes(seat.id);
+      await store.bumpStats(seat.userId, {
+        games: 1,
+        wins: won ? 1 : 0,
+        chipsWon: won ? share - room.buyIn : -room.buyIn,
+        bestTurn: seat.score,
+      });
+    }
+
+    await store.recordGame({
+      code: room.code,
+      rulesetName: room.ruleset.name,
+      buyIn: room.buyIn,
+      pot: room.pot,
+      players: room.seats.map((seat) => ({
+        userId: seat.userId,
+        name: seat.name,
+        score: seat.score,
+        isBot: seat.isBot,
+      })),
+      winnerIds: winners.map((seat) => seat.userId ?? seat.id),
+      endedAt: Date.now(),
+    });
+  }
+
   io.on("connection", (socket) => {
     socket.on("lobby:create", (payload, ack) => {
       const parsed = createSchema.safeParse(payload);
@@ -369,7 +514,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         const code = makeCode();
         const room = new Room(code, roll, chosen);
         rooms.set(code, room);
-        room.join(socket.id, parsed.data.name);
+        room.join(socket.id, parsed.data.name, userIdOf(socket));
         sockets.set(socket.id, { code, seatId: socket.id });
         void socket.join(code);
         ack({ ok: true, code, seatId: socket.id });
@@ -391,7 +536,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       try {
-        room.join(socket.id, parsed.data.name);
+        room.join(socket.id, parsed.data.name, userIdOf(socket));
         sockets.set(socket.id, { code: parsed.data.code, seatId: socket.id });
         void socket.join(parsed.data.code);
         ack({ ok: true, code: parsed.data.code, seatId: socket.id });
@@ -478,8 +623,59 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       });
     });
 
+    socket.on("lobby:setBuyIn", (payload) => {
+      const parsed = setBuyInSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      guard(socket.id, (room, seatId) => {
+        requireHost(room, seatId, "set the stake");
+        room.setBuyIn(parsed.data.amount);
+      });
+    });
+
     socket.on("game:start", () => {
-      guard(socket.id, (room, seatId) => room.start(seatId));
+      const seat = sockets.get(socket.id);
+      const room = seat === undefined ? undefined : rooms.get(seat.code);
+      if (seat === undefined || room === undefined) {
+        return;
+      }
+      if (room.buyIn === 0) {
+        guard(socket.id, (target, seatId) => target.start(seatId));
+        return;
+      }
+      // Take every stake before dealing, and put back anything already taken
+      // if one of them cannot pay. Nobody ends up half-way into a game.
+      void (async () => {
+        if (seat.seatId !== room.hostId) {
+          socket.emit("room:error", "Only the host can start the game.");
+          return;
+        }
+        const paid: string[] = [];
+        for (const player of room.seats) {
+          if (player.userId === null) {
+            continue;
+          }
+          const ok = await store.adjustChips(player.userId, -room.buyIn);
+          if (!ok) {
+            for (const refund of paid) {
+              await store.adjustChips(refund, room.buyIn);
+            }
+            socket.emit("room:error", `${player.name} cannot cover the buy-in.`);
+            return;
+          }
+          paid.push(player.userId);
+        }
+        try {
+          room.start(seat.seatId);
+          broadcast(seat.code);
+        } catch (error) {
+          for (const refund of paid) {
+            await store.adjustChips(refund, room.buyIn);
+          }
+          socket.emit("room:error", error instanceof RoomError ? error.message : "Could not start.");
+        }
+      })();
     });
 
     socket.on("game:roll", () => {
@@ -570,12 +766,13 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       store.clear();
     }
     await io.close();
+    await store.close();
     await new Promise<void>((resolve) => {
       http.close(() => resolve());
     });
   }
 
-  return { http, io, rooms, close };
+  return { http, io, rooms, store, close };
 }
 
 function requireHost(room: Room, seatId: string, what: string): void {

@@ -25,6 +25,8 @@ export interface Seat {
   /** Bots never disconnect and are driven by the server, not a socket. */
   isBot: boolean;
   skill: BotSkill | null;
+  /** Their profile, when they signed in. Guests play without one. */
+  userId: string | null;
 }
 
 interface Turn {
@@ -57,6 +59,8 @@ export class Room {
   status: RoomStatus = "lobby";
   winnerIds: string[] = [];
   lastEvent: string | null = null;
+  /** Chips each seat puts in. Zero means a friendly game. */
+  buyIn = 0;
   /**
    * When the active player forfeits, in epoch ms. Owned by the socket layer —
    * this class never reads it, so the engine stays free of wall-clock time.
@@ -84,7 +88,7 @@ export class Room {
     return this.seats.every((seat) => !seat.connected);
   }
 
-  join(id: string, name: string): Seat {
+  join(id: string, name: string, userId: string | null = null): Seat {
     if (this.status !== "lobby") {
       throw new RoomError("That game has already started.");
     }
@@ -95,6 +99,9 @@ export class Room {
     if (trimmed.length === 0) {
       throw new RoomError("Pick a name first.");
     }
+    if (this.buyIn > 0 && userId === null) {
+      throw new RoomError("That table is playing for chips — sign in first.");
+    }
     const seat: Seat = {
       id,
       name: trimmed,
@@ -103,6 +110,7 @@ export class Room {
       connected: true,
       isBot: false,
       skill: null,
+      userId,
     };
     this.seats.push(seat);
     this.lastEvent = `${trimmed} sat down`;
@@ -122,6 +130,31 @@ export class Room {
     this.lastEvent = "House rules changed";
   }
 
+  /**
+   * Sets the stake. Everyone seated must be signed in, and no bots may be at
+   * the table — a bot has no balance to lose and no account to pay.
+   */
+  setBuyIn(amount: number): void {
+    if (this.status !== "lobby") {
+      throw new RoomError("The stake is set before the game starts.");
+    }
+    if (amount > 0) {
+      if (this.seats.some((seat) => seat.isBot)) {
+        throw new RoomError("Remove the bots before playing for chips.");
+      }
+      if (this.seats.some((seat) => seat.userId === null)) {
+        throw new RoomError("Everyone has to be signed in to play for chips.");
+      }
+    }
+    this.buyIn = amount;
+    this.lastEvent = amount > 0 ? `Buy-in set to ${amount.toLocaleString("en-US")}` : "Playing for fun";
+  }
+
+  /** The pot, once everyone has paid in. */
+  get pot(): number {
+    return this.buyIn * this.seats.length;
+  }
+
   /** Seats a bot. Host-gated by the socket layer; the engine only checks room. */
   addBot(id: string, name: string, skill: BotSkill): Seat {
     if (this.status !== "lobby") {
@@ -129,6 +162,11 @@ export class Room {
     }
     if (this.seats.length >= MAX_SEATS) {
       throw new RoomError("That table is full.");
+    }
+    if (this.buyIn > 0) {
+      // A bot has no balance to debit and no account to pay, so letting one
+      // into a pot would either mint chips or destroy them.
+      throw new RoomError("Bots only play for free.");
     }
     const seat: Seat = {
       id,
@@ -138,6 +176,7 @@ export class Room {
       connected: true,
       isBot: true,
       skill,
+      userId: null,
     };
     this.seats.push(seat);
     this.lastEvent = `${name} sat down`;
@@ -486,6 +525,7 @@ export class Room {
       connected: seat.connected,
       isHost: seat.id === host,
       isBot: seat.isBot,
+      signedIn: seat.userId !== null,
     }));
     return {
       code: this.code,
@@ -493,6 +533,8 @@ export class Room {
       seats,
       turn: this.turn === null ? null : this.turnView(this.turn),
       ruleset: this.ruleset,
+      buyIn: this.buyIn,
+      pot: this.pot,
       winnerIds: [...this.winnerIds],
       lastEvent: this.lastEvent,
     };

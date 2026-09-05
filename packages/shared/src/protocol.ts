@@ -18,6 +18,8 @@ export interface SeatView {
   connected: boolean;
   isHost: boolean;
   isBot: boolean;
+  /** Playing from a profile rather than as a guest. */
+  signedIn: boolean;
 }
 
 export interface TurnView {
@@ -59,6 +61,9 @@ export interface RoomView {
   seats: SeatView[];
   turn: TurnView | null;
   ruleset: Ruleset;
+  /** Chips each seat stakes. Zero for a friendly game. */
+  buyIn: number;
+  pot: number;
   /** Set when status is "over". */
   winnerIds: string[];
   /** A short line describing what just happened, for the activity strip. */
@@ -79,6 +84,7 @@ export interface ClientToServer {
   "lobby:leave": () => void;
   "lobby:addBot": (payload: { skill: BotSkill }) => void;
   "lobby:setRules": (payload: Partial<HouseRules>) => void;
+  "lobby:setBuyIn": (payload: { amount: number }) => void;
   "lobby:removeSeat": (payload: { seatId: string }) => void;
   "game:start": () => void;
   "game:roll": () => void;

@@ -1,4 +1,9 @@
+import MongoStoreFactory from "connect-mongo";
+import { readAuthConfig } from "./auth.js";
+import { MongoStore } from "./mongo-store.js";
 import { createGreedServer } from "./server.js";
+import { MemoryStore } from "./store.js";
+import type { Store } from "./store.js";
 
 /**
  * Port precedence: an explicit --port flag, then PORT, then 3001. The flag
@@ -10,16 +15,47 @@ const PORT = Number(
   portFlag !== -1 ? process.argv[portFlag + 1] : (process.env["PORT"] ?? 3001),
 );
 
-const server = createGreedServer({
-  clientOrigin: process.env["CLIENT_ORIGIN"] ?? "http://localhost:5173",
-});
+const mongoUrl = process.env["MONGO_URL"];
 
-server.http.listen(PORT, () => {
-  console.log(`greed server listening on http://localhost:${PORT}`);
-});
+async function main(): Promise<void> {
+  let store: Store = new MemoryStore();
+  let sessionStore;
 
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    void server.close().then(() => process.exit(0));
+  if (mongoUrl !== undefined && mongoUrl.length > 0) {
+    try {
+      store = await MongoStore.connect(mongoUrl);
+      sessionStore = MongoStoreFactory.create({ mongoUrl });
+      console.log("greed: profiles and chips are persistent");
+    } catch (error) {
+      // A database that will not answer should not take the game down with
+      // it — losing persistence is better than losing the ability to play.
+      console.error("greed: could not reach the database, running in memory", error);
+    }
+  } else {
+    console.log("greed: no MONGO_URL, profiles and chips live in memory only");
+  }
+
+  const auth = readAuthConfig(process.env);
+  if (auth === null) {
+    console.log("greed: no Discord credentials, sign-in is disabled");
+  }
+
+  const server = createGreedServer({
+    store,
+    auth,
+    sessionStore,
+    clientOrigin: process.env["CLIENT_ORIGIN"] ?? "http://localhost:5173",
   });
+
+  server.http.listen(PORT, () => {
+    console.log(`greed server listening on http://localhost:${PORT}`);
+  });
+
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => {
+      void server.close().then(() => process.exit(0));
+    });
+  }
 }
+
+void main();

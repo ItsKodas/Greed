@@ -3,9 +3,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
 
-const SERVER_URL =
-  (import.meta.env["VITE_SERVER_URL"] as string | undefined) ??
-  (import.meta.env.DEV ? "http://localhost:3001" : "");
+/**
+ * Same origin, always. Vite proxies the socket to the game server in
+ * development, so the session cookie travels with the handshake and the
+ * server knows who is sitting down.
+ */
+const SERVER_URL = "";
 
 type GameSocket = Socket<ServerToClient, ClientToServer>;
 
@@ -61,6 +64,7 @@ export interface RoomActions {
   bank: () => void;
   say: (text: string) => void;
   setRules: (changes: Partial<HouseRules>) => void;
+  setBuyIn: (amount: number) => void;
   leave: () => void;
 }
 
@@ -85,7 +89,10 @@ export function useRoom(): RoomHook {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const socket: GameSocket = io(SERVER_URL, { transports: ["websocket", "polling"] });
+    const socket: GameSocket = io(SERVER_URL, {
+      transports: ["websocket", "polling"],
+      withCredentials: true,
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
@@ -179,6 +186,10 @@ export function useRoom(): RoomHook {
     (changes: Partial<HouseRules>) => socketRef.current?.emit("lobby:setRules", changes),
     [],
   );
+  const setBuyIn = useCallback(
+    (amount: number) => socketRef.current?.emit("lobby:setBuyIn", { amount }),
+    [],
+  );
   const start = useCallback(() => socketRef.current?.emit("game:start"), []);
   const roll = useCallback(() => socketRef.current?.emit("game:roll"), []);
   const bank = useCallback(() => socketRef.current?.emit("game:bank"), []);
@@ -202,6 +213,19 @@ export function useRoom(): RoomHook {
     error,
     connected,
     busy,
-    actions: { create, join, addBot, removeSeat, setRules, say, start, roll, toggle, bank, leave },
+    actions: {
+      create,
+      join,
+      addBot,
+      removeSeat,
+      setRules,
+      setBuyIn,
+      say,
+      start,
+      roll,
+      toggle,
+      bank,
+      leave,
+    },
   };
 }

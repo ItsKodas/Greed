@@ -976,3 +976,48 @@
 .lobby__wide .chat {
   margin-top: 0;
 }
+
+/* ---------------------------------------------------------- account */
+
+.account {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gr-space-2);
+  font-size: var(--gr-text-sm);
+}
+
+.account__name {
+  color: var(--gr-color-bone);
+}
+
+.account__chips {
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-brass-hi);
+}
+
+.account__guest,
+.account__out {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-bone-dim);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.account__out:hover {
+  color: var(--gr-color-oxblood);
+}
+
+.account__out:focus-visible,
+.account a:focus-visible {
+  outline: 2px solid var(--gr-color-brass-hi);
+  outline-offset: 2px;
+}
+
+.lobby__stack {
+  display: grid;
+  gap: var(--gr-space-4);
+  align-content: start;
+}

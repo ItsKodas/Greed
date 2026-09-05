@@ -23,6 +23,7 @@ export {
   joinSchema,
   removeSeatSchema,
   resumeSchema,
+  setBuyInSchema,
   setRulesSchema,
   toggleSchema,
   type CreatePayload,

@@ -65,3 +65,7 @@ export type CreatePayload = z.infer<typeof createSchema>;
 export type JoinPayload = z.infer<typeof joinSchema>;
 export type ResumePayload = z.infer<typeof resumeSchema>;
 export type SetRulesPayload = z.infer<typeof setRulesSchema>;
+
+export const setBuyInSchema = z.object({
+  amount: z.number().int().min(0).max(1_000_000),
+});
