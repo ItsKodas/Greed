@@ -52,7 +52,7 @@ function isEveryFace(dice: readonly Die[]): boolean {
 
 export class Room {
   readonly code: string;
-  readonly ruleset: Ruleset;
+  ruleset: Ruleset;
   seats: Seat[] = [];
   status: RoomStatus = "lobby";
   winnerIds: string[] = [];
@@ -107,6 +107,19 @@ export class Room {
     this.seats.push(seat);
     this.lastEvent = `${trimmed} sat down`;
     return seat;
+  }
+
+  /**
+   * Applies a host's rule changes. Lobby only — moving the target or the
+   * threshold mid-game would rewrite what players had already decided against.
+   * The face table is not editable here; a lobby picks an edition instead.
+   */
+  updateRules(changes: Partial<Ruleset>): void {
+    if (this.status !== "lobby") {
+      throw new RoomError("The rules are set once the game starts.");
+    }
+    this.ruleset = Object.freeze({ ...this.ruleset, ...changes });
+    this.lastEvent = "House rules changed";
   }
 
   /** Seats a bot. Host-gated by the socket layer; the engine only checks room. */

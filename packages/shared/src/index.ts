@@ -5,6 +5,8 @@ export {
   MIN_SEATS,
   type Ack,
   type BotSkill,
+  type ChatMessage,
+  type HouseRules,
   type ClientToServer,
   type Phase,
   type RoomStatus,
@@ -13,3 +15,18 @@ export {
   type ServerToClient,
   type TurnView,
 } from "./protocol.js";
+
+export {
+  addBotSchema,
+  chatSchema,
+  createSchema,
+  joinSchema,
+  removeSeatSchema,
+  resumeSchema,
+  setRulesSchema,
+  toggleSchema,
+  type CreatePayload,
+  type JoinPayload,
+  type ResumePayload,
+  type SetRulesPayload,
+} from "./schemas.js";

@@ -78,16 +78,38 @@ export interface ClientToServer {
   "lobby:resume": (payload: { seatId: string; code: string }, ack: (result: Ack) => void) => void;
   "lobby:leave": () => void;
   "lobby:addBot": (payload: { skill: BotSkill }) => void;
+  "lobby:setRules": (payload: Partial<HouseRules>) => void;
   "lobby:removeSeat": (payload: { seatId: string }) => void;
   "game:start": () => void;
   "game:roll": () => void;
   "game:toggle": (payload: { index: number }) => void;
   "game:bank": () => void;
+  "chat:send": (payload: { text: string }) => void;
 }
 
 export interface ServerToClient {
   "room:state": (state: RoomView) => void;
   "room:error": (message: string) => void;
+  "chat:message": (message: ChatMessage) => void;
+}
+
+export interface ChatMessage {
+  seatId: string;
+  name: string;
+  text: string;
+  at: number;
+}
+
+/** The subset of a ruleset a host may move from the lobby. */
+export interface HouseRules {
+  targetScore: number;
+  entryThreshold: number;
+  finalRound: boolean;
+  turnTimerSeconds: number | null;
+  straight: number | null;
+  threePairs: number | null;
+  twoTriplets: number | null;
+  fourPlusPair: number | null;
 }
 
 /** Unambiguous when read aloud: no O/0, I/1, S/5, Z/2. */

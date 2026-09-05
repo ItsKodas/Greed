@@ -28,6 +28,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "concurrently": "^10.0.5",
     "jsdom": "^29.1.1",
+    "socket.io-client": "^4.8.3",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",

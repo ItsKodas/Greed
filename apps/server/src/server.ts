@@ -1,0 +1,598 @@
+import { randomInt } from "node:crypto";
+import { createServer as createHttpServer } from "node:http";
+import type { Server as HttpServer } from "node:http";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import express from "express";
+import { Server } from "socket.io";
+import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
+import type { Die } from "@greed/rules";
+import {
+  CODE_ALPHABET,
+  CODE_LENGTH,
+  addBotSchema,
+  chatSchema,
+  createSchema,
+  joinSchema,
+  removeSeatSchema,
+  resumeSchema,
+  setRulesSchema,
+  toggleSchema,
+} from "@greed/shared";
+import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
+import { decide, thinkingTime } from "./bot.js";
+import type { BotSkill } from "./bot.js";
+import { comboGateKeyFor } from "./gatekey.js";
+import { Room, RoomError } from "./room.js";
+
+export interface GreedServerOptions {
+  /** Injected so tests can roll deterministically. */
+  roll?: (count: number) => Die[];
+  /** How long the busting dice stay on screen before play moves on. */
+  farklePauseMs?: number;
+  /** How long a dropped player keeps their seat. */
+  reconnectGraceMs?: number;
+  /** How long an abandoned table survives. */
+  emptyRoomTtlMs?: number;
+  /** Where the browser client is served from, for CORS. */
+  clientOrigin?: string;
+  /** Off in tests: there is no built client to serve. */
+  serveClient?: boolean;
+  /** Range of the bot's fake thinking time. Tests set this to nearly nothing. */
+  botDelayMs?: number | null;
+}
+
+export interface GreedServer {
+  http: HttpServer;
+  io: Server<ClientToServer, ServerToClient>;
+  /** Rooms currently in memory. Exposed for tests and the health check. */
+  rooms: Map<string, Room>;
+  close: () => Promise<void>;
+}
+
+const BOT_NAMES = ["Skint Alice", "Pockets", "Old Ned", "Bess", "Cutter", "Tumble", "Ivy"];
+
+/** A socket may send this many events in this window before being ignored. */
+const RATE_EVENTS = 60;
+const RATE_WINDOW_MS = 2000;
+/** Chat is throttled harder, because it is the only thing others must read. */
+const CHAT_EVENTS = 5;
+const CHAT_WINDOW_MS = 5000;
+
+interface Budget {
+  count: number;
+  resetAt: number;
+}
+
+export function createGreedServer(options: GreedServerOptions = {}): GreedServer {
+  const {
+    roll = defaultRoll,
+    farklePauseMs = 2200,
+    reconnectGraceMs = 90_000,
+    emptyRoomTtlMs = 5 * 60 * 1000,
+    clientOrigin = "http://localhost:5173",
+    serveClient = true,
+    botDelayMs = null,
+  } = options;
+
+  const rooms = new Map<string, Room>();
+  const sockets = new Map<string, { code: string; seatId: string }>();
+  const turnClocks = new Map<string, NodeJS.Timeout>();
+  const farklePauses = new Map<string, NodeJS.Timeout>();
+  const botMoves = new Map<string, NodeJS.Timeout>();
+  const budgets = new Map<string, Budget>();
+  const chatBudgets = new Map<string, Budget>();
+  /** Every timer we own, so close() can leave no handle behind. */
+  const pending = new Set<NodeJS.Timeout>();
+
+  function later(run: () => void, ms: number): NodeJS.Timeout {
+    const handle = setTimeout(() => {
+      pending.delete(handle);
+      run();
+    }, ms);
+    pending.add(handle);
+    return handle;
+  }
+
+  const app = express();
+  const http = createHttpServer(app);
+  const io = new Server<ClientToServer, ServerToClient>(http, {
+    cors: { origin: clientOrigin, methods: ["GET", "POST"] },
+  });
+
+  app.get("/healthz", (_request, response) => {
+    response.json({ ok: true, rooms: rooms.size });
+  });
+
+  if (serveClient) {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const clientDist = join(here, "../../web/dist");
+    app.use(express.static(clientDist));
+    /**
+     * Anything that is not a file and not an API path is a client route — a
+     * table code, say — so hand back the app and let the router sort it out.
+     * Without this a shared link like /6PMKG would 404 in production, even
+     * though it works in dev where Vite does the same thing for us.
+     */
+    app.get(/^(?!\/(?:healthz|auth|api|socket\.io)\b).*/, (_request, response) => {
+      response.sendFile(join(clientDist, "index.html"), (error) => {
+        if (error !== undefined && error !== null) {
+          response.status(404).end();
+        }
+      });
+    });
+  }
+
+  function makeCode(): string {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      let code = "";
+      for (let index = 0; index < CODE_LENGTH; index += 1) {
+        code += CODE_ALPHABET[randomInt(0, CODE_ALPHABET.length)];
+      }
+      if (!rooms.has(code)) {
+        return code;
+      }
+    }
+    throw new Error("could not find a free room code");
+  }
+
+  function botName(room: Room): string {
+    const taken = new Set(room.seats.map((seat) => seat.name));
+    return BOT_NAMES.find((name) => !taken.has(name)) ?? `Bot ${room.seats.length + 1}`;
+  }
+
+  /** True while this socket is inside its allowance. */
+  function withinBudget(store: Map<string, Budget>, id: string, max: number, window: number): boolean {
+    const now = Date.now();
+    const budget = store.get(id);
+    if (budget === undefined || now > budget.resetAt) {
+      store.set(id, { count: 1, resetAt: now + window });
+      return true;
+    }
+    budget.count += 1;
+    return budget.count <= max;
+  }
+
+  function armClock(room: Room): void {
+    const existing = turnClocks.get(room.code);
+    if (existing !== undefined) {
+      clearTimeout(existing);
+      turnClocks.delete(room.code);
+    }
+
+    const seconds = room.ruleset.turnTimerSeconds;
+    const view = room.view();
+    const active = room.activeSeat();
+    // No clock before the game starts, once it is over, while nobody is
+    // watching, or on a bot — a bot moves in a second and cannot stall.
+    if (
+      room.status !== "playing" ||
+      seconds === null ||
+      view.turn === null ||
+      room.isEmpty ||
+      active?.isBot === true
+    ) {
+      room.endsAt = null;
+      return;
+    }
+
+    const seatId = view.turn.seatId;
+    room.endsAt = Date.now() + seconds * 1000;
+    turnClocks.set(
+      room.code,
+      later(() => {
+        turnClocks.delete(room.code);
+        const still = rooms.get(room.code);
+        if (still === undefined) {
+          return;
+        }
+        still.timeout(seatId);
+        broadcast(room.code);
+      }, seconds * 1000),
+    );
+  }
+
+  function broadcast(code: string): void {
+    const room = rooms.get(code);
+    if (room === undefined) {
+      return;
+    }
+    armClock(room);
+    io.to(code).emit("room:state", room.view());
+    scheduleFarklePause(room);
+    scheduleBot(room);
+  }
+
+  /**
+   * Leaves the busting dice on screen for a beat, then moves play on.
+   *
+   * This lives here rather than in the roll handler because a bot never goes
+   * through a socket handler — it calls the room directly. Scheduling it there
+   * meant a bot that farkled froze the table for good.
+   */
+  function scheduleFarklePause(room: Room): void {
+    if (room.view().turn?.phase !== "farkled" || farklePauses.has(room.code)) {
+      return;
+    }
+    farklePauses.set(
+      room.code,
+      later(() => {
+        farklePauses.delete(room.code);
+        const still = rooms.get(room.code);
+        if (still === undefined || still.view().turn?.phase !== "farkled") {
+          return;
+        }
+        still.advanceTurn();
+        broadcast(room.code);
+      }, farklePauseMs),
+    );
+  }
+
+  /**
+   * Books the active bot's next move.
+   *
+   * The bot goes through the very same Room methods a socket handler calls, so
+   * there is no privileged path for it to cheat down and nothing to keep in
+   * sync with the human rules.
+   */
+  function scheduleBot(room: Room): void {
+    const pendingMove = botMoves.get(room.code);
+    if (pendingMove !== undefined) {
+      clearTimeout(pendingMove);
+      botMoves.delete(room.code);
+    }
+
+    const seat = room.activeSeat();
+    if (seat === null || !seat.isBot || seat.skill === null) {
+      return;
+    }
+    const phase = room.view().turn?.phase;
+    if (phase === undefined || phase === "farkled" || phase === "over") {
+      return;
+    }
+
+    const skill = seat.skill;
+    const delay = botDelayMs ?? thinkingTime(skill);
+    botMoves.set(
+      room.code,
+      later(() => {
+        botMoves.delete(room.code);
+        const still = rooms.get(room.code);
+        if (still === undefined) {
+          return;
+        }
+        try {
+          playBotTurn(still, seat.id, skill);
+        } catch (error) {
+          console.error("bot move failed", error);
+        }
+        broadcast(room.code);
+      }, delay),
+    );
+  }
+
+  function playBotTurn(room: Room, seatId: string, skill: BotSkill): void {
+    const turn = room.view().turn;
+    if (turn === null || turn.seatId !== seatId) {
+      return;
+    }
+    if (turn.phase === "awaiting_roll") {
+      room.doRoll(seatId);
+      return;
+    }
+    if (turn.phase !== "selecting") {
+      return;
+    }
+    const seat = room.seats.find((candidate) => candidate.id === seatId);
+    if (seat === undefined) {
+      return;
+    }
+
+    const decision = decide({
+      dice: turn.dice,
+      kept: room.keptThisTurn,
+      onBoard: seat.onBoard,
+      mustBeat: room.deficitOnFinalTurn(),
+      rules: room.ruleset,
+      gateKey: comboGateKeyFor(room.ruleset),
+      skill,
+    });
+    if (decision === null) {
+      return;
+    }
+    for (const index of decision.keep) {
+      room.toggle(seatId, index);
+    }
+    if (decision.action === "bank") {
+      room.bank(seatId);
+    } else {
+      room.doRoll(seatId);
+    }
+  }
+
+  /** Clears a table once nobody has been sitting at it for a while. */
+  function reapWhenEmpty(code: string): void {
+    const room = rooms.get(code);
+    if (room === undefined || !room.isEmpty) {
+      return;
+    }
+    later(() => {
+      const still = rooms.get(code);
+      if (still !== undefined && still.isEmpty) {
+        turnClocks.delete(code);
+        farklePauses.delete(code);
+        botMoves.delete(code);
+        rooms.delete(code);
+      }
+    }, emptyRoomTtlMs);
+  }
+
+  /** Runs a seated action, turning a RoomError into a message not a crash. */
+  function guard(socketId: string, run: (room: Room, seatId: string) => void): void {
+    const seat = sockets.get(socketId);
+    const socket = io.sockets.sockets.get(socketId);
+    if (seat === undefined || socket === undefined) {
+      return;
+    }
+    if (!withinBudget(budgets, socketId, RATE_EVENTS, RATE_WINDOW_MS)) {
+      socket.emit("room:error", "Slow down.");
+      return;
+    }
+    const room = rooms.get(seat.code);
+    if (room === undefined) {
+      socket.emit("room:error", "That table is gone.");
+      return;
+    }
+    try {
+      run(room, seat.seatId);
+      broadcast(seat.code);
+    } catch (error) {
+      if (error instanceof RoomError) {
+        socket.emit("room:error", error.message);
+        return;
+      }
+      console.error("unexpected error handling an action", error);
+      socket.emit("room:error", "Something went wrong.");
+    }
+  }
+
+  io.on("connection", (socket) => {
+    socket.on("lobby:create", (payload, ack) => {
+      const parsed = createSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, error: "Pick a name first." });
+        return;
+      }
+      try {
+        const chosen =
+          RULESETS.find((candidate) => candidate.name === parsed.data.ruleset) ?? DEFAULT_RULESET;
+        const code = makeCode();
+        const room = new Room(code, roll, chosen);
+        rooms.set(code, room);
+        room.join(socket.id, parsed.data.name);
+        sockets.set(socket.id, { code, seatId: socket.id });
+        void socket.join(code);
+        ack({ ok: true, code, seatId: socket.id });
+        broadcast(code);
+      } catch (error) {
+        ack(fail(error, "Could not open a table."));
+      }
+    });
+
+    socket.on("lobby:join", (payload, ack) => {
+      const parsed = joinSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, error: "That is not a table code." });
+        return;
+      }
+      const room = rooms.get(parsed.data.code);
+      if (room === undefined) {
+        ack({ ok: false, error: "No table with that code." });
+        return;
+      }
+      try {
+        room.join(socket.id, parsed.data.name);
+        sockets.set(socket.id, { code: parsed.data.code, seatId: socket.id });
+        void socket.join(parsed.data.code);
+        ack({ ok: true, code: parsed.data.code, seatId: socket.id });
+        broadcast(parsed.data.code);
+      } catch (error) {
+        ack(fail(error, "Could not sit down."));
+      }
+    });
+
+    socket.on("lobby:resume", (payload, ack) => {
+      const parsed = resumeSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, error: "That table is gone." });
+        return;
+      }
+      const room = rooms.get(parsed.data.code);
+      if (room === undefined) {
+        ack({ ok: false, error: "That table is gone." });
+        return;
+      }
+      try {
+        room.reconnect(parsed.data.seatId);
+        sockets.set(socket.id, { code: room.code, seatId: parsed.data.seatId });
+        void socket.join(room.code);
+        ack({ ok: true, code: room.code, seatId: parsed.data.seatId });
+        broadcast(room.code);
+      } catch (error) {
+        ack(fail(error, "Could not rejoin."));
+      }
+    });
+
+    socket.on("lobby:leave", () => {
+      const seat = sockets.get(socket.id);
+      if (seat === undefined) {
+        return;
+      }
+      sockets.delete(socket.id);
+      void socket.leave(seat.code);
+      const room = rooms.get(seat.code);
+      if (room === undefined) {
+        return;
+      }
+      // Deliberate, so the seat goes now rather than being held for a
+      // reconnection that is not coming.
+      if (room.status === "lobby") {
+        room.removeSeat(seat.seatId);
+      } else {
+        room.disconnect(seat.seatId);
+      }
+      broadcast(seat.code);
+      reapWhenEmpty(seat.code);
+    });
+
+    socket.on("lobby:addBot", (payload) => {
+      const parsed = addBotSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      guard(socket.id, (room, seatId) => {
+        requireHost(room, seatId, "add players");
+        room.addBot(`bot:${randomInt(1, 1_000_000)}`, botName(room), parsed.data.skill);
+      });
+    });
+
+    socket.on("lobby:removeSeat", (payload) => {
+      const parsed = removeSeatSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      guard(socket.id, (room, seatId) => {
+        requireHost(room, seatId, "remove players");
+        room.removeSeat(parsed.data.seatId);
+      });
+    });
+
+    socket.on("lobby:setRules", (payload) => {
+      const parsed = setRulesSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      guard(socket.id, (room, seatId) => {
+        requireHost(room, seatId, "change the rules");
+        room.updateRules(parsed.data);
+      });
+    });
+
+    socket.on("game:start", () => {
+      guard(socket.id, (room, seatId) => room.start(seatId));
+    });
+
+    socket.on("game:roll", () => {
+      guard(socket.id, (room, seatId) => room.doRoll(seatId));
+    });
+
+    socket.on("game:toggle", (payload) => {
+      const parsed = toggleSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      guard(socket.id, (room, seatId) => room.toggle(seatId, parsed.data.index));
+    });
+
+    socket.on("game:bank", () => {
+      guard(socket.id, (room, seatId) => room.bank(seatId));
+    });
+
+    socket.on("chat:send", (payload) => {
+      const parsed = chatSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      const seat = sockets.get(socket.id);
+      if (seat === undefined) {
+        return;
+      }
+      if (!withinBudget(chatBudgets, socket.id, CHAT_EVENTS, CHAT_WINDOW_MS)) {
+        socket.emit("room:error", "Easy on the chat.");
+        return;
+      }
+      const room = rooms.get(seat.code);
+      const who = room?.seats.find((candidate) => candidate.id === seat.seatId);
+      if (room === undefined || who === undefined) {
+        return;
+      }
+      // Plain text only, and never rendered as markup on the other side.
+      io.to(seat.code).emit("chat:message", {
+        seatId: who.id,
+        name: who.name,
+        text: parsed.data.text,
+        at: Date.now(),
+      });
+    });
+
+    socket.on("disconnect", () => {
+      const seat = sockets.get(socket.id);
+      sockets.delete(socket.id);
+      budgets.delete(socket.id);
+      chatBudgets.delete(socket.id);
+      if (seat === undefined) {
+        return;
+      }
+      const room = rooms.get(seat.code);
+      if (room === undefined) {
+        return;
+      }
+      room.disconnect(seat.seatId);
+      broadcast(seat.code);
+
+      // Hold the seat long enough for a page refresh to reclaim it.
+      later(() => {
+        const still = rooms.get(seat.code);
+        if (still === undefined) {
+          return;
+        }
+        const held = still.view().seats.find((candidate) => candidate.id === seat.seatId);
+        if (held?.connected === true) {
+          return; // they came back
+        }
+        still.removeSeat(seat.seatId);
+        broadcast(seat.code);
+      }, reconnectGraceMs);
+
+      reapWhenEmpty(seat.code);
+    });
+  });
+
+  async function close(): Promise<void> {
+    for (const handle of pending) {
+      clearTimeout(handle);
+    }
+    pending.clear();
+    for (const store of [turnClocks, farklePauses, botMoves]) {
+      for (const handle of store.values()) {
+        clearTimeout(handle);
+      }
+      store.clear();
+    }
+    await io.close();
+    await new Promise<void>((resolve) => {
+      http.close(() => resolve());
+    });
+  }
+
+  return { http, io, rooms, close };
+}
+
+function requireHost(room: Room, seatId: string, what: string): void {
+  if (seatId !== room.hostId) {
+    throw new RoomError(`Only the host can ${what}.`);
+  }
+}
+
+function fail(error: unknown, fallback: string): Ack {
+  return { ok: false, error: error instanceof RoomError ? error.message : fallback };
+}
+
+/** The dice. Server-side, always — a client never generates a face. */
+function defaultRoll(count: number): Die[] {
+  const dice: Die[] = [];
+  for (let index = 0; index < count; index += 1) {
+    dice.push(randomInt(1, 7) as Die);
+  }
+  return dice;
+}
