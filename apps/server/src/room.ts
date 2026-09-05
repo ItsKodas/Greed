@@ -35,6 +35,15 @@ interface Turn {
 
 const DICE_PER_ROLL = 6;
 
+/** True when the roll shows every face exactly once — a straight, or $GREED. */
+function isEveryFace(dice: readonly Die[]): boolean {
+  if (dice.length !== DICE_PER_ROLL) {
+    return false;
+  }
+  const seen = new Set(dice);
+  return seen.size === DICE_PER_ROLL;
+}
+
 export class Room {
   readonly code: string;
   readonly ruleset: Ruleset;
@@ -166,7 +175,12 @@ export class Room {
       toRoll = remaining === 0 ? DICE_PER_ROLL : remaining;
     }
 
-    turn.dice = this.roll(toRoll);
+    const rolled = this.roll(toRoll);
+    const straight = isEveryFace(rolled);
+    // Line a straight up so it reads in face order — 1 to 6, or $GREED. Safe
+    // to reorder here because nothing is held yet on a fresh roll, so no index
+    // the client is holding can go stale.
+    turn.dice = straight ? [...rolled].sort((a, b) => a - b) : rolled;
     turn.held = turn.dice.map(() => false);
     turn.phase = "selecting";
 
@@ -175,6 +189,13 @@ export class Room {
       turn.kept = 0;
       turn.phase = "farkled";
       this.lastEvent = `${seat.name} farkled`;
+      return;
+    }
+    if (straight) {
+      this.lastEvent =
+        this.ruleset.skin === "letters"
+          ? `${seat.name} rolled $GREED`
+          : `${seat.name} rolled a straight`;
       return;
     }
     this.lastEvent = `${seat.name} rolled ${toRoll}`;

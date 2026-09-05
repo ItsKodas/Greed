@@ -1,4 +1,4 @@
-import { DEFAULT_RULESET } from "@greed/rules";
+import { DEFAULT_RULESET, LETTER_RULESET } from "@greed/rules";
 import type { Die } from "@greed/rules";
 import { describe, expect, it } from "vitest";
 import { Room, RoomError } from "./room.js";
@@ -115,7 +115,9 @@ describe("turn ownership", () => {
 
 describe("selecting and banking", () => {
   it("reports what the selection is worth as dice are picked up", () => {
-    const room = twoPlayerGame([1, 5, 2, 3, 4, 6]);
+    // Deliberately not a straight — those get sorted into face order on roll,
+    // which would move the 5 out from under index 1.
+    const room = twoPlayerGame([1, 5, 2, 3, 4, 4]);
     room.doRoll("a");
     expect(room.view().turn?.selection).toBe(0);
     pick(room, 0);
@@ -190,6 +192,45 @@ describe("rolling on", () => {
     const room = twoPlayerGame([1, 1, 2, 3, 4, 6]);
     room.doRoll("a");
     expect(() => room.doRoll("a")).toThrow(/at least one/i);
+  });
+});
+
+describe("a straight lines itself up", () => {
+  it("sorts a scrambled straight into face order", () => {
+    const room = twoPlayerGame([4, 1, 6, 2, 5, 3]);
+    room.doRoll("a");
+    expect(room.view().turn?.dice).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("calls it a straight in the pip game", () => {
+    const room = twoPlayerGame([4, 1, 6, 2, 5, 3]);
+    room.doRoll("a");
+    expect(room.view().lastEvent).toMatch(/rolled a straight/i);
+  });
+
+  it("calls it $GREED with letter dice", () => {
+    const room = new Room("TEST1", scripted([4, 1, 6, 2, 5, 3]), LETTER_RULESET);
+    room.join("a", "Ada");
+    room.join("b", "Bo");
+    room.start("a");
+    room.doRoll("a");
+    expect(room.view().turn?.dice).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(room.view().lastEvent).toContain("$GREED");
+  });
+
+  it("leaves any other roll in the order it landed", () => {
+    const room = twoPlayerGame([5, 1, 3, 3, 2, 6]);
+    room.doRoll("a");
+    expect(room.view().turn?.dice).toEqual([5, 1, 3, 3, 2, 6]);
+  });
+
+  it("does not reorder a partial roll that happens to be all-distinct", () => {
+    // Three dice, three faces: distinct, but not a straight.
+    const room = twoPlayerGame([1, 1, 2, 3, 4, 6], [6, 1, 4]);
+    room.doRoll("a");
+    pick(room, 0, 1);
+    room.doRoll("a");
+    expect(room.view().turn?.dice).toEqual([6, 1, 4]);
   });
 });
 
