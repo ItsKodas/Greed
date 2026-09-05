@@ -1,8 +1,25 @@
 import type { RoomView } from "@greed/shared";
+import { useEffect, useState } from "react";
 import { Die } from "./Die.js";
 import type { RoomActions } from "./useRoom.js";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
+
+/** Seconds left on the turn clock, ticking locally off the server's deadline. */
+function useCountdown(endsAt: number | null): number | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (endsAt === null) {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(timer);
+  }, [endsAt]);
+  if (endsAt === null) {
+    return null;
+  }
+  return Math.max(0, Math.ceil((endsAt - now) / 1000));
+}
 
 interface TableProps {
   room: RoomView;
@@ -19,6 +36,7 @@ export function Table({ room, seatId, actions }: TableProps) {
   const canAct = yours && turn.phase === "selecting" && turn.selectionValid;
   const canRollFresh = yours && turn.phase === "awaiting_roll";
   const total = turn === null ? 0 : turn.kept + turn.selection;
+  const left = useCountdown(over ? null : (turn?.endsAt ?? null));
 
   return (
     <div className="table">
@@ -101,6 +119,12 @@ export function Table({ room, seatId, actions }: TableProps) {
             <span>Bust chance</span>
             <b className="stat--bad">{((turn?.bustChance ?? 0) * 100).toFixed(1)}%</b>
           </div>
+          {left !== null ? (
+            <div className="stat">
+              <span>{yours ? "You have" : "They have"}</span>
+              <b className={left <= 15 ? "stat--bad" : undefined}>{left}s</b>
+            </div>
+          ) : null}
         </div>
 
         {over ? (

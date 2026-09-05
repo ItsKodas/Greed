@@ -8,6 +8,47 @@ const SERVER_URL =
 
 type GameSocket = Socket<ServerToClient, ClientToServer>;
 
+const SEAT_KEY = "greed.seat";
+
+interface StoredSeat {
+  code: string;
+  seatId: string;
+}
+
+/** localStorage can throw outright in a private window; never let it break the page. */
+function readSeat(): StoredSeat | null {
+  try {
+    const raw = window.localStorage.getItem(SEAT_KEY);
+    if (raw === null) {
+      return null;
+    }
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as StoredSeat).code === "string" &&
+      typeof (parsed as StoredSeat).seatId === "string"
+    ) {
+      return parsed as StoredSeat;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function writeSeat(seat: StoredSeat | null): void {
+  try {
+    if (seat === null) {
+      window.localStorage.removeItem(SEAT_KEY);
+    } else {
+      window.localStorage.setItem(SEAT_KEY, JSON.stringify(seat));
+    }
+  } catch {
+    // ignore
+  }
+}
+
 export interface RoomActions {
   create: (name: string, ruleset: string) => void;
   join: (name: string, code: string) => void;
@@ -39,7 +80,21 @@ export function useRoom(): RoomHook {
     const socket: GameSocket = io(SERVER_URL, { transports: ["websocket", "polling"] });
     socketRef.current = socket;
 
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      // Reclaim the seat this browser was sitting in, if it is still being held.
+      const stored = readSeat();
+      if (stored === null) {
+        return;
+      }
+      socket.emit("lobby:resume", stored, (result) => {
+        if (result.ok) {
+          setSeatId(result.seatId);
+        } else {
+          writeSeat(null);
+        }
+      });
+    });
     socket.on("disconnect", () => setConnected(false));
     socket.on("room:state", (state) => setRoom(state));
     socket.on("room:error", (message) => setError(message));
@@ -70,6 +125,7 @@ export function useRoom(): RoomHook {
       setBusy(false);
       if (result.ok) {
         setSeatId(result.seatId);
+        writeSeat({ code: result.code, seatId: result.seatId });
       } else {
         setError(result.error);
       }
@@ -86,6 +142,7 @@ export function useRoom(): RoomHook {
       setBusy(false);
       if (result.ok) {
         setSeatId(result.seatId);
+        writeSeat({ code: result.code, seatId: result.seatId });
       } else {
         setError(result.error);
       }
@@ -98,6 +155,7 @@ export function useRoom(): RoomHook {
   const toggle = useCallback((index: number) => socketRef.current?.emit("game:toggle", { index }), []);
 
   const leave = useCallback(() => {
+    writeSeat(null);
     setRoom(null);
     setSeatId(null);
     // Reconnecting drops the old seat server-side via the disconnect handler.

@@ -35,6 +35,12 @@ export interface TurnView {
   /** Chance the next roll scores nothing, 0..1. */
   bustChance: number;
   phase: Phase;
+  /**
+   * Epoch milliseconds at which the active player forfeits, or null when no
+   * clock is running. Absolute rather than a countdown so the client cannot
+   * drift away from the server.
+   */
+  endsAt: number | null;
 }
 
 export interface RoomView {

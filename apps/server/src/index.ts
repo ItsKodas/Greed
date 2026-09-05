@@ -25,8 +25,12 @@ const CLIENT_ORIGIN = process.env["CLIENT_ORIGIN"] ?? "http://localhost:5173";
 const FARKLE_PAUSE_MS = 2200;
 /** Rooms with nobody connected are reaped after this long. */
 const EMPTY_ROOM_TTL_MS = 5 * 60 * 1000;
+/** How long a dropped player keeps their seat. A refresh must fit inside this. */
+const RECONNECT_GRACE_MS = 90 * 1000;
 
 const rooms = new Map<string, Room>();
+/** One inactivity clock per room, re-armed on every state change. */
+const turnClocks = new Map<string, NodeJS.Timeout>();
 /** socket.id -> which room and seat it is sitting in. */
 const sockets = new Map<string, { code: string; seatId: string }>();
 
@@ -67,11 +71,51 @@ const here = dirname(fileURLToPath(import.meta.url));
 const clientDist = join(here, "../../web/dist");
 app.use(express.static(clientDist));
 
+/**
+ * Re-arms the inactivity clock for a room.
+ *
+ * This is an inactivity timer, not a hard per-turn limit: any action by the
+ * active player pushes it back. A player who is present and thinking is not
+ * the problem it exists to solve — a player who has walked away is.
+ */
+function armClock(room: Room): void {
+  const existing = turnClocks.get(room.code);
+  if (existing !== undefined) {
+    clearTimeout(existing);
+    turnClocks.delete(room.code);
+  }
+
+  const seconds = room.ruleset.turnTimerSeconds;
+  const view = room.view();
+  // No clock while nobody is watching it.
+  if (room.status !== "playing" || seconds === null || view.turn === null || room.isEmpty) {
+    room.endsAt = null;
+    return;
+  }
+
+  const seatId = view.turn.seatId;
+  room.endsAt = Date.now() + seconds * 1000;
+  turnClocks.set(
+    room.code,
+    setTimeout(() => {
+      turnClocks.delete(room.code);
+      const still = rooms.get(room.code);
+      if (still === undefined) {
+        return;
+      }
+      still.timeout(seatId);
+      broadcast(room.code);
+    }, seconds * 1000),
+  );
+}
+
 function broadcast(code: string): void {
   const room = rooms.get(code);
-  if (room !== undefined) {
-    io.to(code).emit("room:state", room.view());
+  if (room === undefined) {
+    return;
   }
+  armClock(room);
+  io.to(code).emit("room:state", room.view());
 }
 
 /** Wraps a handler so RoomError becomes a message instead of a crash. */
@@ -194,10 +238,26 @@ io.on("connection", (socket) => {
     }
     room.disconnect(seat.seatId);
     broadcast(seat.code);
+
+    // Hold the seat long enough for a page refresh to reclaim it.
+    setTimeout(() => {
+      const still = rooms.get(seat.code);
+      if (still === undefined) {
+        return;
+      }
+      const held = still.view().seats.find((candidate) => candidate.id === seat.seatId);
+      if (held?.connected === true) {
+        return; // they came back
+      }
+      still.removeSeat(seat.seatId);
+      broadcast(seat.code);
+    }, RECONNECT_GRACE_MS);
+
     if (room.isEmpty) {
       setTimeout(() => {
         const still = rooms.get(seat.code);
         if (still !== undefined && still.isEmpty) {
+          turnClocks.delete(seat.code);
           rooms.delete(seat.code);
         }
       }, EMPTY_ROOM_TTL_MS);

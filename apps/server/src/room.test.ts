@@ -75,12 +75,31 @@ describe("lobby", () => {
     expect(() => room.join("c", "Cy")).toThrow(/already started/i);
   });
 
-  it("removes a seat that leaves during the lobby", () => {
+  it("holds a seat that drops during the lobby, so a refresh can reclaim it", () => {
     const room = new Room("TEST1", scripted());
     room.join("a", "Ada");
     room.join("b", "Bo");
     room.disconnect("b");
+    expect(room.view().seats).toHaveLength(2);
+    expect(room.view().seats[1]?.connected).toBe(false);
+    room.reconnect("b");
+    expect(room.view().seats[1]?.connected).toBe(true);
+  });
+
+  it("drops a held seat once the socket layer gives up on it", () => {
+    const room = new Room("TEST1", scripted());
+    room.join("a", "Ada");
+    room.join("b", "Bo");
+    room.disconnect("b");
+    room.removeSeat("b");
     expect(room.view().seats).toHaveLength(1);
+  });
+
+  it("never removes a seat mid-game, since that would shift the turn order", () => {
+    const room = twoPlayerGame();
+    room.disconnect("b");
+    room.removeSeat("b");
+    expect(room.view().seats).toHaveLength(2);
   });
 });
 
@@ -277,6 +296,26 @@ describe("disconnects", () => {
     expect(room.view().turn?.seatId).toBe("c");
   });
 
+  it("does not end the game when everyone is momentarily gone", () => {
+    const room = twoPlayerGame();
+    room.disconnect("a");
+    room.disconnect("b");
+    expect(room.view().status).toBe("playing");
+    expect(room.view().winnerIds).toEqual([]);
+  });
+
+  it("keeps a solo game alive across a refresh, and gives the turn back", () => {
+    const room = new Room("TEST1", scripted([1, 1, 1, 2, 3, 4]));
+    room.join("a", "Ada");
+    room.start("a");
+    room.disconnect("a");
+    expect(room.view().status).toBe("playing");
+    room.reconnect("a");
+    expect(room.view().turn?.seatId).toBe("a");
+    room.doRoll("a");
+    expect(room.view().turn?.dice).toHaveLength(6);
+  });
+
   it("lets a seat come back", () => {
     const room = twoPlayerGame();
     room.disconnect("b");
@@ -308,6 +347,72 @@ describe("solo", () => {
     room.doRoll("a");
     pick(room, 0, 1, 2, 3, 4, 5);
     room.bank("a");
+    expect(room.view().status).toBe("over");
+    expect(room.view().winnerIds).toEqual(["a"]);
+  });
+});
+
+describe("the clock running out", () => {
+  it("banks a turn that meets the entry threshold", () => {
+    const room = twoPlayerGame([1, 1, 1, 2, 3, 4]);
+    room.doRoll("a");
+    pick(room, 0, 1, 2); // 1000, over the 500 threshold
+    room.timeout("a");
+    expect(room.view().seats[0]?.score).toBe(1000);
+    expect(room.view().lastEvent).toMatch(/ran out of time and banked/i);
+    expect(room.view().turn?.seatId).toBe("b");
+  });
+
+  it("loses a turn that does not meet the threshold", () => {
+    const room = twoPlayerGame([1, 2, 3, 4, 6, 6]);
+    room.doRoll("a");
+    pick(room, 0); // 100, under 500
+    room.timeout("a");
+    expect(room.view().seats[0]?.score).toBe(0);
+    expect(room.view().lastEvent).toMatch(/ran out of time$/i);
+    expect(room.view().turn?.seatId).toBe("b");
+  });
+
+  it("banks any amount once the player is on the board", () => {
+    const room = twoPlayerGame([1, 1, 1, 2, 3, 4], [1, 2, 3, 4, 6, 6], [5, 2, 3, 4, 6, 6]);
+    room.doRoll("a");
+    pick(room, 0, 1, 2);
+    room.bank("a");
+    room.doRoll("b");
+    room.timeout("b"); // Bo has nothing, and is not on the board
+    room.doRoll("a");
+    pick(room, 0); // 50, tiny, but Ada is on the board
+    room.timeout("a");
+    expect(room.view().seats[0]?.score).toBe(1050);
+  });
+
+  it("ignores a timeout for the wrong seat", () => {
+    const room = twoPlayerGame([1, 1, 1, 2, 3, 4]);
+    room.doRoll("a");
+    pick(room, 0, 1, 2);
+    room.timeout("b");
+    expect(room.view().turn?.seatId).toBe("a");
+    expect(room.view().seats[0]?.score).toBe(0);
+  });
+
+  it("ignores a timeout before the game starts", () => {
+    const room = new Room("TEST1", scripted());
+    room.join("a", "Ada");
+    expect(() => room.timeout("a")).not.toThrow();
+  });
+
+  it("ends the game if the banked total reaches the target", () => {
+    const room = new Room("TEST1", scripted([1, 1, 1, 1, 1, 1]), {
+      ...DEFAULT_RULESET,
+      targetScore: 5000,
+      finalRound: false,
+    });
+    room.join("a", "Ada");
+    room.join("b", "Bo");
+    room.start("a");
+    room.doRoll("a");
+    pick(room, 0, 1, 2, 3, 4, 5);
+    room.timeout("a");
     expect(room.view().status).toBe("over");
     expect(room.view().winnerIds).toEqual(["a"]);
   });

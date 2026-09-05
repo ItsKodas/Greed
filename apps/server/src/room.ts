@@ -51,6 +51,11 @@ export class Room {
   status: RoomStatus = "lobby";
   winnerIds: string[] = [];
   lastEvent: string | null = null;
+  /**
+   * When the active player forfeits, in epoch ms. Owned by the socket layer —
+   * this class never reads it, so the engine stays free of wall-clock time.
+   */
+  endsAt: number | null = null;
 
   private turn: Turn | null = null;
   private readonly roll: Roller;
@@ -90,24 +95,39 @@ export class Room {
     return seat;
   }
 
-  /** Marks a seat disconnected. In the lobby the seat is removed outright. */
+  /**
+   * Marks a seat disconnected but keeps it, so a refresh can reclaim it. The
+   * socket layer drops the seat later if nobody comes back — see removeSeat.
+   */
   disconnect(seatId: string): void {
     const index = this.seats.findIndex((seat) => seat.id === seatId);
     if (index === -1) {
       return;
     }
     const seat = this.seats[index] as Seat;
-    if (this.status === "lobby") {
-      this.seats.splice(index, 1);
-      this.lastEvent = `${seat.name} left`;
-      return;
-    }
     seat.connected = false;
     this.lastEvent = `${seat.name} dropped out`;
     // Do not stall the table waiting for someone who left.
     if (this.turn !== null && this.turn.seatIndex === index && this.status === "playing") {
       this.advanceTurn();
     }
+  }
+
+  /**
+   * Gives up on a seat that never came back. Only in the lobby: removing a
+   * seat mid-game would shift every later seat's index out from under the
+   * turn order, and a disconnected seat is simply skipped anyway.
+   */
+  removeSeat(seatId: string): void {
+    if (this.status !== "lobby") {
+      return;
+    }
+    const index = this.seats.findIndex((seat) => seat.id === seatId);
+    if (index === -1) {
+      return;
+    }
+    const [seat] = this.seats.splice(index, 1);
+    this.lastEvent = `${seat?.name ?? "Someone"} left`;
   }
 
   reconnect(seatId: string): Seat {
@@ -254,6 +274,46 @@ export class Room {
   }
 
   /**
+   * The clock ran out. Banks what the player has if it would count, otherwise
+   * the turn is lost — the same outcome as a farkle, reached by inaction.
+   *
+   * Deliberately forgiving: anything already set aside plus a legal current
+   * selection is banked, because losing a good turn to a slow connection is a
+   * worse experience than a stranger having to wait.
+   */
+  timeout(seatId: string): void {
+    if (this.status !== "playing" || this.turn === null) {
+      return;
+    }
+    const seat = this.seats[this.turn.seatIndex];
+    if (seat === undefined || seat.id !== seatId) {
+      return;
+    }
+
+    const selection = this.selectedDice(this.turn);
+    const scored = selection.length > 0 ? scoreSelection(selection, this.ruleset) : null;
+    const total = this.turn.kept + (scored !== null && scored.valid ? scored.points : 0);
+    const worthBanking = seat.onBoard ? total > 0 : total >= this.ruleset.entryThreshold;
+
+    if (worthBanking) {
+      seat.score += total;
+      seat.onBoard = true;
+      this.lastEvent = `${seat.name} ran out of time and banked ${total.toLocaleString("en-US")}`;
+      if (seat.score >= this.ruleset.targetScore && this.finalRoundTrigger === null) {
+        if (this.ruleset.finalRound) {
+          this.finalRoundTrigger = seat.id;
+        } else {
+          this.finish();
+          return;
+        }
+      }
+    } else {
+      this.lastEvent = `${seat.name} ran out of time`;
+    }
+    this.advanceTurn();
+  }
+
+  /**
    * Moves play to the next connected seat. Called by the socket layer after a
    * farkle has been shown, and directly after a bank.
    */
@@ -275,8 +335,9 @@ export class Room {
       this.turn = { seatIndex: next, dice: [], held: [], kept: 0, phase: "awaiting_roll" };
       return;
     }
-    // Nobody left connected.
-    this.finish();
+    // Nobody is connected right now. Leave the game exactly where it is rather
+    // than declaring a winner: at this instant a refresh and a walk-out look
+    // identical, and the empty-room reaper clears the table if nobody returns.
   }
 
   private finish(): void {
@@ -331,6 +392,7 @@ export class Room {
       nextRollCount,
       bustChance: bustProbability(nextRollCount, this.ruleset),
       phase: turn.phase,
+      endsAt: this.endsAt,
     };
   }
 
