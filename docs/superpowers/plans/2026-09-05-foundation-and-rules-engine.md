@@ -168,6 +168,18 @@ Do not pin versions by hand — take whatever npm resolves and let it write the 
 }
 ```
 
+Now run install again, from the repo root:
+
+```bash
+npm install
+```
+
+This is not redundant. Step 2's install ran before this workspace existed, so
+the lockfile has no record of it and `npm ci` would not link
+`node_modules/@greed/rules` — every later package importing the `@greed/rules`
+specifier would fail to resolve. No dependency versions change; this only syncs
+the lockfile with the workspace graph.
+
 - [ ] **Step 4: Write the failing test**
 
 `packages/rules/src/rulesets.test.ts`:
