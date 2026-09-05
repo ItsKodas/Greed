@@ -14,6 +14,11 @@ export const SURFACES = ["wood", "felt", "leather", "brass", "paper"] as const;
 
 export type SurfaceName = (typeof SURFACES)[number];
 
+export interface SurfaceStyle {
+  backgroundImage: string;
+  backgroundBlendMode: string;
+}
+
 /**
  * Aged walnut. The stretched baseFrequency pulls the noise into a direction so
  * it reads as grain; the repeating gradient supplies the harder growth lines.
@@ -70,4 +75,52 @@ export function paper(options: SurfaceOptions = {}): string {
 export function vignette(options: { strength?: number } = {}): string {
   const { strength = 0.55 } = options;
   return `radial-gradient(120% 90% at 50% 40%, transparent 40%, rgb(0 0 0 / ${strength}) 100%)`;
+}
+
+const surfaceMakers: Record<SurfaceName, (options?: SurfaceOptions) => string> = {
+  wood,
+  felt,
+  leather,
+  brass,
+  paper,
+};
+
+/**
+ * Split a CSS `background-image` value into its top-level comma-separated
+ * layers. A plain `String.split(",")` would also split on the commas inside
+ * a gradient's own argument list, so this tracks parenthesis depth instead.
+ */
+function splitLayers(image: string): string[] {
+  const layers: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < image.length; i++) {
+    const char = image[i];
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+    } else if (char === "," && depth === 0) {
+      layers.push(image.slice(start, i));
+      start = i + 1;
+    }
+  }
+  layers.push(image.slice(start));
+  return layers;
+}
+
+/**
+ * The mockup composites its grain layer with `mix-blend-mode: overlay`
+ * everywhere it appears — without it the noise only darkens instead of both
+ * lightening and darkening, reading flatter than the sign-off. Every surface
+ * puts its noise layer first, so the blend mode is `overlay` for that layer
+ * and `normal` for every layer after it. The layer count is derived from the
+ * actual image rather than hardcoded per surface, so it stays correct if a
+ * surface's layer count ever changes.
+ */
+export function surfaceStyle(name: SurfaceName, options?: SurfaceOptions): SurfaceStyle {
+  const backgroundImage = surfaceMakers[name](options);
+  const layerCount = splitLayers(backgroundImage).length;
+  const backgroundBlendMode = ["overlay", ...Array(layerCount - 1).fill("normal")].join(", ");
+  return { backgroundImage, backgroundBlendMode };
 }

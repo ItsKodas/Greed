@@ -5,8 +5,10 @@ export {
   felt,
   leather,
   paper,
+  surfaceStyle,
   vignette,
   wood,
   type SurfaceName,
   type SurfaceOptions,
+  type SurfaceStyle,
 } from "./surfaces.js";
