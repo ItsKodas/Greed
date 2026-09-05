@@ -7,18 +7,18 @@ Play chips only. No real-money wagering, no purchase path.
 
 ## Status
 
-**Playable.** Open a table, share the code, play.
+**Playable.** Open a table, share the link, play.
 
 | | |
 |---|---|
-| **Rules engine** | Complete. 111 tests. |
-| **Design system** | Complete. Tokens + procedural textures + a live gallery. |
-| **Server** | Rooms, turns, reconnect, turn clock, server-authoritative dice. |
-| **Client** | Join, lobby and table screens. |
+| **Rules engine** | Two editions, per-face scoring. |
+| **Design system** | Tokens, procedural textures, a live gallery. |
+| **Server** | Rooms, turns, reconnect, turn clock, validation, rate limiting. |
+| **Client** | Join, lobby, table, chat, house rules. |
 | **Bots** | Easy, normal and hard, deciding by expected value. |
 | **Sound** | Recorded dice, synthesised interface. |
-| Discord login, chips, persistence | Not started |
-| Chat | Not started |
+| **Accounts** | Discord sign-in, chips, buy-ins, stats — all optional. |
+| **Deployment** | Docker image and a compose stack. |
 
 ```bash
 npm install
@@ -26,19 +26,27 @@ npm run dev
 ```
 
 That starts the game server on `:3001` and the client on `:5173`. Open
-<http://localhost:5173>, put in a name, and open a table — then send the
-five-character code to whoever you want to play against. Two to eight players.
+<http://localhost:5173>, put in a name, and open a table — then send the link to
+whoever you want to play against. One to eight players; a table of one is solo
+practice, and the host can seat bots.
 
-`npm run dev` also serves the design-system gallery at `/style`, and `npm test`
-runs all 226 tests.
+`npm test` runs 317 tests, `npm run lint` and `npm run typecheck` check the rest,
+and `npm run dev` also serves the design gallery at `/style`.
 
-Games live in memory, so restarting the server ends them. There are no accounts
-and no chips yet — you type a name and sit down. Refreshing the page keeps your
-seat; a table of one is solo practice, and the host can seat bots.
+### Running the whole thing
 
-Sound files are read from `assets/audio/raw/`. Drop a `.mp3` into
-`assets/audio/raw/dice/` and restart — a build step copies whatever is there and
-writes a manifest, so nothing needs renaming and no code needs editing.
+```bash
+docker compose up --build
+```
+
+Then <http://localhost:3001>, where the server serves the built client itself.
+
+### What is optional
+
+Everything in [`.env.example`](.env.example). With none of it set the game still
+runs exactly as above: guests type a name and play, nothing is kept between
+restarts, and the sign-in button is hidden rather than offered and broken. Add
+Discord credentials to get profiles, and a `MONGO_URL` to keep them.
 
 ## How the game works
 
