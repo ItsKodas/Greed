@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+**/dist
+.git
+.github
+.superpowers
+.claude
+docs
+*.log
+.env
+.env.*
+!.env.example
+apps/web/public/audio

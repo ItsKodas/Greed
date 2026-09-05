@@ -8,7 +8,7 @@ const css = readFileSync(cssPath, "utf8");
 
 /** Turn `walnutLit` into `--gr-color-walnut-lit`. */
 function cssName(key: string): string {
-  return "--gr-color-" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+  return `--gr-color-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
 }
 
 describe("color", () => {
@@ -68,7 +68,7 @@ describe("tokens.css", () => {
   it("defines no colour property that the token object does not know about", () => {
     const declared = [...css.matchAll(/--gr-color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]);
     const known = Object.keys(color).map((key) =>
-      key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()),
+      key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
     );
     for (const name of declared) {
       expect(known, `--gr-color-${name} has no entry in tokens.ts`).toContain(name);

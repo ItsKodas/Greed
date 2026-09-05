@@ -1,4 +1,4 @@
-import MongoStoreFactory from "connect-mongo";
+import type session from "express-session";
 import { readAuthConfig } from "./auth.js";
 import { MongoStore } from "./mongo-store.js";
 import { createGreedServer } from "./server.js";
@@ -19,12 +19,15 @@ const mongoUrl = process.env["MONGO_URL"];
 
 async function main(): Promise<void> {
   let store: Store = new MemoryStore();
-  let sessionStore;
+  let sessionStore: session.Store | undefined;
 
   if (mongoUrl !== undefined && mongoUrl.length > 0) {
     try {
       store = await MongoStore.connect(mongoUrl);
-      sessionStore = MongoStoreFactory.create({ mongoUrl });
+      // Loaded here rather than at the top: with no database configured the
+      // server should not need a database driver present at all.
+      const { default: MongoSessionStore } = await import("connect-mongo");
+      sessionStore = MongoSessionStore.create({ mongoUrl });
       console.log("greed: profiles and chips are persistent");
     } catch (error) {
       // A database that will not answer should not take the game down with

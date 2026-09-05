@@ -17,9 +17,11 @@
     "dev:web": "npm run dev -w @greed/web",
     "sync-audio": "node scripts/sync-audio.mjs",
     "predev": "npm run sync-audio",
-    "prebuild": "npm run sync-audio"
+    "prebuild": "npm run sync-audio",
+    "lint": "biome lint ."
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
     "@testing-library/react": "^16.3.3",
     "@types/express": "^4.17.25",
     "@types/express-session": "^1.19.0",
@@ -30,7 +32,6 @@
     "concurrently": "^10.0.5",
     "jsdom": "^29.1.1",
     "socket.io-client": "^4.8.3",
-    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0"

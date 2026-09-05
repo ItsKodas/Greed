@@ -51,6 +51,9 @@ export function Table({ room, seatId, actions }: TableProps) {
   const [celebrating, setCelebrating] = useState(false);
   const greeded = turn !== null && isScoringStraight(turn.dice, room);
   const seq = turn?.rollSeq ?? 0;
+  // The celebration belongs to one roll, so it keys on the roll counter
+  // rather than on the room.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the roll counter by design
   useEffect(() => {
     if (!greeded) {
       setCelebrating(false);
@@ -102,7 +105,11 @@ export function Table({ room, seatId, actions }: TableProps) {
             <div className={`tray__dice${rolling ? " tray__dice--rolling" : ""}`}>
               {turn.dice.map((face, index) => (
                 <Die
-                  key={index}
+                  // A die is its slot. Position is its whole identity — it is what the
+                  // server toggles, and dice never reorder except on a fresh roll, where
+                  // being treated as the same slots is exactly what the animation needs.
+                  // noArrayIndexKey is switched off for this file in biome.json.
+                  key={`slot-${index}`}
                   face={(rolling ? faces[index] : face) ?? face}
                   skin={room.ruleset.skin}
                   held={!rolling && turn.held[index] === true}

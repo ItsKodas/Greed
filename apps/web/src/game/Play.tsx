@@ -48,7 +48,7 @@ export function Play() {
         </h1>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
         {room !== null ? <LeaveButton room={room} onLeave={actions.leave} /> : null}
-        <Account account={account} />
+        <AccountBadge account={account} />
         <Volume />
         <span className={`play__link${connected ? " play__link--up" : ""}`}>
           {connected ? "connected" : "offline"}
@@ -115,7 +115,7 @@ function LeaveButton({ room, onLeave }: { room: RoomView; onLeave: () => void })
  * server actually has Discord configured — offering a button that answers 503
  * would be worse than offering nothing.
  */
-function Account({ account }: { account: Account }) {
+function AccountBadge({ account }: { account: Account }) {
   if (account.loading) {
     return null;
   }
@@ -257,6 +257,7 @@ function Join({
             value={name}
             maxLength={20}
             placeholder="Ada"
+            // biome-ignore lint/a11y/noAutofocus: this screen exists only to take a name after following an invitation
             autoFocus
             onChange={(event) => setName(event.target.value)}
             onKeyDown={(event) => {

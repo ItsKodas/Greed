@@ -242,17 +242,13 @@ describe("playing for chips", () => {
       accentColor: null,
     });
     // Six 1s every roll: 8,000 in one turn, so Ada wins at once.
-    let seen = 0;
     server = createGreedServer({
       store,
       auth: null,
       serveClient: false,
       farklePauseMs: 20,
       roll: () => [1, 1, 1, 1, 1, 1] as Die[],
-      identify: () => {
-        seen += 1;
-        return ada.id;
-      },
+      identify: () => ada.id,
     });
     await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
     const port = (server.http.address() as AddressInfo).port;

@@ -8,9 +8,10 @@ import session from "express-session";
 import { Server } from "socket.io";
 import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
 import type { Die } from "@greed/rules";
+import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
+// From the subpath, not the barrel: the client imports the barrel, and pulling
+// zod in through it would ship a validation library to every browser.
 import {
-  CODE_ALPHABET,
-  CODE_LENGTH,
   addBotSchema,
   chatSchema,
   createSchema,
@@ -20,7 +21,7 @@ import {
   setBuyInSchema,
   setRulesSchema,
   toggleSchema,
-} from "@greed/shared";
+} from "@greed/shared/schemas";
 import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
 import { decide, thinkingTime } from "./bot.js";
 import type { BotSkill } from "./bot.js";
@@ -199,7 +200,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
      */
     app.get(/^(?!\/(?:healthz|auth|api|socket\.io)\b).*/, (_request, response) => {
       response.sendFile(join(clientDist, "index.html"), (error) => {
-        if (error !== undefined && error !== null) {
+        if (error != null) {
           response.status(404).end();
         }
       });
@@ -405,7 +406,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     }
     later(() => {
       const still = rooms.get(code);
-      if (still !== undefined && still.isEmpty) {
+      if (still?.isEmpty === true) {
         turnClocks.delete(code);
         farklePauses.delete(code);
         botMoves.delete(code);

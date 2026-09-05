@@ -15,19 +15,3 @@ export {
   type ServerToClient,
   type TurnView,
 } from "./protocol.js";
-
-export {
-  addBotSchema,
-  chatSchema,
-  createSchema,
-  joinSchema,
-  removeSeatSchema,
-  resumeSchema,
-  setBuyInSchema,
-  setRulesSchema,
-  toggleSchema,
-  type CreatePayload,
-  type JoinPayload,
-  type ResumePayload,
-  type SetRulesPayload,
-} from "./schemas.js";

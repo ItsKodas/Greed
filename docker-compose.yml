@@ -1,0 +1,41 @@
+# The whole game in two containers.
+#
+#   docker compose up --build
+#
+# Then open http://localhost:3001 — in production the server serves the built
+# client itself, so there is no separate web container and no CORS to arrange.
+#
+# Everything in .env is optional. With none of it set the game still runs:
+# guests type a name and play, and nothing is kept between restarts.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  greed:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      # Overridden by anything in .env, which is loaded below.
+      MONGO_URL: mongodb://mongo:27017/greed
+      CLIENT_ORIGIN: http://localhost:3001
+      PORT: "3001"
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:

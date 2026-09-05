@@ -37,6 +37,9 @@ export function useRollAnimation(
 
   settled.current = dice;
 
+  // Only a new roll restarts the tumble. Depending on the dice as well would
+  // restart it every time a die is picked up, which is what must not happen.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the roll counter by design
   useEffect(() => {
     if (dice.length === 0) {
       setFaces([]);
@@ -65,17 +68,16 @@ export function useRollAnimation(
       window.clearInterval(spin);
       window.clearTimeout(stop);
     };
-    // Only a new roll restarts the tumble; picking dice up must not.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rollSeq]);
 
-  // A roll that arrives while one is already showing (or on first mount)
-  // still needs the real faces once the tumble is over.
+  // A roll that arrives while one is already showing, or on first mount,
+  // still needs the real faces once the tumble is over. Keyed on the dice by
+  // value because the array identity changes on every broadcast.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: compared by value, not identity
   useEffect(() => {
     if (!rolling) {
       setFaces([...dice]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rolling, dice.join(",")]);
 
   return { rolling, faces };

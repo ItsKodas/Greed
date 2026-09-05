@@ -11,6 +11,9 @@ export function Chat({ log, seatId, onSay }: ChatProps) {
   const [draft, setDraft] = useState("");
   const bottom = useRef<HTMLDivElement | null>(null);
 
+  // Scrolling follows the arrival of a message, which the length captures.
+  // The log itself is a new array on every render.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: length is the real trigger
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [log.length]);

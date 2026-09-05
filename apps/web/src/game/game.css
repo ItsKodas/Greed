@@ -280,14 +280,24 @@
 }
 
 .die {
+  /*
+   * The die's shading, mixed from the palette rather than picked by eye, so
+   * changing bone or walnut in tokens.css moves the dice with it.
+   */
+  --die-face: color-mix(in srgb, var(--gr-color-bone) 78%, var(--gr-color-walnut));
+  --die-edge: color-mix(in srgb, var(--gr-color-bone-dim) 68%, var(--gr-color-walnut));
+  --die-dead-face: color-mix(in srgb, var(--gr-color-bone-dim) 82%, var(--gr-color-walnut));
+  --die-dead-back: color-mix(in srgb, var(--gr-color-bone-dim) 52%, var(--gr-color-walnut));
+  --die-dead-edge: color-mix(in srgb, var(--gr-color-bone-dim) 42%, var(--gr-color-walnut));
+
   width: 54px;
   height: 54px;
   flex: none;
   padding: var(--gr-space-2);
   border: none;
   border-radius: var(--gr-radius-die);
-  background-image: linear-gradient(155deg, var(--gr-color-bone-lit), #c8b996);
-  box-shadow: 0 3px 0 #8e805f, 0 5px 10px rgb(0 0 0 / 0.6);
+  background-image: linear-gradient(155deg, var(--gr-color-bone-lit), var(--die-face));
+  box-shadow: 0 3px 0 var(--die-edge), 0 5px 10px rgb(0 0 0 / 0.6);
   display: grid;
   grid-template: repeat(3, 1fr) / repeat(3, 1fr);
   cursor: pointer;
@@ -308,12 +318,12 @@
 
 .die--held {
   transform: translateY(-9px);
-  box-shadow: 0 3px 0 #8e805f, 0 12px 16px rgb(0 0 0 / 0.7), 0 0 0 3px var(--gr-color-brass);
+  box-shadow: 0 3px 0 var(--die-edge), 0 12px 16px rgb(0 0 0 / 0.7), 0 0 0 3px var(--gr-color-brass);
 }
 
 .die--dead {
-  background-image: linear-gradient(155deg, #9b9276, #6f6650);
-  box-shadow: 0 2px 0 #5a5341, 0 3px 6px rgb(0 0 0 / 0.5);
+  background-image: linear-gradient(155deg, var(--die-dead-face), var(--die-dead-back));
+  box-shadow: 0 2px 0 var(--die-dead-edge), 0 3px 6px rgb(0 0 0 / 0.5);
   opacity: 0.5;
 }
 
@@ -387,13 +397,21 @@
   border-radius: var(--gr-radius-sm);
   cursor: pointer;
   border: 1px solid var(--gr-color-brass-dim);
-  background: linear-gradient(180deg, #c79433, var(--gr-color-brass-dim));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gr-color-brass) 82%, var(--gr-color-brass-hi)),
+    var(--gr-color-brass-dim)
+  );
   color: var(--gr-color-walnut);
   box-shadow: 0 1px 0 rgb(255 220 150 / 0.4) inset, var(--gr-lift-low);
 }
 
 .btn:hover:not(:disabled) {
-  background: linear-gradient(180deg, #e0ac45, #96702a);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gr-color-brass-hi) 78%, var(--gr-color-brass)),
+    color-mix(in srgb, var(--gr-color-brass) 60%, var(--gr-color-brass-dim))
+  );
 }
 
 .btn:focus-visible {
@@ -598,7 +616,7 @@
 .die--rolling {
   animation: die-tumble 0.26s ease-in-out infinite;
   cursor: default;
-  box-shadow: 0 3px 0 #8e805f, 0 10px 18px rgb(0 0 0 / 0.55);
+  box-shadow: 0 3px 0 var(--die-edge), 0 10px 18px rgb(0 0 0 / 0.55);
 }
 
 @keyframes die-tumble {
@@ -769,7 +787,7 @@
   22% {
     transform: translateY(-22px) scale(1.18) rotate(-5deg);
     box-shadow:
-      0 3px 0 #8e805f,
+      0 3px 0 var(--die-edge),
       0 18px 26px rgb(0 0 0 / 0.6),
       0 0 0 4px var(--gr-color-brass),
       0 0 26px 8px rgb(232 193 104 / 0.55);
@@ -777,7 +795,7 @@
   55% {
     transform: translateY(-6px) scale(1.05) rotate(2deg);
     box-shadow:
-      0 3px 0 #8e805f,
+      0 3px 0 var(--die-edge),
       0 10px 16px rgb(0 0 0 / 0.55),
       0 0 0 3px var(--gr-color-brass-hi),
       0 0 18px 4px rgb(232 193 104 / 0.35);
@@ -829,7 +847,7 @@
   /* Still mark it, just without the movement. */
   .die--greed {
     box-shadow:
-      0 3px 0 #8e805f,
+      0 3px 0 var(--die-edge),
       0 0 0 3px var(--gr-color-brass-hi);
   }
 }

@@ -225,7 +225,7 @@ export class Room {
     seat.connected = false;
     this.lastEvent = `${seat.name} dropped out`;
     // Do not stall the table waiting for someone who left.
-    if (this.turn !== null && this.turn.seatIndex === index && this.status === "playing") {
+    if (this.turn?.seatIndex === index && this.status === "playing") {
       this.advanceTurn();
     }
   }
@@ -410,7 +410,7 @@ export class Room {
 
     const selection = this.selectedDice(this.turn);
     const scored = selection.length > 0 ? scoreSelection(selection, this.ruleset) : null;
-    const total = this.turn.kept + (scored !== null && scored.valid ? scored.points : 0);
+    const total = this.turn.kept + (scored?.valid === true ? scored.points : 0);
     const worthBanking = seat.onBoard ? total > 0 : total >= this.ruleset.entryThreshold;
 
     if (worthBanking) {
@@ -494,7 +494,7 @@ export class Room {
     const seat = this.seats[turn.seatIndex] as Seat;
     const selection = this.selectedDice(turn);
     const scored = selection.length > 0 ? scoreSelection(selection, this.ruleset) : null;
-    const valid = scored !== null && scored.valid;
+    const valid = scored?.valid === true;
 
     const remaining = turn.dice.length - selection.length;
     const nextRollCount = turn.phase === "awaiting_roll" ? DICE_PER_ROLL : remaining === 0 ? DICE_PER_ROLL : remaining;

@@ -14,7 +14,9 @@
     "connect-mongo": "^6.0.0",
     "express": "^4.21.2",
     "express-session": "^1.19.0",
+    "mongodb": "^7.6.0",
     "mongoose": "^9.9.5",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "tsx": "^4.23.13"
   }
 }
