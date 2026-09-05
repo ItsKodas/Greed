@@ -1,3 +1,14 @@
+/*
+ * Border-box everywhere. Without it any element combining width:100% with
+ * padding overflows its parent — which is exactly what the code field and the
+ * buttons inside a .panel were doing.
+ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: var(--gr-color-walnut);
