@@ -417,7 +417,10 @@ describe("encodeSvg", () => {
   });
 
   it("collapses whitespace and trims", () => {
-    expect(encodeSvg("  <a>\n\n  <b/>\t</a>  ")).toBe("%3Ca%3E %3Cb/%3E%3C/a%3E");
+    // Interior single spaces survive — collapsing normalises runs, it does not
+    // delete separators. encodeSvg must not strip whitespace before a closing
+    // tag, or `<text>Hello </text>` would silently lose its trailing space.
+    expect(encodeSvg("  <a>\n\n  <b/>\t</a>  ")).toBe("%3Ca%3E %3Cb/%3E %3C/a%3E");
   });
 
   it("encodes braces", () => {
