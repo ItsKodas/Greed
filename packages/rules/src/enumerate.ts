@@ -24,23 +24,27 @@ export function enumerateOptions(dice: readonly Die[], rules: Ruleset): Option[]
       if (totalDice(current) === 0) {
         return;
       }
-      const partition = bestPartition([...current] as Counts, rules, memo);
+      // Snapshot once: bestPartition only reads it, and the pushed option
+      // can share the same array rather than allocating a second copy.
+      const snapshot = [...current] as Counts;
+      const partition = bestPartition(snapshot, rules, memo);
       if (partition === null) {
         return;
       }
       options.push({
-        counts: [...current] as Counts,
+        counts: snapshot,
         points: partition.points,
         diceUsed: totalDice(current),
         breakdown: partition.breakdown,
       });
       return;
     }
+    // Every iteration below reassigns current[face] before it is read again,
+    // so there is no need to reset it once the loop finishes.
     for (let n = 0; n <= available[face]; n += 1) {
       current[face] = n;
       walk(face + 1);
     }
-    current[face] = 0;
   };
 
   walk(0);
