@@ -6,3 +6,7 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
+
+.not-found {
+  padding: var(--gr-space-6);
+}

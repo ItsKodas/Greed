@@ -6,7 +6,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Navigate to="/style" replace />} />
       <Route path="/style" element={<Gallery />} />
-      <Route path="*" element={<p style={{ padding: 32 }}>No such page.</p>} />
+      <Route path="*" element={<p className="not-found">No such page.</p>} />
     </Routes>
   );
 }
