@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/rules" },
-    { "path": "./packages/ui" }
+    { "path": "./packages/ui" },
+    { "path": "./apps/web" }
   ]
 }
