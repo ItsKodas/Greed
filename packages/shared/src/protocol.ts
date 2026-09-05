@@ -22,6 +22,12 @@ export interface SeatView {
 
 export interface TurnView {
   seatId: string;
+  /**
+   * Increments on every roll. The client keys its dice animation and its sound
+   * off this rather than off the dice themselves, because rolling the same
+   * faces twice running is a real roll and must still register.
+   */
+  rollSeq: number;
   /** The dice currently on the table. Set-aside dice are folded into `kept`. */
   dice: Die[];
   /** Parallel to `dice`: which are currently picked up. */

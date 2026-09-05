@@ -1,6 +1,7 @@
 import type { RoomView } from "@greed/shared";
 import { useEffect, useState } from "react";
 import { Die } from "./Die.js";
+import { useRollAnimation } from "./useRollAnimation.js";
 import type { RoomActions } from "./useRoom.js";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
@@ -37,6 +38,7 @@ export function Table({ room, seatId, actions }: TableProps) {
   const canRollFresh = yours && turn.phase === "awaiting_roll";
   const total = turn === null ? 0 : turn.kept + turn.selection;
   const left = useCountdown(over ? null : (turn?.endsAt ?? null));
+  const { rolling, faces } = useRollAnimation(turn?.dice ?? [], turn?.rollSeq ?? 0);
 
   return (
     <div className="table">
@@ -72,22 +74,26 @@ export function Table({ room, seatId, actions }: TableProps) {
               {over ? "Game over." : yours ? "Your turn — roll to begin." : `Waiting on ${active?.name ?? "the next player"}.`}
             </p>
           ) : (
-            <div className="tray__dice">
+            <div className={`tray__dice${rolling ? " tray__dice--rolling" : ""}`}>
               {turn.dice.map((face, index) => (
                 <Die
                   key={index}
-                  face={face}
+                  face={(rolling ? faces[index] : face) ?? face}
                   skin={room.ruleset.skin}
-                  held={turn.held[index] === true}
-                  dead={turn.dead[index] === true}
-                  interactive={yours && turn.phase === "selecting"}
+                  held={!rolling && turn.held[index] === true}
+                  dead={!rolling && turn.dead[index] === true}
+                  rolling={rolling}
+                  index={index}
+                  interactive={!rolling && yours && turn.phase === "selecting"}
                   onClick={() => actions.toggle(index)}
                 />
               ))}
             </div>
           )}
           <p className="tray__note">
-            {turn?.phase === "farkled"
+            {rolling
+              ? "Rolling…"
+              : turn?.phase === "farkled"
               ? "Farkle — nothing scores. The turn is lost."
               : yours && turn?.phase === "selecting"
                 ? turn.selectionValid

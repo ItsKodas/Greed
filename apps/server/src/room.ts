@@ -34,6 +34,8 @@ interface Turn {
   held: boolean[];
   /** Points banked into this turn before the current selection. */
   kept: number;
+  /** How many times these dice have been thrown this turn. */
+  seq: number;
   phase: Phase;
 }
 
@@ -214,7 +216,7 @@ export class Room {
       throw new RoomError(`You need at least ${MIN_SEATS} players.`);
     }
     this.status = "playing";
-    this.turn = { seatIndex: 0, dice: [], held: [], kept: 0, phase: "awaiting_roll" };
+    this.turn = { seatIndex: 0, dice: [], held: [], kept: 0, seq: 0, phase: "awaiting_roll" };
     this.lastEvent = `${this.seats[0]?.name ?? "Someone"} goes first`;
   }
 
@@ -265,6 +267,7 @@ export class Room {
     // the client is holding can go stale.
     turn.dice = straight ? [...rolled].sort((a, b) => a - b) : rolled;
     turn.held = turn.dice.map(() => false);
+    turn.seq += 1;
     turn.phase = "selecting";
 
     const seat = this.seats[turn.seatIndex] as Seat;
@@ -395,7 +398,7 @@ export class Room {
         this.finish();
         return;
       }
-      this.turn = { seatIndex: next, dice: [], held: [], kept: 0, phase: "awaiting_roll" };
+      this.turn = { seatIndex: next, dice: [], held: [], kept: 0, seq: 0, phase: "awaiting_roll" };
       return;
     }
     // Nobody is connected right now. Leave the game exactly where it is rather
@@ -446,6 +449,7 @@ export class Room {
 
     return {
       seatId: seat.id,
+      rollSeq: turn.seq,
       dice: [...turn.dice],
       held: [...turn.held],
       dead: this.deadFlags(turn),

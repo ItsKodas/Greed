@@ -8,7 +8,8 @@
  */
 
 export type Cue =
-  | "roll"
+  | "shake"
+  | "land"
   | "pick"
   | "drop"
   | "bank"
@@ -128,12 +129,26 @@ function pick(list: string[] | undefined): string | null {
   return list[Math.floor(Math.random() * list.length)] ?? null;
 }
 
+/**
+ * Prefers dice files whose name mentions a phase, falling back to any of them.
+ *
+ * Naming a file "diceshake2.mp3" is a hint, not a requirement — drop in a pile
+ * of unnamed clips and they still all play, just without the split.
+ */
+function pickPhase(word: string): string | null {
+  const all = samples.dice;
+  if (all === undefined || all.length === 0) {
+    return null;
+  }
+  const matching = all.filter((url) => url.toLowerCase().includes(word));
+  return pick(matching.length > 0 ? matching : all);
+}
+
 /** Plays a sample with a little pitch variation so repeats stay alive. */
-async function sample(list: string[] | undefined, gain: number): Promise<boolean> {
+async function sample(url: string | null, gain: number): Promise<boolean> {
   if (!ready || context === null || master === null) {
     return false;
   }
-  const url = pick(list);
   if (url === null) {
     return false;
   }
@@ -209,12 +224,21 @@ export function play(cue: Cue): void {
     return;
   }
   switch (cue) {
-    case "roll":
-      // Dice on wood: recorded if we have any, a rattle of noise if not.
-      void sample(samples.dice, 0.9).then((played) => {
+    case "shake":
+      // The throw. Recorded if we have one, a rattle of noise if not.
+      void sample(pickPhase("shake"), 0.85).then((played) => {
         if (!played) {
-          for (let hit = 0; hit < 5; hit += 1) {
-            window.setTimeout(() => noise(0.05, 900 + Math.random() * 700, 0.25), hit * 55);
+          for (let hit = 0; hit < 6; hit += 1) {
+            window.setTimeout(() => noise(0.04, 1100 + Math.random() * 800, 0.16), hit * 70);
+          }
+        }
+      });
+      break;
+    case "land":
+      void sample(pickPhase("roll"), 0.9).then((played) => {
+        if (!played) {
+          for (let hit = 0; hit < 4; hit += 1) {
+            window.setTimeout(() => noise(0.05, 800 + Math.random() * 600, 0.22), hit * 45);
           }
         }
       });
@@ -227,7 +251,7 @@ export function play(cue: Cue): void {
       noise(0.03, 1400, 0.12);
       break;
     case "bank":
-      void sample(samples.chips, 0.8).then((played) => {
+      void sample(pick(samples.chips), 0.8).then((played) => {
         if (!played) {
           tone({ frequency: 520, duration: 0.12, type: "triangle", gain: 0.16 });
           tone({ frequency: 780, duration: 0.16, type: "triangle", gain: 0.14, delay: 0.08 });

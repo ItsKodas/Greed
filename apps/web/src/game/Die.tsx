@@ -64,14 +64,23 @@ interface DieProps {
   skin: DiceSkin;
   held: boolean;
   dead: boolean;
+  /** True while the dice are tumbling and the faces shown are not real yet. */
+  rolling: boolean;
+  /** Position in the tray, used to stagger the tumble. */
+  index: number;
   /** False for spectators and when it is not your turn. */
   interactive: boolean;
   onClick: () => void;
 }
 
-export function Die({ face, skin, held, dead, interactive, onClick }: DieProps) {
+export function Die({ face, skin, held, dead, rolling, index, interactive, onClick }: DieProps) {
   const letters = skin === "letters";
-  const classes = ["die", held ? "die--held" : "", dead ? "die--dead" : ""]
+  const classes = [
+    "die",
+    held ? "die--held" : "",
+    dead ? "die--dead" : "",
+    rolling ? "die--rolling" : "",
+  ]
     .filter((name) => name.length > 0)
     .join(" ");
 
@@ -84,7 +93,13 @@ export function Die({ face, skin, held, dead, interactive, onClick }: DieProps) 
       onClick={onClick}
       disabled={dead || !interactive}
       aria-pressed={held}
-      aria-label={`Die showing ${shown}${held ? ", set aside" : ""}${dead ? ", cannot score" : ""}`}
+      aria-label={
+        rolling
+          ? "Rolling"
+          : `Die showing ${shown}${held ? ", set aside" : ""}${dead ? ", cannot score" : ""}`
+      }
+      // Each die lands a beat after the one before it.
+      style={rolling ? { animationDelay: `${index * 40}ms` } : undefined}
     >
       {letters ? (
         <span className={`die__letter${face === 5 ? " die__letter--green" : ""}`}>

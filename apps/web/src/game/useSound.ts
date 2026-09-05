@@ -1,6 +1,7 @@
 import type { RoomView } from "@greed/shared";
 import { useEffect, useRef } from "react";
 import { play, unlock } from "./audio.js";
+import { ROLL_SETTLE_MS } from "./useRollAnimation.js";
 
 /**
  * Turns changes in room state into sound.
@@ -42,22 +43,16 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
       return;
     }
 
-    // New dice on the table.
-    const rolled =
-      was === null ||
-      was.dice.length !== turn.dice.length ||
-      was.dice.some((face, index) => face !== turn.dice[index]);
-    if (rolled && turn.dice.length > 0) {
-      play("roll");
+    // A new throw. Keyed on the counter, not the faces, so rolling the same
+    // thing twice running still makes a noise.
+    if (turn.rollSeq > 0 && turn.rollSeq !== (was?.rollSeq ?? 0) && turn.dice.length > 0) {
+      play("shake");
+      window.setTimeout(() => play("land"), ROLL_SETTLE_MS);
       if (turn.phase === "farkled") {
-        window.setTimeout(() => play("farkle"), 320);
+        window.setTimeout(() => play("farkle"), ROLL_SETTLE_MS + 260);
+      } else if (was !== null && turn.kept > was.kept && turn.dice.length === 6) {
+        window.setTimeout(() => play("hotDice"), ROLL_SETTLE_MS + 120);
       }
-      return;
-    }
-
-    // Hot dice: the whole set was cleared and six fresh ones came back.
-    if (was !== null && turn.kept > was.kept && turn.dice.length === 6 && was.dice.length === 0) {
-      play("hotDice");
       return;
     }
 

@@ -571,3 +571,59 @@
   outline: 2px solid var(--gr-color-brass-hi);
   outline-offset: 3px;
 }
+
+/* ---------------------------------------------------------- tumbling */
+
+/*
+ * Dice in the air. The faces shown while this runs are random and change every
+ * 80ms — the real result only appears when the animation stops, which is also
+ * when the landing sample plays.
+ */
+.die--rolling {
+  animation: die-tumble 0.26s ease-in-out infinite;
+  cursor: default;
+  box-shadow: 0 3px 0 #8e805f, 0 10px 18px rgb(0 0 0 / 0.55);
+}
+
+@keyframes die-tumble {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  20% {
+    transform: translateY(-11px) rotate(-14deg);
+  }
+  45% {
+    transform: translateY(-3px) rotate(9deg);
+  }
+  70% {
+    transform: translateY(-8px) rotate(-6deg);
+  }
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+}
+
+/* The whole tray gets a faint jolt, as though the table were knocked. */
+.tray__dice--rolling {
+  animation: tray-jolt 0.26s ease-in-out infinite;
+}
+
+@keyframes tray-jolt {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  33% {
+    transform: translateX(-2px);
+  }
+  66% {
+    transform: translateX(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .die--rolling,
+  .tray__dice--rolling {
+    animation: none;
+  }
+}

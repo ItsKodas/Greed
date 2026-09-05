@@ -36,6 +36,8 @@ const rooms = new Map<string, Room>();
 const turnClocks = new Map<string, NodeJS.Timeout>();
 /** One pending bot move per room, so a bot can never queue two at once. */
 const botMoves = new Map<string, NodeJS.Timeout>();
+/** One pending farkle pause per room. */
+const farklePauses = new Map<string, NodeJS.Timeout>();
 
 const BOT_NAMES = ["Skint Alice", "Pockets", "Old Ned", "Bess", "Cutter", "Tumble", "Ivy"];
 
@@ -135,7 +137,37 @@ function broadcast(code: string): void {
   }
   armClock(room);
   io.to(code).emit("room:state", room.view());
+  scheduleFarklePause(room);
   scheduleBot(room);
+}
+
+/**
+ * Leaves the busting dice on screen for a beat, then moves play on.
+ *
+ * This lives here rather than in the roll handler because a bot never goes
+ * through a socket handler — it calls the room directly. Scheduling it there
+ * meant a bot that farkled froze the table for good.
+ */
+function scheduleFarklePause(room: Room): void {
+  const phase = room.view().turn?.phase;
+  if (phase !== "farkled") {
+    return;
+  }
+  if (farklePauses.has(room.code)) {
+    return; // already counting down
+  }
+  farklePauses.set(
+    room.code,
+    setTimeout(() => {
+      farklePauses.delete(room.code);
+      const still = rooms.get(room.code);
+      if (still === undefined || still.view().turn?.phase !== "farkled") {
+        return;
+      }
+      still.advanceTurn();
+      broadcast(room.code);
+    }, FARKLE_PAUSE_MS),
+  );
 }
 
 /**
@@ -333,22 +365,8 @@ io.on("connection", (socket) => {
   });
 
   socket.on("game:roll", () => {
-    const seat = sockets.get(socket.id);
+    // broadcast() handles the farkle pause, for humans and bots alike.
     guard(socket.id, (room, seatId) => room.doRoll(seatId));
-    if (seat === undefined) {
-      return;
-    }
-    // A farkle stays on screen for a beat so the player sees what killed them.
-    const room = rooms.get(seat.code);
-    if (room?.view().turn?.phase === "farkled") {
-      setTimeout(() => {
-        const still = rooms.get(seat.code);
-        if (still !== undefined && still.view().turn?.phase === "farkled") {
-          still.advanceTurn();
-          broadcast(seat.code);
-        }
-      }, FARKLE_PAUSE_MS);
-    }
   });
 
   socket.on("disconnect", () => {
@@ -383,6 +401,8 @@ io.on("connection", (socket) => {
         const still = rooms.get(seat.code);
         if (still !== undefined && still.isEmpty) {
           turnClocks.delete(seat.code);
+          farklePauses.delete(seat.code);
+          botMoves.delete(seat.code);
           rooms.delete(seat.code);
         }
       }, EMPTY_ROOM_TTL_MS);
