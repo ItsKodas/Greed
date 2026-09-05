@@ -70,6 +70,7 @@ export function Table({ room, seatId, actions }: TableProps) {
 
       <div className="table__main">
         <div className="tray">
+          <div className="tray__stage">
           {turn === null || turn.dice.length === 0 ? (
             <p className="tray__empty">
               {over ? "Game over." : yours ? "Your turn — roll to begin." : `Waiting on ${active?.name ?? "the next player"}.`}
@@ -91,6 +92,7 @@ export function Table({ room, seatId, actions }: TableProps) {
               ))}
             </div>
           )}
+          </div>
           <p className="tray__note">
             {rolling
               ? "Rolling…"
