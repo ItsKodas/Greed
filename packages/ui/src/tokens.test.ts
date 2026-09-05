@@ -79,6 +79,19 @@ describe("tokens.css", () => {
     expect(css).toContain("--gr-font-data");
   });
 
+  it("defines a custom property for every font, with the same value", () => {
+    const fontProperties: Record<keyof typeof font, string> = {
+      display: "--gr-font-display",
+      ui: "--gr-font-ui",
+      data: "--gr-font-data",
+    };
+    for (const [key, property] of Object.entries(fontProperties)) {
+      const match = css.match(new RegExp(`${property}\\s*:\\s*([^;]+);`));
+      expect(match, `${property} missing from tokens.css`).not.toBeNull();
+      expect(match?.[1]?.trim()).toBe(font[key as keyof typeof font]);
+    }
+  });
+
   it("declares exactly the approved set of tokens", () => {
     // Matches a declaration ("--gr-foo: value;") but not a var(--gr-foo)
     // reference, because a reference is never followed directly by a colon.
