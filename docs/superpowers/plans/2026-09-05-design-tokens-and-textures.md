@@ -1499,8 +1499,31 @@ git commit -m "feat: render the palette, type and textures in the style gallery"
 
 - `npm test` passes, including the test that keeps `tokens.css` and `tokens.ts` in agreement.
 - `npm run typecheck` exits 0.
-- `npm run dev` serves a gallery at `/style` showing twelve swatches, three type specimens and seven texture tiles.
+- `npm run dev` serves a gallery at `/style` showing fourteen swatches, three type specimens and seven texture tiles.
 - `packages/ui/package.json` still has no `dependencies` key.
+
+## Amendments made during execution
+
+Git history is authoritative; these are the decisions that changed the plan as
+written, each forced by a review finding against my own sample code.
+
+- **The palette is fourteen entries, not twelve.** `leather` and `paper` carried
+  their highlights as bare hex literals, defeating the re-theming property. Both
+  were promoted to tokens (`leatherLit`, `boneLit`).
+- **`encodeSvg` keeps interior whitespace.** The plan's test expected a value its
+  own reference implementation does not produce; the expectation was the defect.
+- **`--gr-edge-hard` exists.** The gallery re-literalised `rgb(0 0 0 / 0.5)` as a
+  border; it became a token.
+- **`body` lives in `apps/web/src/global.css`**, imported from `main.tsx` after
+  the token sheet — not in `gallery.css`, which a component imported.
+- **The type specimen uses the `--gr-text-*` scale**, not inline sizes. A specimen
+  showing sizes that are off the scale misleads about what the scale is.
+- **`vitest.config.ts` sets `globals: true`**, required for Testing Library's
+  cleanup and act-environment setup, both of which it gates on ambient globals.
+- **`@types/react` and `@types/react-dom` are pinned to 18.x** to match the React
+  18 runtime; left unpinned they resolved to 19.
+- **`packages/ui/tsconfig.json` sets `types: ["node"]`** for the token sync test's
+  `node:fs` import. It belongs there, not in `tsconfig.base.json`.
 
 ## Next plan
 
