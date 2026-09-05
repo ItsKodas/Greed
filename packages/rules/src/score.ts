@@ -13,7 +13,10 @@ export interface Partition {
  *
  * Every combination consumes at least one die, so the recursion strictly
  * decreases and cannot cycle. The memo is keyed on the count vector, which
- * is why callers may share one across an enumeration.
+ * is why callers may share one across an enumeration. A memo is valid only
+ * for the single `rules` value it was built with — do not reuse one across
+ * two different rulesets, since the same count vector can partition
+ * differently under each.
  */
 export function bestPartition(
   counts: Counts,
