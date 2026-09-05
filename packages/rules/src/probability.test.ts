@@ -6,6 +6,7 @@ import {
   hasAnyScore,
 } from "./probability.js";
 import { DEFAULT_RULESET, MINIMAL_RULESET } from "./rulesets.js";
+import type { Ruleset } from "./types.js";
 
 describe("hasAnyScore", () => {
   it("is true when a one is present", () => {
@@ -31,6 +32,12 @@ describe("hasAnyScore", () => {
   it("respects three pairs when enabled", () => {
     expect(hasAnyScore([2, 2, 3, 3, 4, 4], DEFAULT_RULESET)).toBe(true);
     expect(hasAnyScore([2, 2, 3, 3, 4, 4], MINIMAL_RULESET)).toBe(false);
+  });
+
+  it("is false for a triple worth zero points, rather than a zero-point score", () => {
+    // Face 2 has no single-die score, so this isolates the n-of-a-kind gate.
+    const zeroed: Ruleset = { ...DEFAULT_RULESET, tripleMultiplier: 0 };
+    expect(hasAnyScore([2, 2, 2], zeroed)).toBe(false);
   });
 });
 

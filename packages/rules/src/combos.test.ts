@@ -100,6 +100,21 @@ describe("ruleset gating", () => {
     expect(kinds).not.toContain("straight");
     expect(kinds).not.toContain("three-pairs");
   });
+
+  it("omits a triple worth zero points", () => {
+    const zeroed: Ruleset = { ...DEFAULT_RULESET, tripleOne: 0 };
+    expect(kindsFor([1, 1, 1], zeroed)).not.toContain("triple");
+  });
+
+  it("omits a straight worth zero points", () => {
+    const zeroed: Ruleset = { ...DEFAULT_RULESET, straight: 0 };
+    expect(kindsFor([1, 2, 3, 4, 5, 6], zeroed)).not.toContain("straight");
+  });
+
+  it("omits three pairs worth zero points", () => {
+    const zeroed: Ruleset = { ...DEFAULT_RULESET, threePairs: 0 };
+    expect(kindsFor([2, 2, 3, 3, 4, 4], zeroed)).not.toContain("three-pairs");
+  });
 });
 
 describe("combo shape", () => {

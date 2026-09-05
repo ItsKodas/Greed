@@ -21,6 +21,14 @@ describe("validity", () => {
   it("rejects a lone non-scoring die", () => {
     expect(scoreSelection([4], DEFAULT_RULESET).valid).toBe(false);
   });
+
+  it("rejects a triple worth zero points instead of scoring it at zero", () => {
+    // Face 2 has no single-die score, so this isolates the n-of-a-kind gate.
+    const zeroed: Ruleset = { ...DEFAULT_RULESET, tripleMultiplier: 0 };
+    const result = scoreSelection([2, 2, 2], zeroed);
+    expect(result.valid).toBe(false);
+    expect(result.points).toBe(0);
+  });
 });
 
 describe("basic scoring", () => {

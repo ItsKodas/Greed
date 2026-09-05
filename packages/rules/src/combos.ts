@@ -67,19 +67,24 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
   for (let index = 0; index < 6; index += 1) {
     const face = (index + 1) as Die;
     for (let n = 3; n <= counts[index]; n += 1) {
-      combos.push(nOfAKindCombo(face, n, rules));
+      const combo = nOfAKindCombo(face, n, rules);
+      if (combo.points > 0) {
+        combos.push(combo);
+      }
     }
   }
 
   const { straight, threePairs, twoTriplets, fourPlusPair } = rules;
 
-  if (straight !== null && contains(counts, STRAIGHT)) {
+  if (straight !== null && straight > 0 && contains(counts, STRAIGHT)) {
     combos.push({ kind: "straight", face: null, points: straight, counts: [...STRAIGHT] });
   }
 
-  if (threePairs !== null) {
+  if (threePairs !== null && threePairs > 0) {
     // Exactly three distinct faces showing exactly two each. A face showing
-    // four or more is not two pairs; that is what fourPlusPair is for.
+    // four or more is not two pairs; that is what fourPlusPair is for. At six
+    // dice this filter is defensive and unreachable: three faces at >=4 would
+    // need at least 4+2+2 = 8 dice, so it never actually excludes anything.
     const paired = facesWithAtLeast(counts, 2).filter((face) => counts[face - 1] < 4);
     for (const trio of combinations(paired, 3)) {
       const comboCounts = emptyCounts();
@@ -90,7 +95,7 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
     }
   }
 
-  if (twoTriplets !== null) {
+  if (twoTriplets !== null && twoTriplets > 0) {
     const tripled = facesWithAtLeast(counts, 3);
     for (const pair of combinations(tripled, 2)) {
       const comboCounts = emptyCounts();
@@ -101,7 +106,7 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
     }
   }
 
-  if (fourPlusPair !== null) {
+  if (fourPlusPair !== null && fourPlusPair > 0) {
     for (const quad of facesWithAtLeast(counts, 4)) {
       for (const pair of facesWithAtLeast(counts, 2)) {
         if (pair === quad) {
