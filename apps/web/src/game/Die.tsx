@@ -49,6 +49,16 @@ const LETTERS: Record<DieFace, string> = {
   6: "D",
 };
 
+/**
+ * Ink colour per face. The green E is the only one that carries a rule — a
+ * straight needs one E of each colour — but the printed dice colour the other
+ * letters too, so the rest follow the card.
+ */
+const LETTER_TONE: Partial<Record<DieFace, string>> = {
+  3: "red", // R
+  5: "green", // the green E
+};
+
 /** Spoken form, so the die still reads correctly to a screen reader. */
 const LETTER_NAMES: Record<DieFace, string> = {
   1: "dollar",
@@ -102,7 +112,11 @@ export function Die({ face, skin, held, dead, rolling, index, interactive, onCli
       style={rolling ? { animationDelay: `${index * 40}ms` } : undefined}
     >
       {letters ? (
-        <span className={`die__letter${face === 5 ? " die__letter--green" : ""}`}>
+        <span
+          className={`die__letter${
+            LETTER_TONE[face] !== undefined ? ` die__letter--${LETTER_TONE[face] ?? ""}` : ""
+          }`}
+        >
           {LETTERS[face]}
         </span>
       ) : (

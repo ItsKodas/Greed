@@ -454,6 +454,11 @@
   color: var(--gr-color-emerald);
 }
 
+/* R, following the printed dice. */
+.die__letter--red {
+  color: var(--gr-color-oxblood);
+}
+
 /* ---------------------------------------------------- variant picker */
 
 .variants {
