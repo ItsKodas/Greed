@@ -545,3 +545,29 @@
   outline: 2px solid var(--gr-color-brass-hi);
   outline-offset: 2px;
 }
+
+/* ----------------------------------------------------------- volume */
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+}
+
+.volume__icon {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-bone-dim);
+  width: 1em;
+  text-align: center;
+}
+
+.volume input {
+  width: 74px;
+  accent-color: var(--gr-color-brass);
+  cursor: pointer;
+}
+
+.volume input:focus-visible {
+  outline: 2px solid var(--gr-color-brass-hi);
+  outline-offset: 3px;
+}

@@ -14,7 +14,10 @@
     "dev": "concurrently -n server,web -c yellow,cyan \"npm:dev:server\" \"npm:dev:web\"",
     "build": "npm run build -w @greed/web",
     "dev:server": "npm run dev -w @greed/server",
-    "dev:web": "npm run dev -w @greed/web"
+    "dev:web": "npm run dev -w @greed/web",
+    "sync-audio": "node scripts/sync-audio.mjs",
+    "predev": "npm run sync-audio",
+    "prebuild": "npm run sync-audio"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.3",

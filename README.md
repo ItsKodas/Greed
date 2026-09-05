@@ -13,11 +13,12 @@ Play chips only. No real-money wagering, no purchase path.
 |---|---|
 | **Rules engine** | Complete. 111 tests. |
 | **Design system** | Complete. Tokens + procedural textures + a live gallery. |
-| **Server** | Rooms, turns, server-authoritative dice. 29 tests. |
+| **Server** | Rooms, turns, reconnect, turn clock, server-authoritative dice. |
 | **Client** | Join, lobby and table screens. |
+| **Bots** | Easy, normal and hard, deciding by expected value. |
+| **Sound** | Recorded dice, synthesised interface. |
 | Discord login, chips, persistence | Not started |
-| Bot opponent | Not started |
-| Sound | Not started |
+| Chat | Not started |
 
 ```bash
 npm install
@@ -32,7 +33,12 @@ five-character code to whoever you want to play against. Two to eight players.
 runs all 226 tests.
 
 Games live in memory, so restarting the server ends them. There are no accounts
-and no chips yet — you type a name and sit down.
+and no chips yet — you type a name and sit down. Refreshing the page keeps your
+seat; a table of one is solo practice, and the host can seat bots.
+
+Sound files are read from `assets/audio/raw/`. Drop a `.mp3` into
+`assets/audio/raw/dice/` and restart — a build step copies whatever is there and
+writes a manifest, so nothing needs renaming and no code needs editing.
 
 ## How the game works
 

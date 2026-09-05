@@ -10,3 +10,6 @@ coverage/
 .vite/
 assets/audio/build/
 *.tsbuildinfo
+
+# copied from assets/audio/raw by scripts/sync-audio.mjs
+apps/web/public/audio/

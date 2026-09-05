@@ -1,5 +1,7 @@
 import { RULESETS } from "@greed/rules";
 import { useState } from "react";
+import { getVolume, setVolume, unlock } from "./audio.js";
+import { useSound } from "./useSound.js";
 import { Table } from "./Table.js";
 import { useRoom } from "./useRoom.js";
 import type { RoomActions } from "./useRoom.js";
@@ -8,6 +10,7 @@ import "./game.css";
 
 export function Play() {
   const { room, seatId, error, connected, busy, actions } = useRoom();
+  useSound(room, seatId);
 
   return (
     <main className="play">
@@ -16,6 +19,7 @@ export function Play() {
           GRE<em>E</em>D
         </h1>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
+        <Volume />
         <span className={`play__link${connected ? " play__link--up" : ""}`}>
           {connected ? "connected" : "offline"}
         </span>
@@ -34,6 +38,31 @@ export function Play() {
         <Table room={room} seatId={seatId ?? ""} actions={actions} />
       )}
     </main>
+  );
+}
+
+function Volume() {
+  const [level, setLevel] = useState(() => getVolume());
+  return (
+    <label className="volume">
+      <span className="volume__icon" aria-hidden="true">
+        {level === 0 ? "✕" : "♪"}
+      </span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={level}
+        aria-label="Volume"
+        onChange={(event) => {
+          const next = Number(event.target.value);
+          unlock();
+          setVolume(next);
+          setLevel(next);
+        }}
+      />
+    </label>
   );
 }
 
