@@ -74,6 +74,13 @@ describe("countBustingRolls", () => {
   it("counts 600 busting five-dice rolls", () => {
     expect(countBustingRolls(5, DEFAULT_RULESET)).toBe(600);
   });
+
+  it("throws for a dice count outside one to six", () => {
+    expect(() => countBustingRolls(-1, DEFAULT_RULESET)).toThrow(RangeError);
+    expect(() => countBustingRolls(0, DEFAULT_RULESET)).toThrow(RangeError);
+    expect(() => countBustingRolls(7, DEFAULT_RULESET)).toThrow(RangeError);
+    expect(() => countBustingRolls(1.5, DEFAULT_RULESET)).toThrow(RangeError);
+  });
 });
 
 describe("bustProbabilities", () => {

@@ -20,6 +20,9 @@ export function hasAnyScore(dice: readonly Die[], rules: Ruleset): boolean {
 
 /** Exhaustively count the rolls of `diceCount` dice that score nothing. */
 export function countBustingRolls(diceCount: number, rules: Ruleset): number {
+  if (!Number.isInteger(diceCount) || diceCount < 1 || diceCount > 6) {
+    throw new RangeError(`diceCount must be 1 to 6, got ${diceCount}`);
+  }
   const dice: Die[] = new Array<Die>(diceCount).fill(1);
   const total = 6 ** diceCount;
   let busts = 0;
