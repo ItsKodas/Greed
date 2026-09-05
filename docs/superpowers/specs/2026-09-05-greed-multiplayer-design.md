@@ -134,10 +134,14 @@ the server will use.
 ### 4.1 API
 
 ```ts
-scoreSelection(dice: Die[], rules: Ruleset): ScoreResult
-enumerateOptions(dice: Die[], rules: Ruleset): Option[]
-hasAnyScore(dice: Die[], rules: Ruleset): boolean
-bustProbabilities(rules: Ruleset): Record<1 | 2 | 3 | 4 | 5 | 6, number>
+scoreSelection(dice: readonly Die[], rules: Ruleset): ScoreResult
+enumerateOptions(dice: readonly Die[], rules: Ruleset): Option[]
+hasAnyScore(dice: readonly Die[], rules: Ruleset): boolean
+bustProbabilities(rules: Ruleset): BustTable
+bustProbability(diceRemaining: number, rules: Ruleset): number
+
+/** Bust chance by dice remaining. Index 0 is one die, index 5 is six. */
+type BustTable = readonly [number, number, number, number, number, number];
 
 interface ScoreResult {
   valid: boolean;      // every die consumed by a combination
@@ -169,9 +173,14 @@ dice safer — so the table is *computed*, not hardcoded. At room creation,
 enumerate all rolls of n dice for n = 1..6 (46,656 worst case) against
 `hasAnyScore` and cache by a hash of the ruleset. Milliseconds, once.
 
-With the base ruleset this reproduces the known figures: 2.31% on six dice
-(1080 / 46656), rising to 66.7% on one. These are shown to the player before
-they choose to reroll, and drive the bot's expected-value calculation.
+With the default ruleset this reproduces the known figures: 2.31% on six dice
+(1080 / 46656), rising to 66.7% on one. Note that the widely-quoted 2.31%
+assumes three-pairs scores — with only 1s, 5s and n-of-a-kind the figure is
+1440 / 46656 (3.09%), because the 360 rolls shaped `(2,2,2,0)` over faces
+{2,3,4,6} stop being rescued. Both are pinned as test invariants.
+
+These probabilities are shown to the player before they choose to reroll, and
+drive the bot's expected-value calculation.
 
 ## 5. Protocol (`packages/shared`)
 
@@ -432,8 +441,9 @@ Vitest across the workspace.
 
 - **Rules engine** — the deepest coverage, written test-first. Table-driven
   cases per combination, partition cases where greedy ordering would fail, and
-  property tests over all 46,656 six-dice rolls. One invariant pins the classic
-  figure: exactly 1080 of them farkle under the base ruleset (2.3148%).
+  property tests over all 46,656 six-dice rolls. Two invariants pin the known
+  figures: exactly 1080 farkles under the default ruleset (2.3148%) and 1440
+  under the minimal one (1s, 5s and n-of-a-kind only).
 - **Server** — in-process Socket.IO clients drive whole games: join, roll,
   select, bank, hot dice, farkle, entry threshold, final round, payout.
   Adversarial tests assert that out-of-turn actions, invalid selections, and
