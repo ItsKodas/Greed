@@ -168,8 +168,9 @@ This is what stops a player setting aside a dead die to keep more dice in play.
 
 ### 4.3 Bust probabilities
 
-Bust chance depends on the active ruleset — enabling three-pairs makes four
-dice safer — so the table is *computed*, not hardcoded. At room creation,
+Bust chance depends on the active ruleset — enabling three-pairs makes six
+dice safer — so the table is *computed*, not hardcoded. (Three pairs consumes
+six dice, so it cannot affect the tables for one through five.) At room creation,
 enumerate all rolls of n dice for n = 1..6 (46,656 worst case) against
 `hasAnyScore` and cache by a hash of the ruleset. Milliseconds, once.
 

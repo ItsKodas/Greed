@@ -10,6 +10,13 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-05-greed-multiplayer-design.md`
 
+> **Status: executed.** The whole-branch review after Task 7 hardened several
+> things this plan's code blocks predate — `readonly` types on everything the
+> package returns, a uniform `points > 0` gate on every combination, and a
+> bust-cache key derived from the combo gates rather than raw field values.
+> Git history is authoritative; read these blocks as the plan of record, not
+> as the current source.
+
 ## Global Constraints
 
 - `packages/rules` must have **zero runtime dependencies**. Dev dependencies are fine. The server, browser client and bot all import it.
@@ -167,6 +174,18 @@ Do not pin versions by hand — take whatever npm resolves and let it write the 
   "include": ["src/**/*.ts"]
 }
 ```
+
+Now run install again, from the repo root:
+
+```bash
+npm install
+```
+
+This is not redundant. Step 2's install ran before this workspace existed, so
+the lockfile has no record of it and `npm ci` would not link
+`node_modules/@greed/rules` — every later package importing the `@greed/rules`
+specifier would fail to resolve. No dependency versions change; this only syncs
+the lockfile with the workspace graph.
 
 - [ ] **Step 4: Write the failing test**
 
@@ -1640,7 +1659,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
   });
 
   it("never reports an option that scoreSelection disagrees with", () => {
-    for (const dice of rolls.slice(0, 2000)) {
+    for (const dice of rolls) {
       const best = enumerateOptions(dice, DEFAULT_RULESET)[0];
       if (best === undefined) {
         continue;
@@ -1658,7 +1677,7 @@ describe("cross-module invariants over all 46656 six-dice rolls", () => {
   });
 
   it("never scores a selection above the best enumerated option", () => {
-    for (const dice of rolls.slice(0, 2000)) {
+    for (const dice of rolls) {
       const options = enumerateOptions(dice, DEFAULT_RULESET);
       const best = options[0];
       if (best === undefined) {
