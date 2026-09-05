@@ -50,43 +50,52 @@ Design priorities, in order:
 
 The defaults below are the classic set. Every value is a lobby setting.
 
-| Combination | Default | Setting |
-|---|---:|---|
-| Single 1 | 100 | `singleOne` |
-| Single 5 | 50 | `singleFive` |
-| Three 1s | 1000 | `tripleOne` |
-| Three of a kind (2-6) | face x 100 | `tripleMultiplier` |
-| Four of a kind | triple x 2 | `nOfAKind: "double"` |
-| Five of a kind | triple x 4 | `nOfAKind: "double"` |
-| Six of a kind | triple x 8 | `nOfAKind: "double"` |
-| Straight 1-2-3-4-5-6 | 1500 | `straight` |
-| Three pairs | 750 | `threePairs` |
-| Two triplets | 2500 | `twoTriplets` |
-| Four of a kind + a pair | off | `fourPlusPair` |
+| Combination | Default |
+|---|---:|
+| Single 1 | 100 |
+| Single 5 | 50 |
+| Three 1s | 1000 |
+| Three of a kind (2-6) | face x 100 |
+| Four of a kind | triple x 2 |
+| Five of a kind | triple x 4 |
+| Six of a kind | triple x 8 |
+| Straight 1-2-3-4-5-6 | 1500 |
+| Three pairs | 750 |
+| Two triplets | 2500 |
+| Four of a kind + a pair | off |
 
-Alternative `nOfAKind: "flat"` scores four/five/six of a kind as flat
-1000 / 2000 / 3000 regardless of face.
+All of it comes out of the per-face table below, so a lobby can express any of
+it and a good deal the pip game never needed.
 
 ### 2.3 Ruleset
 
+Scoring is a **per-face table**: for each face, what N of that face is worth.
+The original design named `singleOne`, `singleFive` and `tripleMultiplier`
+directly, which could not express the retail letter edition — its two E faces
+must both score 300 as triples while being genuinely different faces, and no
+`face x multiplier` formula allows that. The classic game is now one
+configuration of the general model rather than the shape of it.
+
 ```ts
+/** What N of one face is worth. Index 0 is a single die, index 5 is all six. */
+type FaceScores = readonly [number, number, number, number, number, number];
+
 interface Ruleset {
+  name: string;                    // "Classic"
+  skin: "pips" | "letters";        // how the faces are drawn
+
   targetScore: number;             // 10000
   entryThreshold: number;          // 500; 0 disables
   finalRound: boolean;             // true
   turnTimerSeconds: number | null; // 60; null disables
 
-  singleOne: number;               // 100
-  singleFive: number;              // 50
-  tripleOne: number;               // 1000
-  tripleMultiplier: number;        // 100 -> face * 100
+  /** Indexed 0..5 for faces 1..6. Zero means "not a combination". */
+  faces: readonly [
+    FaceScores, FaceScores, FaceScores,
+    FaceScores, FaceScores, FaceScores,
+  ];
 
-  nOfAKind: "double" | "flat";     // "double"
-  flatFour: number;                // 1000, used when nOfAKind === "flat"
-  flatFive: number;                // 2000
-  flatSix: number;                 // 3000
-
-  straight: number | null;         // 1500
+  straight: number | null;         // 1500 — one of every face
   threePairs: number | null;       // 750
   twoTriplets: number | null;      // 2500
   fourPlusPair: number | null;     // null (off)
@@ -94,6 +103,16 @@ interface Ruleset {
   farklePenalty: { consecutive: number; points: number } | null; // null (off)
 }
 ```
+
+The classic game and the letter edition, as face tables:
+
+```
+classic  1: [100, 0, 1000, 2000, 4000, 8000]   5: [50, 0, 500, 1000, 2000, 4000]
+letters  $: [  0, 0,  600,    0,    0, 5000]   G: [50, 0, 500,    0,    0, 5000]
+         D: [100, 0,    0, 1000,    0, 5000]
+```
+
+See `docs/reference/letter-dice-edition.md` for the letter edition in full.
 
 `farklePenalty` defaults off because it punishes new players harshly; hosts who
 want it typically set `{ consecutive: 3, points: 500 }`.
@@ -139,6 +158,8 @@ enumerateOptions(dice: readonly Die[], rules: Ruleset): Option[]
 hasAnyScore(dice: readonly Die[], rules: Ruleset): boolean
 bustProbabilities(rules: Ruleset): BustTable
 bustProbability(diceRemaining: number, rules: Ruleset): number
+
+/** Internal to the package: the partition search and combo enumeration. */
 
 /** Bust chance by dice remaining. Index 0 is one die, index 5 is six. */
 type BustTable = readonly [number, number, number, number, number, number];
@@ -475,6 +496,28 @@ file. `/healthz` backs the container healthcheck.
 Configuration is entirely environment-driven: `DISCORD_CLIENT_ID`,
 `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`, `MONGO_URL`, `SESSION_SECRET`,
 `PORT`, `PUBLIC_URL`. No host-specific code.
+
+## 15a. Deviations from this document
+
+Recorded as they were made. The code is the authority where these disagree
+with anything above.
+
+- **Scoring is a per-face table**, not `singleOne` / `tripleMultiplier`. Section
+  2.3 has been rewritten; the reason is the letter edition's two E faces.
+- **A second edition exists.** The retail letter dice (`$ G R E E D`) ship
+  alongside the classic game and the host picks between them.
+- **Textures use SVG `feTurbulence`**, not `simplex-noise` on canvas, so the
+  generators stay pure string functions with no runtime dependency.
+- **Dice are drawn flat with a tumble animation**, not as CSS 3D cubes. The
+  cubes bought nothing the tumble does not, and cost a face-per-side rig.
+- **Audio is raw Web Audio**, not howler.js. Recorded samples for the dice,
+  synthesised cues for the interface, and no dependency.
+- **Guests may play without signing in.** Section 6.4 said sign-in was required;
+  the name-in-a-box flow proved too useful to remove. Signing in is what buys a
+  persistent profile, chips and buy-in games.
+- **A table of one is allowed**, as solo practice against the target.
+- **Client routes are `/`, `/:code` and `/style`**, not the `/play` and
+  `/room/:code` originally sketched.
 
 ## 16. Build order
 
