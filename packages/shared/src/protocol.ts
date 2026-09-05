@@ -73,4 +73,5 @@ export const CODE_ALPHABET = "ABCDEFGHJKLMNPQRTUVWXY346789";
 export const CODE_LENGTH = 5;
 
 export const MAX_SEATS = 8;
-export const MIN_SEATS = 2;
+/** One is allowed: a solo table is practice against the target score. */
+export const MIN_SEATS = 1;

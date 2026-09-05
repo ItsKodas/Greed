@@ -50,10 +50,17 @@ describe("lobby", () => {
     expect(() => room.join("c", "   ")).toThrow(RoomError);
   });
 
-  it("refuses to start without two players", () => {
+  it("allows a table of one, as solo practice against the target", () => {
     const room = new Room("TEST1", scripted());
     room.join("a", "Ada");
-    expect(() => room.start("a")).toThrow(/at least 2/i);
+    room.start("a");
+    expect(room.view().status).toBe("playing");
+    expect(room.view().turn?.seatId).toBe("a");
+  });
+
+  it("refuses to start a table with nobody at it", () => {
+    const room = new Room("TEST1", scripted());
+    expect(() => room.start("a")).toThrow(RoomError);
   });
 
   it("lets only the host start", () => {
@@ -234,6 +241,34 @@ describe("disconnects", () => {
     room.disconnect("b");
     room.reconnect("b");
     expect(room.view().seats[1]?.connected).toBe(true);
+  });
+});
+
+describe("solo", () => {
+  it("gives the turn straight back after banking", () => {
+    const room = new Room("TEST1", scripted([1, 1, 1, 2, 3, 4], [5, 5, 2, 3, 4, 6]));
+    room.join("a", "Ada");
+    room.start("a");
+    room.doRoll("a");
+    pick(room, 0, 1, 2);
+    room.bank("a");
+    expect(room.view().status).toBe("playing");
+    expect(room.view().turn?.seatId).toBe("a");
+    expect(room.view().seats[0]?.score).toBe(1000);
+  });
+
+  it("ends the moment the target is reached", () => {
+    const room = new Room("TEST1", scripted([1, 1, 1, 1, 1, 1]), {
+      ...DEFAULT_RULESET,
+      targetScore: 5000,
+    });
+    room.join("a", "Ada");
+    room.start("a");
+    room.doRoll("a");
+    pick(room, 0, 1, 2, 3, 4, 5);
+    room.bank("a");
+    expect(room.view().status).toBe("over");
+    expect(room.view().winnerIds).toEqual(["a"]);
   });
 });
 

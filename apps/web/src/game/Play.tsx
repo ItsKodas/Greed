@@ -87,7 +87,7 @@ function Join({ actions, busy, connected }: { actions: RoomActions; busy: boolea
         <div className="panel">
           <p className="panel__label">Open your own</p>
           <p className="panel__note">
-            You get a five-character code to share. Two to eight players, first to 10,000 wins.
+            You get a five-character code to share. Up to eight players, or start alone to practise. First to 10,000 wins.
           </p>
           <button type="button" className="btn btn--ghost btn--wide" disabled={!ready} onClick={() => actions.create(name)}>
             Open a table
@@ -102,7 +102,7 @@ function Join({ actions, busy, connected }: { actions: RoomActions; busy: boolea
 
 function Lobby({ room, seatId, actions }: { room: RoomView; seatId: string | null; actions: RoomActions }) {
   const you = room.seats.find((seat) => seat.id === seatId);
-  const enough = room.seats.length >= 2;
+  const solo = room.seats.length === 1;
 
   return (
     <div className="lobby">
@@ -138,8 +138,8 @@ function Lobby({ room, seatId, actions }: { room: RoomView; seatId: string | nul
         </div>
 
         {you?.isHost === true ? (
-          <button type="button" className="btn btn--wide" disabled={!enough} onClick={actions.start}>
-            {enough ? "Deal the first turn" : "Waiting for one more player"}
+          <button type="button" className="btn btn--wide" onClick={actions.start}>
+            {solo ? "Practise on your own" : "Deal the first turn"}
           </button>
         ) : (
           <p className="panel__note">Waiting for the host to start.</p>
