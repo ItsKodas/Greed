@@ -7,6 +7,13 @@ export type Die = 1 | 2 | 3 | 4 | 5 | 6;
  */
 export type Counts = [number, number, number, number, number, number];
 
+/**
+ * A count vector as handed back to a caller. Internal working vectors stay
+ * mutable `Counts`; anything returned from the public surface uses this so
+ * a caller cannot corrupt state another result still references.
+ */
+export type ReadonlyCounts = readonly [number, number, number, number, number, number];
+
 export type ComboKind =
   | "single-one"
   | "single-five"
@@ -21,27 +28,27 @@ export type ComboKind =
 
 /** One scoring combination, and exactly which dice it consumes. */
 export interface Combo {
-  kind: ComboKind;
+  readonly kind: ComboKind;
   /** The face this combo is built from, or null when it spans faces. */
-  face: Die | null;
-  points: number;
-  counts: Counts;
+  readonly face: Die | null;
+  readonly points: number;
+  readonly counts: ReadonlyCounts;
 }
 
 export interface ScoreResult {
   /** False when some selected die cannot belong to any combination. */
-  valid: boolean;
-  points: number;
+  readonly valid: boolean;
+  readonly points: number;
   /** The highest-scoring partition, for explaining the score in the UI. */
-  breakdown: Combo[];
+  readonly breakdown: readonly Combo[];
 }
 
 /** One legal way to set dice aside from a roll. */
 export interface Option {
-  counts: Counts;
-  points: number;
-  diceUsed: number;
-  breakdown: Combo[];
+  readonly counts: ReadonlyCounts;
+  readonly points: number;
+  readonly diceUsed: number;
+  readonly breakdown: readonly Combo[];
 }
 
 export type NOfAKindMode = "double" | "flat";

@@ -3,8 +3,8 @@ import { countsKey, subtract, toCounts, totalDice } from "./counts.js";
 import type { Combo, Counts, Die, Ruleset, ScoreResult } from "./types.js";
 
 export interface Partition {
-  points: number;
-  breakdown: Combo[];
+  readonly points: number;
+  readonly breakdown: readonly Combo[];
 }
 
 /**

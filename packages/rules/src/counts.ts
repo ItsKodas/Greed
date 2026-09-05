@@ -1,4 +1,4 @@
-import type { Counts, Die } from "./types.js";
+import type { Counts, Die, ReadonlyCounts } from "./types.js";
 
 export function emptyCounts(): Counts {
   return [0, 0, 0, 0, 0, 0];
@@ -12,7 +12,7 @@ export function toCounts(dice: readonly Die[]): Counts {
   return counts;
 }
 
-export function fromCounts(counts: Counts): Die[] {
+export function fromCounts(counts: ReadonlyCounts): Die[] {
   const dice: Die[] = [];
   for (let index = 0; index < 6; index += 1) {
     for (let n = 0; n < counts[index]; n += 1) {
@@ -22,12 +22,12 @@ export function fromCounts(counts: Counts): Die[] {
   return dice;
 }
 
-export function totalDice(counts: Counts): number {
+export function totalDice(counts: ReadonlyCounts): number {
   return counts[0] + counts[1] + counts[2] + counts[3] + counts[4] + counts[5];
 }
 
 /** True when `haystack` has at least as many of every face as `needle`. */
-export function contains(haystack: Counts, needle: Counts): boolean {
+export function contains(haystack: ReadonlyCounts, needle: ReadonlyCounts): boolean {
   for (let index = 0; index < 6; index += 1) {
     if (needle[index] > haystack[index]) {
       return false;
@@ -36,7 +36,7 @@ export function contains(haystack: Counts, needle: Counts): boolean {
   return true;
 }
 
-export function subtract(from: Counts, taken: Counts): Counts {
+export function subtract(from: ReadonlyCounts, taken: ReadonlyCounts): Counts {
   return [
     from[0] - taken[0],
     from[1] - taken[1],
@@ -48,11 +48,11 @@ export function subtract(from: Counts, taken: Counts): Counts {
 }
 
 /** Memoization key. Count vectors are fixed-length, so join is unambiguous. */
-export function countsKey(counts: Counts): string {
+export function countsKey(counts: ReadonlyCounts): string {
   return counts.join(",");
 }
 
-export function facesWithAtLeast(counts: Counts, n: number): Die[] {
+export function facesWithAtLeast(counts: ReadonlyCounts, n: number): Die[] {
   const faces: Die[] = [];
   for (let index = 0; index < 6; index += 1) {
     if (counts[index] >= n) {
