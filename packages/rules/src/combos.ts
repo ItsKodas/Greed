@@ -127,3 +127,34 @@ export function applicableCombos(counts: Counts, rules: Ruleset): Combo[] {
 
   return combos;
 }
+
+/**
+ * The cache key `bustProbabilities` uses to memoize its bust table.
+ *
+ * Whether a roll busts depends only on which combo types can ever fire, not
+ * on their point values — so this mirrors exactly the gates above (each
+ * `> 0` / `!== null` check that guards a push) rather than joining the raw
+ * ruleset fields. Two rulesets whose gates agree produce bit-identical bust
+ * tables, so they must collide on this key; if a gate above changes, update
+ * this function alongside it or the two will silently drift apart.
+ */
+export function comboGateKey(rules: Ruleset): string {
+  const flat = rules.nOfAKind === "flat";
+  return [
+    rules.singleOne > 0,
+    rules.singleFive > 0,
+    rules.tripleOne > 0,
+    rules.tripleMultiplier > 0,
+    rules.nOfAKind,
+    // In "double" mode these follow from the triple gates above, so they
+    // carry no extra information and are held constant to avoid splitting
+    // otherwise-identical tables.
+    flat && rules.flatFour > 0,
+    flat && rules.flatFive > 0,
+    flat && rules.flatSix > 0,
+    rules.straight !== null && rules.straight > 0,
+    rules.threePairs !== null && rules.threePairs > 0,
+    rules.twoTriplets !== null && rules.twoTriplets > 0,
+    rules.fourPlusPair !== null && rules.fourPlusPair > 0,
+  ].join("|");
+}

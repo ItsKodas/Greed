@@ -1,4 +1,4 @@
-import { applicableCombos } from "./combos.js";
+import { applicableCombos, comboGateKey } from "./combos.js";
 import { toCounts } from "./counts.js";
 import type { Die, Ruleset } from "./types.js";
 
@@ -36,27 +36,6 @@ export function countBustingRolls(diceCount: number, rules: Ruleset): number {
   return busts;
 }
 
-/**
- * Only the scoring settings change the odds, so the cache key ignores the
- * rest. Two lobbies with different targets share one computation.
- */
-function scoringKey(rules: Ruleset): string {
-  return [
-    rules.singleOne,
-    rules.singleFive,
-    rules.tripleOne,
-    rules.tripleMultiplier,
-    rules.nOfAKind,
-    rules.flatFour,
-    rules.flatFive,
-    rules.flatSix,
-    rules.straight,
-    rules.threePairs,
-    rules.twoTriplets,
-    rules.fourPlusPair,
-  ].join("|");
-}
-
 const tableCache = new Map<string, BustTable>();
 
 /**
@@ -64,22 +43,27 @@ const tableCache = new Map<string, BustTable>();
  *
  * Computed rather than hardcoded, because the odds genuinely depend on the
  * ruleset: enabling three pairs makes six dice meaningfully safer. The full
- * enumeration is 46,656 rolls in the worst case and is cached per ruleset.
+ * enumeration is 46,656 rolls in the worst case and is cached, keyed on
+ * which combo types can fire (see `comboGateKey`) rather than on raw field
+ * values, so the number of distinct tables is bounded by the number of gate
+ * combinations rather than growing with every point-value tweak a host
+ * makes. The cached table is frozen, since it is module-global state shared
+ * by every caller.
  */
 export function bustProbabilities(rules: Ruleset): BustTable {
-  const key = scoringKey(rules);
+  const key = comboGateKey(rules);
   const cached = tableCache.get(key);
   if (cached !== undefined) {
     return cached;
   }
-  const table: BustTable = [
+  const table: BustTable = Object.freeze([
     countBustingRolls(1, rules) / 6,
     countBustingRolls(2, rules) / 6 ** 2,
     countBustingRolls(3, rules) / 6 ** 3,
     countBustingRolls(4, rules) / 6 ** 4,
     countBustingRolls(5, rules) / 6 ** 5,
     countBustingRolls(6, rules) / 6 ** 6,
-  ];
+  ]);
   tableCache.set(key, table);
   return table;
 }

@@ -109,6 +109,18 @@ describe("bustProbabilities", () => {
     const second = bustProbabilities({ ...DEFAULT_RULESET, targetScore: 5000 });
     expect(second).toBe(first);
   });
+
+  it("ignores a point-value change that does not cross zero when caching", () => {
+    // tripleMultiplier 100 vs 101 gates identically (both > 0), so the two
+    // rulesets must share one bust table even though the raw field differs.
+    const first = bustProbabilities(DEFAULT_RULESET);
+    const second = bustProbabilities({ ...DEFAULT_RULESET, tripleMultiplier: 101 });
+    expect(second).toBe(first);
+  });
+
+  it("is frozen, since it is module-global shared state", () => {
+    expect(Object.isFrozen(bustProbabilities(DEFAULT_RULESET))).toBe(true);
+  });
 });
 
 describe("bustProbability", () => {
