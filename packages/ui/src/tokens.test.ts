@@ -59,12 +59,12 @@ describe("tokens.css", () => {
       const property = cssName(key);
       const match = css.match(new RegExp(`${property}\\s*:\\s*([^;]+);`));
       expect(match, `${property} missing from tokens.css`).not.toBeNull();
-      expect(match?.[1]?.trim().toLowerCase()).toBe(value);
+      expect(match?.[1]?.trim()).toBe(value);
     }
   });
 
   it("defines no colour property that the token object does not know about", () => {
-    const declared = [...css.matchAll(/--gr-color-([a-z-]+)\s*:/g)].map((m) => m[1]);
+    const declared = [...css.matchAll(/--gr-color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]);
     const known = Object.keys(color).map((key) =>
       key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()),
     );
