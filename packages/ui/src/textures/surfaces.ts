@@ -38,7 +38,7 @@ export function felt(options: SurfaceOptions = {}): string {
 
 /** Worn leather. Coarse cellular noise over a radial mottle. */
 export function leather(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.leather, highlight = "#5b3e2c" } = options;
+  const { seed = 1, tint = color.leather, highlight = color.leatherLit } = options;
   return [
     turbulence({ seed, baseFrequency: "0.35", octaves: 4, opacity: 0.26, size: 200, kind: "turbulence" }),
     `radial-gradient(90% 70% at 30% 20%, ${highlight}, ${tint})`,
@@ -56,7 +56,7 @@ export function brass(options: SurfaceOptions = {}): string {
 
 /** Bone / paper stock. Very fine grain, barely there. */
 export function paper(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.bone, highlight = "#f3ead6" } = options;
+  const { seed = 1, tint = color.bone, highlight = color.boneLit } = options;
   return [
     turbulence({ seed, baseFrequency: "2.4", octaves: 2, opacity: 0.14, size: 100 }),
     `linear-gradient(155deg, ${highlight}, ${tint})`,

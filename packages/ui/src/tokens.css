@@ -15,9 +15,11 @@
   --gr-color-brass-hi: #e8c168;
   --gr-color-brass-dim: #7a5a21;
   --gr-color-bone: #e8dcc4;
+  --gr-color-bone-lit: #f3ead6;
   --gr-color-bone-dim: #a2957d;
   --gr-color-oxblood: #7e2b22;
   --gr-color-leather: #4a3225;
+  --gr-color-leather-lit: #5b3e2c;
 
   --gr-font-display: "Bevan", Georgia, serif;
   --gr-font-ui: "IBM Plex Sans", system-ui, sans-serif;

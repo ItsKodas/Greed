@@ -12,16 +12,18 @@ function cssName(key: string): string {
 }
 
 describe("color", () => {
-  it("carries the twelve approved palette entries", () => {
+  it("carries the fourteen approved palette entries", () => {
     expect(Object.keys(color).sort()).toEqual([
       "baize",
       "baizeLit",
       "bone",
       "boneDim",
+      "boneLit",
       "brass",
       "brassDim",
       "brassHi",
       "leather",
+      "leatherLit",
       "oxblood",
       "walnut",
       "walnutDeep",
