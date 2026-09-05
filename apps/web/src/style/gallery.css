@@ -1,12 +1,3 @@
-body {
-  margin: 0;
-  background: var(--gr-color-walnut);
-  color: var(--gr-color-bone);
-  font-family: var(--gr-font-ui);
-  line-height: 1.55;
-  -webkit-font-smoothing: antialiased;
-}
-
 .gallery {
   max-width: 1100px;
   margin: 0 auto;
@@ -81,6 +72,19 @@ body {
 .specimen__sample {
   margin: 0;
   color: var(--gr-color-bone);
+  line-height: 1.2;
+}
+
+.specimen__sample--display {
+  font-size: var(--gr-text-2xl);
+}
+
+.specimen__sample--ui {
+  font-size: var(--gr-text-lg);
+}
+
+.specimen__sample--data {
+  font-size: var(--gr-text-lg);
 }
 
 .specimen__label {
@@ -98,7 +102,7 @@ body {
 .tile__surface {
   height: 130px;
   border-radius: var(--gr-radius-sm);
-  border: 1px solid rgb(0 0 0 / 0.5);
+  border: var(--gr-edge-hard);
   box-shadow: var(--gr-lift-low);
 }
 
