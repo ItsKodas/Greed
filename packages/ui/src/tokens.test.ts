@@ -78,6 +78,67 @@ describe("tokens.css", () => {
     expect(css).toContain("--gr-font-ui");
     expect(css).toContain("--gr-font-data");
   });
+
+  it("declares exactly the approved set of tokens", () => {
+    // Matches a declaration ("--gr-foo: value;") but not a var(--gr-foo)
+    // reference, because a reference is never followed directly by a colon.
+    const declared = [...css.matchAll(/(--gr-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
+    expect(declared.sort()).toEqual(
+      [
+        "--gr-color-baize",
+        "--gr-color-baize-deep",
+        "--gr-color-baize-lit",
+        "--gr-color-bone",
+        "--gr-color-bone-deep",
+        "--gr-color-bone-dim",
+        "--gr-color-bone-lit",
+        "--gr-color-brass",
+        "--gr-color-brass-dim",
+        "--gr-color-brass-hi",
+        "--gr-color-leather",
+        "--gr-color-leather-deep",
+        "--gr-color-leather-lit",
+        "--gr-color-oxblood",
+        "--gr-color-walnut",
+        "--gr-color-walnut-deep",
+        "--gr-color-walnut-lit",
+        "--gr-font-data",
+        "--gr-font-display",
+        "--gr-font-ui",
+        "--gr-text-xs",
+        "--gr-text-sm",
+        "--gr-text-base",
+        "--gr-text-lg",
+        "--gr-text-xl",
+        "--gr-text-2xl",
+        "--gr-text-3xl",
+        "--gr-space-1",
+        "--gr-space-2",
+        "--gr-space-3",
+        "--gr-space-4",
+        "--gr-space-5",
+        "--gr-space-6",
+        "--gr-space-7",
+        "--gr-space-8",
+        "--gr-radius-sm",
+        "--gr-radius-md",
+        "--gr-radius-die",
+        "--gr-edge-hair",
+        "--gr-edge-soft",
+        "--gr-edge-hard",
+        "--gr-lift-low",
+        "--gr-lift-high",
+        "--gr-well",
+      ].sort(),
+    );
+  });
+
+  it("anchors the scale endpoints to the approved values", () => {
+    expect(css).toMatch(/--gr-space-1:\s*4px;/);
+    expect(css).toMatch(/--gr-space-8:\s*64px;/);
+    expect(css).toMatch(/--gr-text-xs:\s*0\.74rem;/);
+    expect(css).toMatch(/--gr-text-3xl:\s*2\.7rem;/);
+  });
 });
 
 describe("font", () => {
