@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
+import { judgeCode, mintCodeText, normaliseCode } from "./codes.js";
+import type { CodeRecord, RedeemResult } from "./codes.js";
 import type { Model } from "mongoose";
 import {
   DAILY_FLOOR,
@@ -75,6 +78,43 @@ const gameSchema = new mongoose.Schema<GameRecord>(
 );
 gameSchema.index({ "players.userId": 1, endedAt: -1 });
 
+const codeSchema = new mongoose.Schema<CodeRecord>(
+  {
+    /* Stored without dashes and upper-cased, so how somebody types it is
+       their business and not the database's. */
+    code: { type: String, required: true, unique: true, index: true },
+    chips: { type: Number, required: true },
+    maxRedemptions: { type: Number, default: null },
+    redemptions: { type: Number, default: 0 },
+    expiresAt: { type: Number, default: null },
+    note: { type: String, default: "" },
+    createdBy: { type: String, required: true },
+    createdAt: { type: Number, required: true },
+    revoked: { type: Boolean, default: false },
+  },
+  { timestamps: false },
+);
+
+interface RedemptionDoc {
+  code: string;
+  userId: string;
+  chips: number;
+  at: number;
+}
+
+const redemptionSchema = new mongoose.Schema<RedemptionDoc>({
+  code: { type: String, required: true },
+  userId: { type: String, required: true },
+  chips: { type: Number, required: true },
+  at: { type: Number, required: true },
+});
+/*
+ * The one-each rule, enforced by the database rather than checked by the
+ * server. A check followed by a write is a race by construction, and two
+ * clicks a millisecond apart is the ordinary case here, not an exotic one.
+ */
+redemptionSchema.index({ code: 1, userId: 1 }, { unique: true });
+
 function toProfile(doc: UserDoc): Profile {
   return {
     id: doc._id.toString(),
@@ -104,10 +144,14 @@ export class MongoStore implements Store {
   readonly kind = "mongo" as const;
   private readonly users: Model<UserDoc>;
   private readonly games: Model<GameRecord>;
+  private readonly codes: Model<CodeRecord>;
+  private readonly redemptions: Model<RedemptionDoc>;
 
   private constructor(private readonly connection: mongoose.Connection) {
     this.users = connection.model<UserDoc>("User", userSchema);
     this.games = connection.model<GameRecord>("Game", gameSchema);
+    this.codes = connection.model<CodeRecord>("Code", codeSchema);
+    this.redemptions = connection.model<RedemptionDoc>("Redemption", redemptionSchema);
   }
 
   /**
@@ -282,6 +326,103 @@ export class MongoStore implements Store {
       .limit(limit)
       .lean();
     return docs as unknown as GameRecord[];
+  }
+
+  async mintCode(input: {
+    chips: number;
+    maxRedemptions: number | null;
+    expiresAt: number | null;
+    note: string;
+    createdBy: string;
+  }): Promise<CodeRecord> {
+    const text = mintCodeText((bytes) => randomBytes(bytes));
+    const record = {
+      code: normaliseCode(text),
+      chips: input.chips,
+      maxRedemptions: input.maxRedemptions,
+      redemptions: 0,
+      expiresAt: input.expiresAt,
+      note: input.note,
+      createdBy: input.createdBy,
+      createdAt: Date.now(),
+      revoked: false,
+    };
+    await this.codes.create(record);
+    // Returned with its dashes, because that is the form a person is given.
+    return { ...record, code: text };
+  }
+
+  async listCodes(limit: number): Promise<CodeRecord[]> {
+    const docs = await this.codes.find().sort({ createdAt: -1 }).limit(limit).lean();
+    return docs as unknown as CodeRecord[];
+  }
+
+  async revokeCode(code: string): Promise<boolean> {
+    const result = await this.codes.updateOne(
+      { code: normaliseCode(code) },
+      { $set: { revoked: true } },
+    );
+    return result.matchedCount === 1;
+  }
+
+  /**
+   * Pays a code out, once per player.
+   *
+   * Three steps, in this order for a reason. The claim comes first, because
+   * the unique index is what makes "once each" true and a claim that loses
+   * that race must cost nothing. The slot on the code comes second, so a code
+   * that has run out is refused before any chips move. The chips come last,
+   * and only once both have held.
+   *
+   * A crash between the second step and the third loses that redemption for
+   * that player. For play chips that is an acceptable failure and a cheaper
+   * one than a transaction, which would need a replica set to run at all.
+   */
+  async redeem(code: string, userId: string): Promise<RedeemResult> {
+    const key = normaliseCode(code);
+    const record = await this.codes.findOne({ code: key }).lean();
+    if (record === null) {
+      return { ok: false, reason: "unknown-code" };
+    }
+
+    const refusal = judgeCode(record as unknown as CodeRecord, Date.now());
+    if (refusal !== null) {
+      return { ok: false, reason: refusal };
+    }
+
+    try {
+      await this.redemptions.create({ code: key, userId, chips: record.chips, at: Date.now() });
+    } catch {
+      // The only way this fails is the unique index, which is the answer.
+      return { ok: false, reason: "already-redeemed" };
+    }
+
+    const taken = await this.codes.updateOne(
+      {
+        code: key,
+        revoked: false,
+        $and: [
+          { $or: [{ expiresAt: null }, { expiresAt: { $gt: Date.now() } }] },
+          {
+            $or: [
+              { maxRedemptions: null },
+              { $expr: { $lt: ["$redemptions", "$maxRedemptions"] } },
+            ],
+          },
+        ],
+      },
+      { $inc: { redemptions: 1 } },
+    );
+    if (taken.modifiedCount !== 1) {
+      // Somebody else took the last one between the check and here. Give the
+      // claim back, so they can use a different code.
+      await this.redemptions.deleteOne({ code: key, userId });
+      return { ok: false, reason: "used-up" };
+    }
+
+    await this.adjustChips(userId, record.chips);
+    const after = await this.get(userId);
+    return { ok: true, chips: record.chips, balance: after?.chips ?? record.chips };
   }
 
   async close(): Promise<void> {

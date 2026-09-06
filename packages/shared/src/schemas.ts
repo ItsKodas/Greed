@@ -73,3 +73,15 @@ export type SetRulesPayload = z.infer<typeof setRulesSchema>;
 export const setBuyInSchema = z.object({
   amount: z.number().int().min(0).max(1_000_000),
 });
+
+/** Minting a code. Bounded so a slip of the keyboard cannot mint a fortune. */
+export const mintCodeSchema = z.object({
+  chips: z.number().int().min(1).max(1_000_000),
+  /** Null or absent means as many people as turn up, each once. */
+  maxRedemptions: z.number().int().min(1).max(100_000).nullable().optional(),
+  /** Epoch ms. Absent means it does not expire. */
+  expiresAt: z.number().int().positive().nullable().optional(),
+  note: z.string().max(120).optional(),
+});
+
+export type MintCodePayload = z.infer<typeof mintCodeSchema>;

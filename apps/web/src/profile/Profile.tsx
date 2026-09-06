@@ -133,6 +133,7 @@ function Signed({
             </p>
           )}
         </div>
+        <Redeem onRedeemed={() => window.location.reload()} />
       </div>
 
       <div className="profile__figures">
@@ -206,5 +207,76 @@ function Figure({ value, label, money }: { value: string; label: string; money?:
       <b className={money === true ? "figure__money" : undefined}>{value}</b>
       <span>{label}</span>
     </div>
+  );
+}
+
+/** How a refusal is put to the person who typed the code. */
+const REFUSALS: Record<string, string> = {
+  "unknown-code": "No code like that.",
+  "already-redeemed": "You have already used that one.",
+  "used-up": "That code has been used up.",
+  expired: "That code has expired.",
+  revoked: "That code is no longer good.",
+  "too-many": "Too many tries. Give it a minute.",
+  "sign-in": "Sign in first.",
+};
+
+function Redeem({ onRedeemed }: { onRedeemed: () => void }) {
+  const [typed, setTyped] = useState("");
+  const [said, setSaid] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const send = () => {
+    if (typed.trim().length === 0 || busy) {
+      return;
+    }
+    setBusy(true);
+    void fetch("/api/redeem", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: typed }),
+    })
+      .then((response) => response.json())
+      .then((body: { ok: boolean; chips?: number; reason?: string }) => {
+        if (body.ok) {
+          setSaid(`Redeemed for ${fmt(body.chips ?? 0)} chips.`);
+          setTyped("");
+          onRedeemed();
+        } else {
+          setSaid(REFUSALS[body.reason ?? ""] ?? "That did not work.");
+        }
+      })
+      .catch(() => setSaid("Could not reach the room. Try again."))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <section className="panel">
+      <p className="panel__label">Redeem a code</p>
+      <div className="redeem">
+        <input
+          className="field__input redeem__input"
+          value={typed}
+          maxLength={20}
+          placeholder="XXXX-XXXX-XX"
+          aria-label="Redemption code"
+          onChange={(event) => setTyped(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              send();
+            }
+          }}
+        />
+        <button type="button" className="btn" disabled={busy} onClick={send}>
+          Redeem
+        </button>
+      </div>
+      {said === null ? (
+        <p className="panel__note">Codes come from the Discord. Each works once per player.</p>
+      ) : (
+        <p className="panel__note">{said}</p>
+      )}
+    </section>
   );
 }

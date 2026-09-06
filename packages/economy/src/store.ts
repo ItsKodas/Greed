@@ -1,3 +1,6 @@
+import { randomBytes } from "node:crypto";
+import { judgeCode, mintCodeText, normaliseCode } from "./codes.js";
+import type { CodeRecord, RedeemResult } from "./codes.js";
 /**
  * Where profiles, chips and finished games live.
  *
@@ -91,6 +94,26 @@ export interface Store {
   claimDaily(id: string): Promise<DailyResult>;
   bumpStats(id: string, bump: StatBump): Promise<void>;
   recordGame(record: GameRecord): Promise<void>;
+
+  /** Puts a new code into circulation. */
+  mintCode(input: {
+    chips: number;
+    maxRedemptions: number | null;
+    expiresAt: number | null;
+    note: string;
+    createdBy: string;
+  }): Promise<CodeRecord>;
+  /** Newest first, for the person who has to decide what to revoke. */
+  listCodes(limit: number): Promise<CodeRecord[]>;
+  /** Stops a code without deleting it, so the ledger still explains itself. */
+  revokeCode(code: string): Promise<boolean>;
+  /**
+   * Pays a code out, once per player.
+   *
+   * Every implementation must make "once each" a thing that cannot be raced:
+   * two clicks a millisecond apart are the ordinary case, not the exotic one.
+   */
+  redeem(code: string, userId: string): Promise<RedeemResult>;
   recentGames(userId: string, limit: number): Promise<GameRecord[]>;
   close(): Promise<void>;
 }
@@ -128,6 +151,9 @@ export function judgeDaily(profile: Profile, now: number): DailyResult {
 }
 
 export class MemoryStore implements Store {
+  private readonly codes = new Map<string, CodeRecord>();
+  /** "code:player", which is the whole of the one-each rule in memory. */
+  private readonly redeemed = new Set<string>();
   readonly kind = "memory" as const;
   private readonly people = new Map<string, Profile>();
   private readonly games: GameRecord[] = [];
@@ -221,6 +247,66 @@ export class MemoryStore implements Store {
     return this.games
       .filter((game) => game.players.some((player) => player.userId === userId))
       .slice(0, limit);
+  }
+
+  async mintCode(input: {
+    chips: number;
+    maxRedemptions: number | null;
+    expiresAt: number | null;
+    note: string;
+    createdBy: string;
+  }): Promise<CodeRecord> {
+    const record: CodeRecord = {
+      code: mintCodeText((bytes) => randomBytes(bytes)),
+      chips: input.chips,
+      maxRedemptions: input.maxRedemptions,
+      redemptions: 0,
+      expiresAt: input.expiresAt,
+      note: input.note,
+      createdBy: input.createdBy,
+      createdAt: Date.now(),
+      revoked: false,
+    };
+    this.codes.set(normaliseCode(record.code), record);
+    return record;
+  }
+
+  async listCodes(limit: number): Promise<CodeRecord[]> {
+    return [...this.codes.values()]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, limit);
+  }
+
+  async revokeCode(code: string): Promise<boolean> {
+    const record = this.codes.get(normaliseCode(code));
+    if (record === undefined) {
+      return false;
+    }
+    record.revoked = true;
+    return true;
+  }
+
+  async redeem(code: string, userId: string): Promise<RedeemResult> {
+    const key = normaliseCode(code);
+    const record = this.codes.get(key);
+    if (record === undefined) {
+      return { ok: false, reason: "unknown-code" };
+    }
+    if (this.redeemed.has(`${key}:${userId}`)) {
+      return { ok: false, reason: "already-redeemed" };
+    }
+    const refusal = judgeCode(record, Date.now());
+    if (refusal !== null) {
+      return { ok: false, reason: refusal };
+    }
+    const profile = this.people.get(userId);
+    if (profile === undefined) {
+      return { ok: false, reason: "unknown-code" };
+    }
+    this.redeemed.add(`${key}:${userId}`);
+    record.redemptions += 1;
+    profile.chips += record.chips;
+    return { ok: true, chips: record.chips, balance: profile.chips };
   }
 
   async close(): Promise<void> {

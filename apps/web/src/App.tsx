@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import { Play } from "./game/Play.js";
+import { Admin } from "./admin/Admin.js";
 import { Profile } from "./profile/Profile.js";
 import { Room } from "./room/Room.js";
 import { TableLink } from "./room/TableLink.js";
@@ -14,6 +15,7 @@ export default function App() {
         * ranks a literal above a parameter anyway, but the order says the
         * intent out loud: /style is a page, not a five-letter table code.
         */}
+      <Route path="/admin" element={<Admin />} />
       <Route path="/me" element={<Profile />} />
       <Route path="/style" element={<Gallery />} />
       <Route path="/greed" element={<Play />} />

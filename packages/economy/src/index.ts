@@ -17,3 +17,5 @@ export {
 } from "./store.js";
 export type { DailyResult, GameRecord, Profile, ProfileStats, StatBump, Store } from "./store.js";
 export { MongoStore } from "./mongo-store.js";
+export { CODE_ALPHABET, CODE_LENGTH, judgeCode, mintCodeText, normaliseCode } from "./codes.js";
+export type { CodeRecord, RedeemFailure, RedeemResult } from "./codes.js";

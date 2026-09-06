@@ -17,6 +17,7 @@ import {
   chatSchema,
   createSchema,
   joinSchema,
+  mintCodeSchema,
   watchSchema,
   removeSeatSchema,
   resumeSchema,
@@ -28,6 +29,7 @@ import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
 import { decide, thinkingTime } from "@greed/game-greed";
 import type { BotSkill } from "@greed/game-greed";
 import { comboGateKeyFor } from "@greed/game-greed";
+import { readAdmins } from "./admin.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
 import type { AuthConfig } from "./auth.js";
 import { MemoryStore, judgeDaily } from "@greed/economy";
@@ -89,6 +91,15 @@ export interface GreedServerOptions {
    * it because a real identity would otherwise need a Discord round-trip.
    */
   identify?: (socket: { id: string; request: unknown }) => string | null;
+  /**
+   * Who a request belongs to. Defaults to the session cookie.
+   *
+   * The mirror of `identify` for the HTTP routes. Both exist so tests can say
+   * who is asking without standing up a real sign-in, and neither is reachable
+   * from a request — they are arguments to the constructor, so nothing a
+   * client sends can choose one.
+   */
+  identifyRequest?: (request: { session?: { userId?: string } }) => string | null;
 }
 
 /**
@@ -114,6 +125,15 @@ const BOT_NAMES = ["Skint Alice", "Pockets", "Old Ned", "Bess", "Cutter", "Tumbl
 
 /** A socket may send this many events in this window before being ignored. */
 const RATE_EVENTS = 60;
+/*
+ * Guessing a code is the only attack in the product that pays, and ten
+ * characters of a thirty-letter alphabet is roughly 5.9 x 10^14 of them — so
+ * this is not the thing standing between an attacker and free chips. What it
+ * does is make the attempt cost an account and a wait, which is enough when
+ * the search space is that size.
+ */
+const REDEEM_TRIES = 10;
+const REDEEM_WINDOW_MS = 60_000;
 const RATE_WINDOW_MS = 2000;
 /** Chat is throttled harder, because it is the only thing others must read. */
 const CHAT_EVENTS = 5;
@@ -138,6 +158,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     sessionSecret = resolveSessionSecret(process.env["SESSION_SECRET"]),
     sessionStore,
     identify,
+    identifyRequest,
   } = options;
 
   const rooms = new Map<string, Room>();
@@ -150,6 +171,8 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   const farklePauses = new Map<string, NodeJS.Timeout>();
   const botMoves = new Map<string, NodeJS.Timeout>();
   const budgets = new Map<string, Budget>();
+  /* Keyed by account, not by socket: a socket is free to make more of. */
+  const redeemBudgets = new Map<string, Budget>();
   /** Tables already paid out, so a re-broadcast cannot pay twice. */
   const settled = new Set<string>();
   const chatBudgets = new Map<string, Budget>();
@@ -166,6 +189,12 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   }
 
   const app = express();
+  /*
+   * Nothing posted here is large — a code, a stake, a note — so the limit is
+   * small on purpose. Without this, request.body is undefined and every POST
+   * silently behaves as though it were sent empty.
+   */
+  app.use(express.json({ limit: "8kb" }));
 
   const trustProxy = resolveTrustProxy(process.env["TRUST_PROXY"]);
   if (trustProxy !== null) {
@@ -201,7 +230,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
 
   app.get("/api/me", (request, response) => {
     void (async () => {
-      const id = request.session.userId;
+      const id = userIdOfRequest(request);
       const profile = id === undefined ? null : await store.get(id);
       response.json(
         profile === null
@@ -228,7 +257,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
 
   app.post("/api/daily", (request, response) => {
     void (async () => {
-      const id = request.session.userId;
+      const id = userIdOfRequest(request);
       if (id === undefined) {
         response.status(401).json({ error: "Sign in first." });
         return;
@@ -279,9 +308,98 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     response.json({ code, game: GREED.id });
   });
 
+  const admins = readAdmins(process.env);
+
+  /** The id behind a request, however this server has been told to find it. */
+  function userIdOfRequest(request: express.Request): string | undefined {
+    if (identifyRequest !== undefined) {
+      return identifyRequest(request) ?? undefined;
+    }
+    return request.session.userId;
+  }
+
+  /** The signed-in player, or null. Used by everything below. */
+  async function whoIs(request: express.Request) {
+    const id = userIdOfRequest(request);
+    return id === undefined ? null : await store.get(id);
+  }
+
+  /**
+   * Redeeming a code.
+   *
+   * The one endpoint in the product where guessing pays, so it is the one that
+   * is rate limited by account rather than by socket: a socket is free to make
+   * more of, and an account is not.
+   */
+  app.post("/api/redeem", (request, response) => {
+    void (async () => {
+      const profile = await whoIs(request);
+      if (profile === null) {
+        response.status(401).json({ ok: false, reason: "sign-in" });
+        return;
+      }
+      if (!withinBudget(redeemBudgets, profile.id, REDEEM_TRIES, REDEEM_WINDOW_MS)) {
+        response.status(429).json({ ok: false, reason: "too-many" });
+        return;
+      }
+      const typed = String((request.body as { code?: unknown } | undefined)?.code ?? "");
+      if (typed.trim().length === 0) {
+        response.status(400).json({ ok: false, reason: "unknown-code" });
+        return;
+      }
+      response.json(await store.redeem(typed, profile.id));
+    })();
+  });
+
+  /** Everything below this needs to be on the list. */
+  const requireAdmin: express.RequestHandler = (request, response, next) => {
+    void (async () => {
+      const profile = await whoIs(request);
+      if (profile === null || !admins.has(profile.discordId)) {
+        // Deliberately the same answer either way: whether a page exists is
+        // not something an unauthorised visitor needs to learn.
+        response.status(404).json({ error: "Not found." });
+        return;
+      }
+      next();
+    })();
+  };
+
+  app.get("/api/admin/codes", requireAdmin, (_request, response) => {
+    void (async () => {
+      response.json({ codes: await store.listCodes(50) });
+    })();
+  });
+
+  app.post("/api/admin/codes", requireAdmin, (request, response) => {
+    void (async () => {
+      const parsed = mintCodeSchema.safeParse(request.body);
+      if (!parsed.success) {
+        response.status(400).json({ error: "That is not a code worth minting." });
+        return;
+      }
+      const profile = await whoIs(request);
+      const code = await store.mintCode({
+        chips: parsed.data.chips,
+        maxRedemptions: parsed.data.maxRedemptions ?? null,
+        expiresAt: parsed.data.expiresAt ?? null,
+        note: parsed.data.note ?? "",
+        createdBy: profile?.id ?? "unknown",
+      });
+      response.json({ code });
+    })();
+  });
+
+  app.post("/api/admin/codes/:code/revoke", requireAdmin, (request, response) => {
+    void (async () => {
+      const done = await store.revokeCode(String(request.params["code"] ?? ""));
+      response.status(done ? 200 : 404).json({ revoked: done });
+    })();
+  });
+
   app.get("/api/games", (request, response) => {
     void (async () => {
-      const id = request.session.userId;
+      const id = userIdOfRequest(request);
       if (id === undefined) {
         response.status(401).json({ error: "Sign in first." });
         return;

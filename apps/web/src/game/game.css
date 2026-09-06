@@ -1576,3 +1576,26 @@
   text-align: center;
   font-size: var(--gr-text-xs);
 }
+
+.redeem {
+  display: flex;
+  gap: var(--gr-space-2);
+}
+
+.redeem__input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--gr-font-data);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* A revoked code stays in the list, dimmed — the ledger has to explain itself. */
+.code--dead td {
+  color: var(--gr-color-ink-faint);
+}
+
+/* Chips are money wherever they appear, including on the code desk. */
+.code__chips {
+  color: var(--gr-color-chip-hi);
+}

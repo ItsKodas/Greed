@@ -37,6 +37,7 @@ services:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
       DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-}
+      ADMIN_DISCORD_IDS: ${ADMIN_DISCORD_IDS:-}
       # Where a player's browser is, which is where they land after signing in.
       # Note this is NOT the dev value: `npm run dev` puts the client on Vite's
       # port and the API on another, while here the server serves the client
