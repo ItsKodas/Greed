@@ -1,5 +1,5 @@
 import { Discord, generateCodeVerifier, generateState, OAuth2RequestError } from "arctic";
-import type { Express, RequestHandler } from "express";
+import type { Express, RequestHandler, Response as ExpressResponse } from "express";
 import type { Store } from "./store.js";
 
 /**
@@ -70,6 +70,24 @@ interface DiscordUser {
   accent_color?: number | null;
 }
 
+/**
+ * One way out when signing in cannot continue.
+ *
+ * Every one of these used to redirect in silence, which left an operator with
+ * a failed page, an empty log and nothing to go on. The reason is written to
+ * the log and put on the URL: it names which step gave up, and none of these
+ * values tells an attacker anything they did not already know by causing it.
+ */
+function giveUp(
+  response: ExpressResponse,
+  config: AuthConfig,
+  reason: string,
+  detail?: Record<string, unknown>,
+): void {
+  console.error(`greed: discord sign-in failed (${reason})`, detail ?? "");
+  response.redirect(`${config.clientUrl}/?signin=failed&why=${reason}`);
+}
+
 export function mountAuth(app: Express, store: Store, config: AuthConfig | null): void {
   if (config === null) {
     const unavailable: RequestHandler = (_request, response) => {
@@ -104,15 +122,18 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
       delete request.session.oauthState;
       delete request.session.oauthVerifier;
 
-      if (
-        code === null ||
-        state === null ||
-        expected === undefined ||
-        verifier === undefined ||
-        state !== expected
-      ) {
-        response.redirect(`${config.clientUrl}/?signin=failed`);
-        return;
+      if (expected === undefined || verifier === undefined) {
+        // The session that started this did not come back with the callback,
+        // so there is nothing to check the reply against. Almost always the
+        // cookie was never set: a `secure` cookie behind a proxy that Express
+        // has not been told to trust, or a browser refusing a third-party one.
+        return giveUp(response, config, "no-session");
+      }
+      if (code === null || state === null) {
+        return giveUp(response, config, "no-code");
+      }
+      if (state !== expected) {
+        return giveUp(response, config, "state-mismatch");
       }
 
       try {
@@ -121,8 +142,9 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
           headers: { Authorization: `Bearer ${tokens.accessToken()}` },
         });
         if (!profileResponse.ok) {
-          response.redirect(`${config.clientUrl}/?signin=failed`);
-          return;
+          return giveUp(response, config, "discord-refused-profile", {
+            status: profileResponse.status,
+          });
         }
         const discordUser = (await profileResponse.json()) as DiscordUser;
         const profile = await store.upsertDiscordUser({
@@ -134,10 +156,16 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
         request.session.userId = profile.id;
         response.redirect(`${config.clientUrl}/?signin=ok`);
       } catch (error) {
-        if (!(error instanceof OAuth2RequestError)) {
-          console.error("discord sign-in failed", error);
-        }
-        response.redirect(`${config.clientUrl}/?signin=failed`);
+        // An OAuth2RequestError used to be swallowed here as "expected". It is
+        // not: a mismatched redirect URI and a wrong client secret both arrive
+        // this way, and both are silent in exactly the deployment where you
+        // cannot afford to guess.
+        return giveUp(
+          response,
+          config,
+          error instanceof OAuth2RequestError ? "discord-rejected-exchange" : "unexpected",
+          { error },
+        );
       }
     })();
   });

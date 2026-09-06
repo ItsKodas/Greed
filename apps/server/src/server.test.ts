@@ -4,7 +4,7 @@ import type { Ack, ClientToServer, RoomView, ServerToClient } from "@greed/share
 import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createGreedServer, resolveSessionSecret } from "./server.js";
+import { createGreedServer, resolveSessionSecret, resolveTrustProxy } from "./server.js";
 import type { GreedServer } from "./server.js";
 
 /**
@@ -516,5 +516,40 @@ describe("the session secret", () => {
     // cookies with it would let anyone forge a session.
     expect(() => resolveSessionSecret(undefined)).toThrow(/SESSION_SECRET/);
     expect(() => resolveSessionSecret("")).toThrow(/SESSION_SECRET/);
+  });
+});
+
+describe("how much of a proxy to believe", () => {
+  const was = process.env["NODE_ENV"];
+  afterEach(() => {
+    process.env["NODE_ENV"] = was;
+  });
+
+  it("trusts one proxy in production when nothing is configured", () => {
+    process.env["NODE_ENV"] = "production";
+    expect(resolveTrustProxy(undefined)).toBe(1);
+  });
+
+  it("treats an empty string as unset", () => {
+    process.env["NODE_ENV"] = "production";
+    // Compose writes ${VAR:-} for anything missing from .env, so "not set"
+    // reaches a container as "" rather than undefined. A ?? here reads
+    // correctly and never fires, which cost a working sign-in once already.
+    expect(resolveTrustProxy("")).toBe(1);
+    expect(resolveTrustProxy("   ")).toBe(1);
+  });
+
+  it("trusts nothing in development", () => {
+    process.env["NODE_ENV"] = "development";
+    expect(resolveTrustProxy(undefined)).toBeNull();
+    expect(resolveTrustProxy("")).toBeNull();
+  });
+
+  it("takes a hop count, a boolean or an address", () => {
+    expect(resolveTrustProxy("2")).toBe(2);
+    expect(resolveTrustProxy("true")).toBe(true);
+    expect(resolveTrustProxy("false")).toBe(false);
+    expect(resolveTrustProxy("loopback")).toBe("loopback");
+    expect(resolveTrustProxy("10.0.0.0/8")).toBe("10.0.0.0/8");
   });
 });

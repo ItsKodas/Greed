@@ -135,21 +135,9 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
 
   const app = express();
 
-  /*
-   * Behind a proxy that terminates TLS — Cloudflare, nginx, a tunnel — Express
-   * sees a plain http connection and only learns otherwise from
-   * X-Forwarded-Proto. Until it is told to believe that header it treats the
-   * request as insecure and express-session declines to send a cookie marked
-   * `secure` at all, so signing in appears to do nothing whatsoever.
-   *
-   * A number is a count of proxies to trust nearest-first. One suits a single
-   * proxy in front; set TRUST_PROXY when there are more, or to a specific
-   * address or subnet.
-   */
-  const trustProxy = process.env["TRUST_PROXY"] ?? (isProduction() ? "1" : "");
-  if (trustProxy.length > 0) {
-    const hops = Number(trustProxy);
-    app.set("trust proxy", Number.isNaN(hops) ? trustProxy : hops);
+  const trustProxy = resolveTrustProxy(process.env["TRUST_PROXY"]);
+  if (trustProxy !== null) {
+    app.set("trust proxy", trustProxy);
   }
   const http = createHttpServer(app);
   const io = new Server<ClientToServer, ServerToClient, DefaultEventsMap, SocketIdentity>(http, {
@@ -847,6 +835,35 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   }
 
   return { http, io, rooms, store, close };
+}
+
+/**
+ * How much of X-Forwarded-Proto to believe.
+ *
+ * Behind a proxy that terminates TLS — Cloudflare, nginx, a tunnel — Express
+ * sees a plain http connection and only learns otherwise from that header.
+ * Until it is told to trust the header it treats every request as insecure,
+ * and express-session then declines to send a cookie marked `secure` at all:
+ * no cookie, no session, and signing in silently does nothing.
+ *
+ * An empty string counts as unset. Compose writes `${VAR:-}` for anything
+ * absent from .env, so in a container "not configured" arrives as "" rather
+ * than as undefined, and a `??` here would look right and never fire.
+ */
+export function resolveTrustProxy(
+  configured: string | undefined,
+): number | boolean | string | null {
+  const value = configured?.trim() ?? "";
+  if (value.length === 0) {
+    // One proxy in front is the ordinary deployment; nothing in development.
+    return isProduction() ? 1 : null;
+  }
+  if (value === "true" || value === "false") {
+    return value === "true";
+  }
+  const hops = Number(value);
+  // Anything else is Express's own syntax: an address, a subnet, "loopback".
+  return Number.isNaN(hops) ? value : hops;
 }
 
 /** Whether this is a real deployment rather than someone's laptop. */
