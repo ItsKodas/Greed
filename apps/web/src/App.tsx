@@ -1,4 +1,5 @@
 import { Route, Routes } from "react-router-dom";
+import { Blackjack } from "./blackjack/Blackjack.js";
 import { Play } from "./game/Play.js";
 import { Admin } from "./admin/Admin.js";
 import { Profile } from "./profile/Profile.js";
@@ -20,6 +21,8 @@ export default function App() {
       <Route path="/style" element={<Gallery />} />
       <Route path="/greed" element={<Play />} />
       <Route path="/greed/:code" element={<Play />} />
+      <Route path="/blackjack" element={<Blackjack />} />
+      <Route path="/blackjack/:code" element={<Blackjack />} />
       {/*
         * A bare code at the root, so a link that was shared before there were
         * several games still works and no share link ever has to name one.

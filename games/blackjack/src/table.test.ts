@@ -44,6 +44,16 @@ describe("taking a stake", () => {
     expect(table.seats[0]?.bet).toBe(500);
   });
 
+  it("lets a stake be taken back off the felt before the deal", () => {
+    const table = new Table("TEST1");
+    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    table.bet("a", 500);
+    table.bet("a", 0);
+    expect(table.seats[0]?.bet).toBe(0);
+    // And so there is nothing left to deal to.
+    expect(() => table.deal("a")).toThrow(/nobody has bet/i);
+  });
+
   it("will not deal with nothing on the table", () => {
     const table = new Table("TEST1");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });

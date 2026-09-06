@@ -1,0 +1,38 @@
+/*
+ * The blackjack room.
+ *
+ * Same rule as Greed's: a game owns its materials, the building owns its
+ * interface. So this repaints the surfaces — a green room lit low over one
+ * table — and touches nothing that carries meaning.
+ *
+ * Left alone deliberately: neon, because the sign and the controls belong to
+ * the building and should look the same in every room; chip, because a player
+ * learns once that gold is their money and it has to hold at every table; good
+ * and bad, because a win is a win wherever it happened.
+ *
+ * Where this differs from Greed is what the room is made of. Greed is a wooden
+ * back room with dice on a bar; this is a card room, so the felt is the whole
+ * floor rather than one table on it, and the walls are the same green gone
+ * dark rather than a separate colour.
+ */
+:root[data-game="blackjack"] {
+  --gr-color-night: #0b1712;
+  --gr-color-slate: #12241c;
+  --gr-color-shadow: #050c09;
+  --gr-color-smoke: #1a3327;
+  --gr-color-smoke-lit: #22422f;
+
+  /*
+   * Lighter than the building's felt, because here it is the surface you are
+   * reading cards off rather than a table seen across a room.
+   */
+  --gr-color-felt: #17402e;
+  --gr-color-felt-lit: #1e5039;
+  --gr-color-felt-deep: #0e2c1f;
+
+  /* Cool ink again, but warmed a shade off blue so it sits on green. */
+  --gr-color-ink: #dcebe1;
+  --gr-color-ink-lit: #f1f8f3;
+  --gr-color-ink-dim: #8ba193;
+  --gr-color-ink-faint: #5d7268;
+}

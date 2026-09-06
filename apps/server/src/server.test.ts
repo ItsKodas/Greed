@@ -719,9 +719,10 @@ describe("what the room offers", () => {
 
     const ids = body.games.map((game) => game.id);
     expect(ids).toContain("greed");
-    // Listed but not yet openable, so the room can show what is coming.
     expect(body.games.find((game) => game.id === "greed")?.open).toBe(true);
-    expect(body.games.find((game) => game.id === "blackjack")?.open).toBe(false);
+    expect(body.games.find((game) => game.id === "blackjack")?.open).toBe(true);
+    // Listed but not yet openable, so the room can show what is coming.
+    expect(body.games.find((game) => game.id === "slots")?.open).toBe(false);
     // A machine is not a table, and says so.
     expect(body.games.find((game) => game.id === "slots")?.shape).toBe("machine");
   });

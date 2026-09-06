@@ -61,6 +61,9 @@ export interface TurnView {
   endsAt: number | null;
 }
 
+/** Any game's view of a table, tagged with the game that made it. */
+export type TableState = { game: string } & Record<string, unknown>;
+
 export interface RoomView {
   code: string;
   status: RoomStatus;
@@ -84,7 +87,8 @@ export type Ack =
 
 export interface ClientToServer {
   "lobby:create": (
-    payload: { name: string; ruleset?: string },
+    /** `game` names which table to open; left out, it is Greed, as it always was. */
+    payload: { name: string; game?: string; ruleset?: string },
     ack: (result: Ack) => void,
   ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
@@ -110,7 +114,15 @@ export interface ClientToServer {
 }
 
 export interface ServerToClient {
-  "room:state": (state: RoomView) => void;
+  /**
+   * The table, as this seat may see it.
+   *
+   * Shaped by whichever game is being played, so it carries the game's id and
+   * nothing more is promised here. A client knows which game it opened and
+   * reads the rest accordingly; the alternative is a union that every game has
+   * to be added to, which is the coupling this whole layer just shed.
+   */
+  "room:state": (state: TableState) => void;
   "room:error": (message: string) => void;
   "chat:message": (message: ChatMessage) => void;
 }

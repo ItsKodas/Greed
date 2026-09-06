@@ -158,7 +158,16 @@ export function useRoom(): RoomHook {
       });
     });
     socket.on("disconnect", () => setConnected(false));
-    socket.on("room:state", (state) => {
+    socket.on("room:state", (raw) => {
+      /*
+       * One channel now carries every game's state, so what arrives is checked
+       * before it is believed. A stale socket from another table would
+       * otherwise be rendered through these components, which know only dice.
+       */
+      if (raw.game !== "greed") {
+        return;
+      }
+      const state = raw as unknown as RoomView;
       setRoom(state);
       setPendingRoll((waiting) => {
         if (waiting === null) {

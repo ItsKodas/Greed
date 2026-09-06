@@ -185,11 +185,20 @@ export class Table {
     if (seat === undefined) {
       throw new TableError("You are not at this table.");
     }
-    if (!Number.isInteger(amount) || amount < MIN_BET || amount > MAX_BET) {
+    /*
+     * Zero is a bet: it is taking your chips back off the felt before the
+     * cards come out. Without it a misclick would stand for the whole hand,
+     * because every other amount here replaces the last one and there would be
+     * no amount that meant none.
+     */
+    const withdrawn = amount === 0;
+    if (!Number.isInteger(amount) || (!withdrawn && (amount < MIN_BET || amount > MAX_BET))) {
       throw new TableError(`Bets are between ${MIN_BET} and ${MAX_BET}.`);
     }
     seat.bet = amount;
-    this.lastEvent = `${seat.name} bet ${amount.toLocaleString("en-US")}`;
+    this.lastEvent = withdrawn
+      ? `${seat.name} took their chips back`
+      : `${seat.name} bet ${amount.toLocaleString("en-US")}`;
   }
 
   /** Deals the hand. The host's call, and only once somebody has bet. */

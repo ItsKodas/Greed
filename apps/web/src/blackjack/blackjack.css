@@ -1,0 +1,245 @@
+/*
+ * The blackjack table.
+ *
+ * The layout says what the game is before a word is read: the dealer alone
+ * across the top, everybody else in a row beneath facing them. That is the
+ * whole difference from Greed — there, players face each other and the middle
+ * of the table is the contested thing; here every seat plays the house and the
+ * only hand that matters to all of them is the one at the top.
+ */
+
+.bj {
+  padding-top: var(--gr-space-5);
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  grid-template-areas: "dealer side" "seats side";
+  gap: var(--gr-space-5);
+  align-items: start;
+}
+
+/* -------------------------------------------------------------- the dealer */
+
+.bj__dealer {
+  grid-area: dealer;
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-4);
+  padding: var(--gr-space-4) var(--gr-space-5);
+  border-radius: var(--gr-radius-md);
+  /* The house sits on its own patch of felt, lit from above and nowhere else. */
+  background:
+    radial-gradient(120% 180% at 50% -40%, var(--gr-color-felt-lit), transparent 70%),
+    var(--gr-color-felt-deep);
+  border: var(--gr-edge-soft);
+  box-shadow: var(--gr-well);
+  min-height: 118px;
+}
+
+.bj__whose {
+  margin: 0;
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-lg);
+  color: var(--gr-color-ink-dim);
+  letter-spacing: 0.04em;
+  min-width: 5.5em;
+}
+
+.bj__total {
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-lg);
+  color: var(--gr-color-ink-lit);
+  margin-left: auto;
+}
+
+/* --------------------------------------------------------------- the seats */
+
+.bj__seats {
+  grid-area: seats;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
+  gap: var(--gr-space-3);
+  align-items: start;
+}
+
+.bj__seat {
+  display: grid;
+  gap: var(--gr-space-3);
+  padding: var(--gr-space-3);
+  border-radius: var(--gr-radius-sm);
+  background: rgb(0 0 0 / 0.26);
+  border: var(--gr-edge-soft);
+  border-left: 3px solid var(--gr-color-neon-dim);
+}
+
+/* Glowing means it is happening now — the same promise the building makes
+   everywhere else, kept here. */
+.bj__seat--turn {
+  border-color: var(--gr-color-neon);
+  border-left-color: var(--gr-color-neon);
+  background: rgb(46 123 255 / 0.13);
+}
+
+.bj__seat--waiting,
+.bj__seat--gone {
+  opacity: 0.55;
+  border-left-color: var(--gr-color-ink-dim);
+}
+
+.bj__who {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+}
+
+/* Gold, because it is their money sitting on the felt. */
+.bj__bet {
+  margin-left: auto;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-chip);
+}
+
+.bj__result {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.bj__result--good {
+  color: var(--gr-color-good);
+}
+
+.bj__result--bad {
+  color: var(--gr-color-bad);
+}
+
+.bj__watchers {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+}
+
+/* ------------------------------------------------------------- the actions */
+
+.bj__actions {
+  grid-area: side;
+  display: grid;
+  gap: var(--gr-space-2);
+  align-content: start;
+}
+
+.bj__chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gr-space-2);
+}
+
+/*
+ * A chip, not a button: round, edged, and stacked rather than chosen from.
+ * Gold only on the rim and the number, so it reads as money without becoming
+ * the brightest thing on the page.
+ */
+.bj__chip {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px dashed color-mix(in srgb, var(--gr-color-chip) 60%, transparent);
+  background: radial-gradient(circle at 50% 34%, var(--gr-color-smoke-lit), var(--gr-color-shadow));
+  color: var(--gr-color-chip-hi);
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+  box-shadow: var(--gr-lift-low);
+}
+
+.bj__chip:hover:not(:disabled) {
+  border-color: var(--gr-color-chip);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.bj__chip:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 2px;
+}
+
+.bj__chip:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.bj__stake {
+  margin: var(--gr-space-1) 0 var(--gr-space-2);
+  text-align: center;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-faint);
+}
+
+.bj__stake--on {
+  font-size: var(--gr-text-xl);
+  color: var(--gr-color-chip);
+}
+
+/* --------------------------------------------------------------- the cards */
+
+.hand {
+  display: flex;
+  gap: 3px;
+  min-height: 74px;
+  align-items: flex-start;
+}
+
+.card {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 66px;
+  border-radius: var(--gr-radius-md);
+  /* Paper, and the only white thing in the room besides the burning middle of
+     the sign — which is why a dealt hand pulls the eye without being lit. */
+  background: linear-gradient(170deg, #fdfbf6, #e6e1d6);
+  color: #1b1b1b;
+  border: 1px solid rgb(0 0 0 / 0.4);
+  box-shadow: var(--gr-lift-low);
+  font-family: var(--gr-font-display);
+  line-height: 1;
+}
+
+.card--red {
+  color: #b0202a;
+}
+
+.card__rank {
+  font-size: var(--gr-text-lg);
+}
+
+.card__pip {
+  font-size: var(--gr-text-base);
+}
+
+/* The back of a card nobody has been told the face of. Patterned rather than
+   plain, so it is obviously a card and obviously not readable. */
+.card--down {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      var(--gr-color-neon-dim) 0 3px,
+      var(--gr-color-shadow) 3px 6px
+    );
+  border-color: var(--gr-color-neon-dim);
+}
+
+@media (max-width: 720px) {
+  .bj {
+    grid-template-columns: 1fr;
+    grid-template-areas: "dealer" "seats" "side";
+  }
+}

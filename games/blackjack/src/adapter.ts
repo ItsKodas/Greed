@@ -43,8 +43,8 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           // charge twice for the same hand.
           const owed = amount - already;
           if (owed > 0 && !(await deps.take(seat.userId, owed))) {
-            table.bet(seatId, already === 0 ? amount : already);
-            seat.bet = already;
+            // Back to what was on the felt before, which zero can now express.
+            table.bet(seatId, already);
             throw new TableError("You cannot cover that bet.");
           }
           if (owed < 0) {

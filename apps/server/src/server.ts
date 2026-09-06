@@ -37,20 +37,15 @@ import type { AuthConfig } from "./auth.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
 
 /**
- * What the room offers. One entry today; the point of the list is that adding
- * the second one is an entry rather than a change to the server.
+ * What the room offers.
+ *
+ * A game that exists lists itself: these are the same objects the adapters
+ * carry, so a game cannot be advertised here with a name, a seat count or an
+ * open sign that differs from the one it is actually played under.
  */
 const CATALOGUE = new Catalogue()
   .add(GREED)
-  .add({
-    id: "blackjack",
-    name: "Blackjack",
-    blurb: "Beat the dealer to twenty-one.",
-    shape: "table",
-    minSeats: 1,
-    maxSeats: 6,
-    open: false,
-  })
+  .add(BLACKJACK)
   .add({
     id: "slots",
     name: "Slots",
@@ -284,12 +279,10 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
    * game — so it is answered here rather than by each game separately.
    */
   app.get("/api/room", (_request, response) => {
-    // Every open table is a Greed table today. When there are two games, a
-    // table will carry its game's id and this counts by that instead.
     const live = [...rooms.values()];
     response.json({
       games: CATALOGUE.all().map((game) => {
-        const mine = game.id === GREED.id ? live : [];
+        const mine = live.filter((room) => room.game.listing.id === game.id);
         return {
           ...game,
           tables: mine.length,
@@ -310,12 +303,12 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
    */
   app.get("/api/table/:code", (request, response) => {
     const code = String(request.params["code"] ?? "").toUpperCase();
-    if (!rooms.has(code)) {
+    const seated = rooms.get(code);
+    if (seated === undefined) {
       response.status(404).json({ error: "No table with that code." });
       return;
     }
-    // Every table is a Greed table today; when there are two, the table says.
-    response.json({ code, game: GREED.id });
+    response.json({ code, game: seated.game.listing.id });
   });
 
   /**
@@ -545,7 +538,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
    * Greed's view is the same for everyone, so today this sends identical
    * payloads and costs one small object per seat at a table of at most eight.
    */
-  function sendState(code: string, table: PlayTable): void {
+  function sendState(code: string, seated: Seated): void {
     const members = io.sockets.adapter.rooms.get(code);
     if (members === undefined) {
       return;
@@ -554,7 +547,13 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       // Null while a socket is in the room but between seats — mid-resume, or
       // after its seat was taken away. It still gets the table, as nobody.
       const seat = sockets.get(socketId)?.seatId ?? null;
-      io.to(socketId).emit("room:state", table.view(seat) as never);
+      io.to(socketId).emit("room:state", {
+        // Tagged, so a client can tell what it is looking at without being
+        // told separately — and so a stale socket cannot render one game's
+        // state through another's components.
+        game: seated.game.listing.id,
+        ...(seated.table.view(seat) as Record<string, unknown>),
+      });
     }
   }
 
@@ -564,7 +563,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       return;
     }
     armClock(code, seated);
-    sendState(code, seated.table);
+    sendState(code, seated);
     schedulePause(code, seated);
     scheduleBot(code, seated);
     if (seated.game.isSettled(seated.table) && !settled.has(code)) {
