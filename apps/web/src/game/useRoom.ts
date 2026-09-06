@@ -2,6 +2,12 @@ import type { ChatMessage, ClientToServer, HouseRules, RoomView, ServerToClient 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
+import type { PendingRoll } from "./useRollAnimation.js";
+
+/** A pending throw, plus the counter it was asked from so we know when it lands. */
+interface PendingRollState extends PendingRoll {
+  fromSeq: number;
+}
 
 /**
  * Same origin, always. Vite proxies the socket to the game server in
@@ -59,7 +65,8 @@ export interface RoomActions {
   addBot: (skill: "easy" | "normal" | "hard") => void;
   removeSeat: (seatId: string) => void;
   start: () => void;
-  roll: () => void;
+  /** Takes how many dice go up, so the tumble can start before the reply. */
+  roll: (count: number) => void;
   toggle: (index: number) => void;
   bank: () => void;
   say: (text: string) => void;
@@ -75,8 +82,8 @@ export interface RoomHook {
    * Null once the server has caught up and its own answer should be shown.
    */
   heldLocally: boolean[] | null;
-  /** A roll has been asked for and the dice it produces have not arrived. */
-  rollingLocally: boolean;
+  /** A throw asked for whose dice have not arrived, or null when none is. */
+  pendingRoll: PendingRoll | null;
   chat: ChatMessage[];
   seatId: string | null;
   error: string | null;
@@ -109,8 +116,15 @@ export function useRoom(): RoomHook {
    */
   const [heldLocally, setHeldLocally] = useState<boolean[] | null>(null);
   const pendingToggles = useRef(0);
-  /** Set on click, cleared when the roll it belongs to arrives. */
-  const [rollingLocally, setRollingLocally] = useState(false);
+  /*
+   * A throw asked for and not yet answered.
+   *
+   * Held against the roll counter it was asked from, not as a bare flag. The
+   * table broadcasts for all sorts of reasons — a clock tick, someone typing —
+   * and an earlier version cleared this on any of them, which cut the dice off
+   * mid-air. Only the counter moving means the throw was actually answered.
+   */
+  const [pendingRoll, setPendingRoll] = useState<PendingRollState | null>(null);
   /* Read by callbacks that must not be rebuilt on every state broadcast. */
   const roomRef = useRef<RoomView | null>(null);
   roomRef.current = room;
@@ -142,15 +156,24 @@ export function useRoom(): RoomHook {
     socket.on("disconnect", () => setConnected(false));
     socket.on("room:state", (state) => {
       setRoom(state);
-      // A roll of our own has landed, so the local stand-in has done its job.
-      if (state.turn !== null) {
-        setRollingLocally(false);
-      }
+      setPendingRoll((waiting) => {
+        if (waiting === null) {
+          return null;
+        }
+        // Answered only when the throw counter has actually moved on, or when
+        // the turn has ended under us and there is nothing left to wait for.
+        const seq = state.turn?.rollSeq ?? 0;
+        return seq !== waiting.fromSeq || state.turn === null ? null : waiting;
+      });
       if (pendingToggles.current === 0) {
         setHeldLocally(null);
       }
     });
-    socket.on("room:error", (message) => setError(message));
+    socket.on("room:error", (message) => {
+      setError(message);
+      // A refused throw is never answered, so the dice would hang in the air.
+      setPendingRoll(null);
+    });
     // Kept client-side rather than in room state: the table broadcasts on
     // every roll, and shipping the backlog each time would be waste.
     socket.on("chat:message", (message) => {
@@ -230,15 +253,17 @@ export function useRoom(): RoomHook {
   );
   const start = useCallback(() => socketRef.current?.emit("game:start"), []);
 
-  const roll = useCallback(() => {
+  /**
+   * @param count How many dice are going up. The caller works this out from
+   * the rules, because the dice themselves are a round trip away and the
+   * animation cannot wait for them without being the thing it is fixing.
+   */
+  const roll = useCallback((count: number) => {
     const socket = socketRef.current;
     if (socket === null) {
       return;
     }
-    // The tumble starts on the press and runs until the dice arrive, so the
-    // wait for the server is spent watching dice roll rather than watching
-    // nothing happen. What they land on is still the server's to say.
-    setRollingLocally(true);
+    setPendingRoll({ count, fromSeq: roomRef.current?.turn?.rollSeq ?? 0 });
     setHeldLocally(null);
     socket.emit("game:roll");
   }, []);
@@ -283,7 +308,7 @@ export function useRoom(): RoomHook {
   return {
     room,
     heldLocally,
-    rollingLocally,
+    pendingRoll,
     chat,
     seatId,
     error,

@@ -1,4 +1,4 @@
-import { scoreSelection } from "@greed/rules";
+import { bustProbability, scoreSelection } from "@greed/rules";
 import { play } from "./audio.js";
 import type { RoomView } from "@greed/shared";
 import { SeatAvatar } from "./Avatar.js";
@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Die } from "./Die.js";
 import { ScoreCard } from "./ScoreCard.js";
 import { ROLL_SETTLE_MS, useRollAnimation } from "./useRollAnimation.js";
+import type { PendingRoll } from "./useRollAnimation.js";
 import { isScoringStraight } from "./useSound.js";
 import type { RoomActions } from "./useRoom.js";
 
@@ -37,8 +38,8 @@ interface TableProps {
   actions: RoomActions;
   /** This player's picks, while they are ahead of the server. */
   heldLocally: boolean[] | null;
-  /** A roll asked for whose dice have not come back yet. */
-  rollingLocally: boolean;
+  /** A throw asked for whose dice have not come back yet. */
+  pendingRoll: PendingRoll | null;
 }
 
 export function Table({
@@ -46,7 +47,7 @@ export function Table({
   seatId,
   actions,
   heldLocally,
-  rollingLocally,
+  pendingRoll,
 }: TableProps) {
   const turn = room.turn;
   const over = room.status === "over";
@@ -81,15 +82,22 @@ export function Table({
       : turn.dice.length - keptCount
     : (turn?.nextRollCount ?? 0);
 
+  // Cached behind a table keyed on the ruleset, so this costs nothing after
+  // the first call and can follow the local count rather than lag behind it.
+  const bustChance =
+    ahead && nextRollCount >= 1 && nextRollCount <= 6
+      ? bustProbability(nextRollCount, room.ruleset)
+      : (turn?.bustChance ?? 0);
+
   const canAct = yours && turn.phase === "selecting" && selectionValid;
   const canRollFresh = yours && turn.phase === "awaiting_roll";
   const total = turn === null ? 0 : turn.kept + selection;
   const left = useCountdown(over ? null : (turn?.endsAt ?? null));
-  const settled = useRollAnimation(turn?.dice ?? [], turn?.rollSeq ?? 0);
-  // Tumbling covers both the animation itself and the wait for the dice, so a
-  // press is answered immediately even when the answer is still in flight.
-  const rolling = settled.rolling || rollingLocally;
-  const faces = settled.faces;
+  // One tumble, from the press until the dice land. It owns both halves — the
+  // wait for the reply and the throw itself — because handing over between two
+  // animations is what made the dice stutter and change count mid-air.
+  const { rolling, faces } = useRollAnimation(turn?.dice ?? [], turn?.rollSeq ?? 0, pendingRoll);
+  const shown = rolling ? faces : (turn?.dice ?? []);
 
   // The rarest thing in the game — 720 of the 46,656 six-dice rolls — so it
   // gets a moment of its own once the dice have settled.
@@ -142,23 +150,29 @@ export function Table({
       <div className="table__main">
         <div className={`tray${celebrating ? " tray--greed" : ""}`}>
           <div className="tray__stage">
-          {turn === null || turn.dice.length === 0 ? (
+          {!rolling && (turn === null || turn.dice.length === 0) ? (
             <p className="tray__empty">
               {over ? "Game over." : yours ? "Your turn — roll to begin." : `Waiting on ${active?.name ?? "the next player"}.`}
             </p>
           ) : (
             <div className={`tray__dice${rolling ? " tray__dice--rolling" : ""}`}>
-              {turn.dice.map((face, index) => (
+              {/*
+                * What is on the table: the dice in the air while they are in
+                * the air, and the dice that landed once they have. The first
+                * throw of a turn has no dice to show yet, so following the
+                * turn here would leave the tray empty for the whole throw.
+                */}
+              {shown.map((face, index) => (
                 <Die
                   // A die is its slot. Position is its whole identity — it is what the
                   // server toggles, and dice never reorder except on a fresh roll, where
                   // being treated as the same slots is exactly what the animation needs.
                   // noArrayIndexKey is switched off for this file in biome.json.
                   key={`slot-${index}`}
-                  face={(rolling ? faces[index] : face) ?? face}
+                  face={face}
                   skin={room.ruleset.skin}
                   held={!rolling && held[index] === true}
-                  dead={!rolling && turn.dead[index] === true}
+                  dead={!rolling && turn?.dead[index] === true}
                   rolling={rolling}
                   index={index}
                   celebrating={celebrating}
@@ -211,7 +225,7 @@ export function Table({
           </div>
           <div className="stat">
             <span>Bust chance</span>
-            <b className="stat--bad">{((turn?.bustChance ?? 0) * 100).toFixed(1)}%</b>
+            <b className="stat--bad">{(bustChance * 100).toFixed(1)}%</b>
           </div>
           {left !== null ? (
             <div className="stat">
@@ -233,10 +247,12 @@ export function Table({
               disabled={!(canRollFresh || canAct)}
               onClick={() => {
                 play("shake");
-                actions.roll();
+                actions.roll(nextRollCount);
               }}
             >
-              {canRollFresh ? "Roll 6" : `Roll ${turn?.nextRollCount ?? 6}`}
+              {/* The count worked out here, not the one last heard from the
+                  server — otherwise the button offers six and throws five. */}
+              {canRollFresh ? "Roll 6" : `Roll ${nextRollCount}`}
             </button>
             <button
               type="button"

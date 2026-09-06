@@ -25,7 +25,7 @@ export function Play() {
   const looksLikeCode =
     raw.length === CODE_LENGTH && [...raw].every((letter) => CODE_ALPHABET.includes(letter));
   const urlCode = looksLikeCode ? raw : "";
-  const { room, heldLocally, rollingLocally, chat, seatId, error, connected, busy, actions } =
+  const { room, heldLocally, pendingRoll, chat, seatId, error, connected, busy, actions } =
     useRoom();
   const account = useAccount();
   useSound(room, seatId);
@@ -82,7 +82,7 @@ export function Play() {
             seatId={seatId ?? ""}
             actions={actions}
             heldLocally={heldLocally}
-            rollingLocally={rollingLocally}
+            pendingRoll={pendingRoll}
           />
           <Chat log={chat} seatId={seatId} onSay={actions.say} />
         </>
