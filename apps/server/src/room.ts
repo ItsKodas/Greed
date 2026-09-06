@@ -6,50 +6,31 @@ import {
   scoreSelection,
 } from "@greed/rules";
 import type { Die, Ruleset } from "@greed/rules";
-import { MAX_SEATS, MIN_SEATS } from "@greed/shared";
+import { MIN_SEATS, Seating, TableError } from "@greed/core";
+import type { Seat as TableSeat, SeatIdentity } from "@greed/core";
 import type { Phase, RoomStatus, RoomView, SeatView, TurnView } from "@greed/shared";
 import type { BotSkill } from "./bot.js";
 
-/** Thrown for anything a client did wrong. The socket layer turns it into room:error. */
-export class RoomError extends Error {}
+/**
+ * Thrown for anything a client did wrong; the socket layer turns it into
+ * room:error. An alias rather than a second class, so a refusal from the
+ * seating and a refusal from the rules are the same thing to a caller.
+ */
+export const RoomError = TableError;
+export type RoomError = TableError;
 
 /** Injected so tests can roll deterministically. */
 export type Roller = (count: number) => Die[];
 
 /**
- * What a signed-in player brings to a seat besides a name. Resolved once when
- * they connect, so the table does not have to ask the store on every render.
+ * A seat at a Greed table: everything a seat is anywhere, plus the two things
+ * that only mean something here.
  */
-export interface SeatIdentity {
-  userId: string;
-  /** A ready-to-use image URL, or null for someone with no picture. */
-  avatar: string | null;
-  /** Discord's accent colour, as the 24-bit number they give us. */
-  accentColor: number | null;
-}
-
-export interface Seat {
-  id: string;
-  name: string;
+export interface Seat extends TableSeat {
+  /** Banked points this game. */
   score: number;
+  /** Whether they have met the entry threshold at least once. */
   onBoard: boolean;
-  connected: boolean;
-  /**
-   * At the table, but not in the game currently being played.
-   *
-   * Someone who arrives mid-game sits down for the next one rather than being
-   * dealt in. Dealing them in would be worse than it sounds at a table playing
-   * for chips: they would pay the same stake as people who have had four turns
-   * already, for a fraction of the game.
-   */
-  waiting: boolean;
-  /** Bots never disconnect and are driven by the server, not a socket. */
-  isBot: boolean;
-  skill: BotSkill | null;
-  /** Their profile, when they signed in. Guests play without one. */
-  userId: string | null;
-  avatar: string | null;
-  accentColor: number | null;
 }
 
 interface Turn {
@@ -78,17 +59,13 @@ function isEveryFace(dice: readonly Die[]): boolean {
 export class Room {
   readonly code: string;
   ruleset: Ruleset;
-  seats: Seat[] = [];
+  /** Who is here. Greed adds a score and a board flag to each seat. */
+  private readonly seating = new Seating();
+
+  get seats(): Seat[] {
+    return this.seating.seats as Seat[];
+  }
   status: RoomStatus = "lobby";
-  /**
-   * Sockets watching without a seat.
-   *
-   * Held by socket rather than by person on purpose: watching is something a
-   * connection does, not something an account is, and nothing about it should
-   * outlive the tab it happens in. They do not keep an abandoned table alive
-   * either — `isEmpty` counts seats, not eyes.
-   */
-  private readonly watchers = new Set<string>();
   winnerIds: string[] = [];
   lastEvent: string | null = null;
   /** Chips each seat puts in. Zero means a friendly game. */
@@ -113,42 +90,28 @@ export class Room {
   // ---------------------------------------------------------------- lobby
 
   get hostId(): string | null {
-    return this.seats[0]?.id ?? null;
+    return this.seating.hostId;
   }
 
   get isEmpty(): boolean {
-    return this.seats.every((seat) => !seat.connected);
+    return this.seating.isEmpty;
   }
 
   join(id: string, name: string, identity: SeatIdentity | null = null): Seat {
-    if (this.seats.length >= MAX_SEATS) {
-      throw new RoomError("That table is full.");
-    }
-    const trimmed = name.trim().slice(0, 20);
-    if (trimmed.length === 0) {
-      throw new RoomError("Pick a name first.");
-    }
-    if (this.buyIn > 0 && identity === null) {
-      throw new RoomError("That table is playing for chips — sign in first.");
-    }
-    const seat: Seat = {
+    const seat = this.seating.join(
       id,
-      name: trimmed,
-      score: 0,
-      onBoard: false,
-      connected: true,
-      // A table in its lobby deals everyone in; one already playing does not.
-      waiting: this.status !== "lobby",
-      isBot: false,
-      skill: null,
-      userId: identity?.userId ?? null,
-      avatar: identity?.avatar ?? null,
-      accentColor: identity?.accentColor ?? null,
-    };
-    this.seats.push(seat);
-    this.lastEvent = `${trimmed} sat down`;
+      name,
+      this.status,
+      identity,
+      // Chips need somebody to charge, so a paying table needs an account.
+      this.buyIn > 0,
+    ) as Seat;
+    seat.score = 0;
+    seat.onBoard = false;
+    this.lastEvent = `${seat.name} sat down`;
     return seat;
   }
+
 
   /**
    * Applies a host's rule changes. Lobby only — moving the target or the
@@ -193,39 +156,26 @@ export class Room {
     if (this.status !== "lobby") {
       throw new RoomError("That game has already started.");
     }
-    if (this.seats.length >= MAX_SEATS) {
-      throw new RoomError("That table is full.");
-    }
     if (this.buyIn > 0) {
       // A bot has no balance to debit and no account to pay, so letting one
       // into a pot would either mint chips or destroy them.
       throw new RoomError("Bots only play for free.");
     }
-    const seat: Seat = {
-      id,
-      name,
-      score: 0,
-      onBoard: false,
-      connected: true,
-      waiting: false,
-      isBot: true,
-      skill,
-      userId: null,
-      avatar: null,
-      accentColor: null,
-    };
-    this.seats.push(seat);
-    this.lastEvent = `${name} sat down`;
+    const seat = this.seating.addBot(id, name, skill) as Seat;
+    seat.score = 0;
+    seat.onBoard = false;
+    this.lastEvent = `${name} joined`;
     return seat;
   }
 
+
   /** The seat whose turn it is, or null outside a running game. */
   watch(socketId: string): void {
-    this.watchers.add(socketId);
+    this.seating.watch(socketId);
   }
 
   unwatch(socketId: string): void {
-    this.watchers.delete(socketId);
+    this.seating.unwatch(socketId);
   }
 
   activeSeat(): Seat | null {
@@ -262,11 +212,10 @@ export class Room {
    */
   disconnect(seatId: string): void {
     const index = this.seats.findIndex((seat) => seat.id === seatId);
-    if (index === -1) {
+    const seat = this.seating.disconnect(seatId);
+    if (seat === null) {
       return;
     }
-    const seat = this.seats[index] as Seat;
-    seat.connected = false;
     this.lastEvent = `${seat.name} dropped out`;
     // Do not stall the table waiting for someone who left.
     if (this.turn?.seatIndex === index && this.status === "playing") {
@@ -283,20 +232,12 @@ export class Room {
     if (this.status !== "lobby") {
       return;
     }
-    const index = this.seats.findIndex((seat) => seat.id === seatId);
-    if (index === -1) {
-      return;
-    }
-    const [seat] = this.seats.splice(index, 1);
+    const seat = this.seating.remove(seatId);
     this.lastEvent = `${seat?.name ?? "Someone"} left`;
   }
 
   reconnect(seatId: string): Seat {
-    const seat = this.seats.find((candidate) => candidate.id === seatId);
-    if (seat === undefined) {
-      throw new RoomError("That seat is gone.");
-    }
-    seat.connected = true;
+    const seat = this.seating.reconnect(seatId) as Seat;
     this.lastEvent = `${seat.name} came back`;
     return seat;
   }
@@ -324,9 +265,9 @@ export class Room {
     for (const seat of this.seats) {
       seat.score = 0;
       seat.onBoard = false;
-      // Whoever turned up while the last game was running is in this one.
-      seat.waiting = false;
     }
+    // Whoever turned up while the last game was running is in this one.
+    this.seating.dealInWaiting();
     this.lastEvent = "Another game — sit down or change the rules";
   }
 
@@ -622,7 +563,7 @@ export class Room {
     return {
       code: this.code,
       status: this.status,
-      watching: this.watchers.size,
+      watching: this.seating.watching,
       seats,
       turn: this.turn === null ? null : this.turnView(this.turn),
       ruleset: this.ruleset,

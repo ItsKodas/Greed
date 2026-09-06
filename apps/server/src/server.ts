@@ -33,7 +33,7 @@ import type { AuthConfig } from "./auth.js";
 import { MemoryStore } from "@greed/economy";
 import type { Store } from "@greed/economy";
 import { Room, RoomError } from "./room.js";
-import type { SeatIdentity } from "./room.js";
+import type { SeatIdentity } from "@greed/core";
 
 /** This game's id, as the economy files its figures under. */
 const GREED = "greed";
