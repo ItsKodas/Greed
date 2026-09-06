@@ -71,6 +71,8 @@ async function startRoom(...people: Array<string | null>): Promise<{
     store,
     auth: null,
     serveClient: false,
+    // Bots think for a moment in a real room; here that moment is nothing.
+    botDelayMs: 5,
     identify: () => {
       const id = ids[seen] ?? null;
       seen += 1;
@@ -258,6 +260,42 @@ describe("blackjack over the wire", () => {
     expect(again.seats[0]?.bet).toBe(0);
     expect(again.seats[0]?.cards).toHaveLength(0);
     expect(again.dealer.cards).toHaveLength(0);
+  });
+
+  it("seats a bot that bets, plays its own hand and costs nobody anything", async () => {
+    const { store, port, ids } = await startRoom("Ada");
+    const ada = ids[0] as string;
+    const host = await client(port);
+    await open_(host, "Ada");
+
+    host.emit("lobby:addBot", { skill: "hard" });
+    // It stakes itself without being asked: a bot at a card table has to put
+    // something on the felt before there is a hand for it to play.
+    const betting = await stateWhere(
+      host,
+      (view) => view.seats.length === 2 && (view.seats[1]?.bet ?? 0) > 0,
+    );
+    expect(betting.seats[1]?.isBot).toBe(true);
+
+    // Nothing was taken for it, because there is no account to take it from.
+    expect((await store.get(ada))?.chips).toBe(STARTING_CHIPS);
+
+    await act(host, { type: "bet", amount: 500 });
+    await act(host, { type: "deal" });
+    // The human stands at once, so everything after this is the bot playing
+    // itself out — the seam where a bot that has stopped moving looks exactly
+    // like a table that has frozen.
+    const dealt = await stateWhere(host, (view) => view.phase !== "betting");
+    if (dealt.turnSeatId === host.latest?.seats[0]?.id) {
+      await act(host, { type: "stand" });
+    }
+
+    const over = await stateWhere(host, (view) => view.phase === "settled", 8000);
+    const bot = over.seats[1];
+    expect(bot?.outcome).not.toBeNull();
+    expect(bot?.cards.length).toBeGreaterThanOrEqual(2);
+    // A bot never bust while standing pat: it took its own decisions.
+    expect(over.turnSeatId).toBeNull();
   });
 
   it("will not take a verb from another game", async () => {

@@ -1,5 +1,6 @@
 import { TableError } from "@backroom/core";
-import type { GameAdapter } from "@backroom/core";
+import type { BotMove, GameAdapter } from "@backroom/core";
+import { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
 import { BLACKJACK } from "./listing.js";
 import { value } from "./hand.js";
 import { Table } from "./table.js";
@@ -89,6 +90,76 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
 
     isSettled(table) {
       return table.phase === "settled";
+    },
+
+    /**
+     * What a seated bot wants to do next.
+     *
+     * Two jobs, because a bot at a card table has two: put something on the
+     * felt before the deal, and play the hand afterwards. It calls the table
+     * directly rather than going back through `act` — `act` charges an account
+     * for a stake, and a bot has no account to charge, which is the same
+     * reason `settle` pays it nothing.
+     */
+    botMove(table): BotMove | null {
+      if (table.phase === "betting") {
+        const waiting = table.seats.find(
+          (seat) => seat.isBot && !seat.waiting && seat.bet === 0,
+        );
+        if (waiting === undefined) {
+          return null;
+        }
+        const skill = waiting.skill ?? "normal";
+        return {
+          seatId: waiting.id,
+          delayMs: thinkingTime(skill),
+          play() {
+            table.bet(waiting.id, betFor(skill));
+          },
+        };
+      }
+
+      if (table.phase !== "playing") {
+        return null;
+      }
+      const seat = table.currentSeat();
+      if (seat === null || !seat.isBot) {
+        return null;
+      }
+      const skill = seat.skill ?? "normal";
+      /*
+       * The upcard, not the dealer's hand. A bot holds the same table object a
+       * player's socket does and could read the hole card straight off it, so
+       * only the one card everybody can see is passed along.
+       */
+      const up = table.dealer[0];
+      if (up === undefined) {
+        return null;
+      }
+      const upcard = upcardValue(up);
+      return {
+        seatId: seat.id,
+        delayMs: thinkingTime(skill),
+        play() {
+          const move = decide({
+            cards: seat.cards,
+            upcard,
+            canDouble: seat.cards.length === 2,
+            skill,
+          });
+          if (move === "hit") {
+            table.hit(seat.id);
+            return;
+          }
+          if (move === "double") {
+            // No chips are taken: a bot has none. What it costs is recorded on
+            // the seat all the same, so the hand it plays is the real one.
+            table.double(seat.id);
+            return;
+          }
+          table.stand(seat.id);
+        },
+      };
     },
 
     /**

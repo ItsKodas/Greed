@@ -3,6 +3,7 @@ import type { TableView } from "@backroom/game-blackjack";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AccountBadge } from "../account/AccountBadge.js";
+import { Chat } from "../game/Chat.js";
 import { Avatar } from "../game/Avatar.js";
 import { Sign } from "../game/Sign.js";
 import { useAccount } from "../game/useAccount.js";
@@ -83,7 +84,10 @@ export function Blackjack() {
       {state === null ? (
         <Sit table={table} invited={urlCode} account={account} />
       ) : (
-        <Felt table={table} state={state} seatId={seatId} />
+        <>
+          <Felt table={table} state={state} seatId={seatId} />
+          <Chat log={table.chat} seatId={seatId} onSay={table.say} />
+        </>
       )}
     </main>
   );
@@ -159,7 +163,14 @@ function Felt({
             </p>
           </>
         ) : state.phase === "betting" ? (
-          <Betting table={table} mine={me?.bet ?? 0} min={state.minBet} max={state.maxBet} isHost={isHost} />
+          <Betting
+            table={table}
+            mine={me?.bet ?? 0}
+            min={state.minBet}
+            max={state.maxBet}
+            isHost={isHost}
+            seats={state.seats.length}
+          />
         ) : state.phase === "settled" ? (
           <>
             <p className="panel__label">Hand over</p>
@@ -279,12 +290,14 @@ function Betting({
   min,
   max,
   isHost,
+  seats,
 }: {
   table: Table;
   mine: number;
   min: number;
   max: number;
   isHost: boolean;
+  seats: number;
 }) {
   const stake = (amount: number) => table.act({ type: "bet", amount });
 
@@ -316,9 +329,32 @@ function Betting({
         Take it back
       </button>
       {isHost ? (
-        <button type="button" className="btn btn--wide" onClick={() => table.act({ type: "deal" })}>
-          Deal
-        </button>
+        <>
+          <button
+            type="button"
+            className="btn btn--wide"
+            onClick={() => table.act({ type: "deal" })}
+          >
+            Deal
+          </button>
+          {seats < 6 ? (
+            <div className="bots">
+              <span className="bots__label">Add a player</span>
+              <div className="bots__row">
+                {(["easy", "normal", "hard"] as const).map((skill) => (
+                  <button
+                    key={skill}
+                    type="button"
+                    className="btn btn--ghost btn--small"
+                    onClick={() => table.addBot(skill)}
+                  >
+                    {skill}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : (
         <p className="panel__note">The host deals once everyone has bet.</p>
       )}

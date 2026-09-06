@@ -12,3 +12,5 @@ export { Table } from "./table.js";
 export type { Outcome, Phase, Seat, SeatView, TableView } from "./table.js";
 export { BLACKJACK } from "./listing.js";
 export { blackjackAdapter } from "./adapter.js";
+export { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
+export type { Move } from "./bot.js";

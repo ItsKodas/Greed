@@ -1,4 +1,11 @@
-import type { Ack, ClientToServer, ServerToClient, TableState } from "@backroom/shared";
+import type {
+  Ack,
+  BotSkill,
+  ChatMessage,
+  ClientToServer,
+  ServerToClient,
+  TableState,
+} from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 
@@ -62,6 +69,12 @@ export interface TableSocketHook<TView> {
   error: string | null;
   connected: boolean;
   busy: boolean;
+  /* Table talk belongs to the building rather than to any game: the server
+     reads nothing but the text, and every room has people in it. */
+  chat: ChatMessage[];
+  say: (text: string) => void;
+  /** Seats a bot. Refused by the server for a game that has none. */
+  addBot: (skill: BotSkill) => void;
   create: (name: string, options?: CreateOptions) => void;
   join: (name: string, code: string) => void;
   watch: (code: string) => void;
@@ -82,6 +95,7 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [chat, setChat] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
     // No transports named on purpose: naming one makes it the only one tried,
@@ -111,6 +125,10 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
       setState(raw as unknown as TView);
     });
     socket.on("room:error", (message: string) => setError(message));
+    // Capped, because a long night at a table should not grow without limit.
+    socket.on("chat:message", (message: ChatMessage) =>
+      setChat((log) => [...log, message].slice(-60)),
+    );
 
     return () => {
       socket.close();
@@ -184,6 +202,8 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
     socketRef.current?.emit("lobby:leave");
     setState(null);
     setSeatId(null);
+    // Somebody else's table talk is not yours to carry to the next one.
+    setChat([]);
     onLeave();
   }, [game, onLeave]);
 
@@ -191,5 +211,31 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
     socketRef.current?.emit("game:action", action as { type: string }, done);
   }, []);
 
-  return { state, seatId, error, connected, busy, create, join, watch, leave, act };
+  const addBot = useCallback((skill: BotSkill) => {
+    socketRef.current?.emit("lobby:addBot", { skill });
+  }, []);
+
+  const say = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    socketRef.current?.emit("chat:send", { text: trimmed });
+  }, []);
+
+  return {
+    state,
+    seatId,
+    error,
+    connected,
+    busy,
+    chat,
+    addBot,
+    create,
+    join,
+    watch,
+    leave,
+    act,
+    say,
+  };
 }
