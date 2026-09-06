@@ -1,0 +1,34 @@
+/*
+ * Greed's room.
+ *
+ * A game owns its materials; the building owns its interface. So this file
+ * repaints the surfaces you play on — walnut, leather, worn baize, and the
+ * bone of the dice — and touches nothing that carries meaning.
+ *
+ * Left alone deliberately: neon, because the sign and the controls belong to
+ * the building and should look the same in every room; chip, because a player
+ * learns once that gold is their money and it has to hold at every table;
+ * good and bad, because up is up.
+ */
+:root[data-game="greed"] {
+  --gr-color-night: #241811;
+  --gr-color-slate: #3a281c;
+  --gr-color-shadow: #170f0a;
+  --gr-color-smoke: #4a3225;
+  --gr-color-smoke-lit: #5b3e2c;
+
+  --gr-color-felt: #16241c;
+  --gr-color-felt-lit: #1e3227;
+  --gr-color-felt-deep: #101a14;
+
+  /*
+   * Warm, but deliberately not golden. Bone at full cream sits close enough to
+   * the chip gold that a balance stops standing out from the words around it,
+   * and gold only means money for as long as nothing else is nearly gold. So
+   * the type is warm and desaturated, and the money keeps the saturation.
+   */
+  --gr-color-ink: #e0d8cb;
+  --gr-color-ink-lit: #f1ece2;
+  --gr-color-ink-dim: #9c9488;
+  --gr-color-ink-faint: #756e64;
+}

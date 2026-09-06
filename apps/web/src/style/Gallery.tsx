@@ -1,3 +1,4 @@
+import { Sign } from "../game/Sign.js";
 import { Swatches } from "./Swatches.js";
 import { TextureTiles } from "./TextureTiles.js";
 import { TypeSpecimen } from "./TypeSpecimen.js";
@@ -7,11 +8,13 @@ export function Gallery() {
   return (
     <main className="gallery">
       <h1 className="gallery__title">
-        GRE<em>E</em>D
+        <Sign />
       </h1>
       <p className="gallery__deck">
-        The design system, as running code. Every colour, typeface and surface below is what the
-        game is built from — change a token and this page changes with it.
+        The building's design system, as running code — every colour, typeface and surface the room
+        is built from. A game may repaint the materials it is played on; these are what it borrows
+        and must not change: the sign, the controls, and the two colours that carry meaning rather
+        than mood. Anything glowing is happening now. Anything gold is money.
       </p>
       <Swatches />
       <TypeSpecimen />

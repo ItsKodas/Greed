@@ -1,6 +1,7 @@
 import { RULESETS } from "@greed/rules";
 import { Avatar, SeatAvatar } from "./Avatar.js";
 import { Sign } from "./Sign.js";
+import "@greed/game-greed/theme.css";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
@@ -30,6 +31,22 @@ export function Play() {
     useRoom();
   const account = useAccount();
   useSound(room, seatId);
+
+  /*
+   * Which room you are standing in, on the document rather than on this
+   * element — the page's own background lives on body, so a game that only
+   * repainted its own subtree would sit in the building's colours with a
+   * warm rectangle in the middle of it.
+   *
+   * Cleared on the way out, so the room picker and the profile are the
+   * building's again.
+   */
+  useEffect(() => {
+    document.documentElement.dataset["game"] = "greed";
+    return () => {
+      delete document.documentElement.dataset["game"];
+    };
+  }, []);
 
   // The address bar follows the table, so a link can be shared and a refresh
   // lands back in the right place.
