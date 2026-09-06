@@ -329,8 +329,9 @@ export function useRoom(): RoomHook {
     setSeatId(null);
     setChat([]);
     // Clearing the address too, so leaving does not drop the player back on
-    // the table's own URL — which reads as an invitation to rejoin it.
-    navigate("/");
+    // the table's own URL — which reads as an invitation to rejoin it. Back to
+    // the game rather than the room: you left a table, not the building.
+    navigate("/greed");
   }, [navigate]);
 
   return {

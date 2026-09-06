@@ -23,13 +23,28 @@ describe("App", () => {
     expect(screen.getByText(/no table with that code/i)).toBeDefined();
   });
 
-  it("treats a well-formed code as an invitation to that table", () => {
+  it("looks a bare code up rather than assuming which game it is", () => {
+    /*
+     * Codes are unique across the room, so a link never names a game. What is
+     * at the root is therefore a question rather than an address, and the
+     * answer comes from the server.
+     */
     renderAt("/GBQKF");
+    expect(screen.getByText(/finding that table/i)).toBeDefined();
+  });
+
+  it("treats a code under its game as an invitation to that table", () => {
+    renderAt("/greed/GBQKF");
     expect(screen.getByText(/invited to table/i)).toBeDefined();
   });
 
-  it("lower-cases links still find the table", () => {
-    renderAt("/gbqkf");
+  it("lower-cased links still find the table", () => {
+    renderAt("/greed/gbqkf");
     expect(screen.getByText(/GBQKF/)).toBeDefined();
+  });
+
+  it("shows the room at the root", () => {
+    renderAt("/");
+    expect(screen.getByText(/at the tables/i)).toBeDefined();
   });
 });

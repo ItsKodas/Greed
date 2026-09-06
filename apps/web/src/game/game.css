@@ -1233,3 +1233,339 @@
 .rules__note {
   color: var(--gr-color-chip);
 }
+
+/* ------------------------------------------------------------------- room */
+
+.room {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: var(--gr-space-6) var(--gr-space-5) var(--gr-space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+}
+
+.room__head {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-4);
+  padding-bottom: var(--gr-space-4);
+  border-bottom: var(--gr-edge-hair);
+  margin-bottom: var(--gr-space-5);
+}
+
+.room__mark {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.room__mark a {
+  text-decoration: none;
+  color: inherit;
+}
+
+.room__spacer {
+  flex: 1;
+}
+
+.room__label {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+  margin: var(--gr-space-5) 0 var(--gr-space-3);
+}
+
+/*
+ * A table game is wide and says who is at it. The shape is the information:
+ * a glance tells you what kind of thing it is before you read the name.
+ */
+.room__tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: var(--gr-space-3);
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  padding: var(--gr-space-4);
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-sm);
+  background:
+    radial-gradient(90% 120% at 50% 130%, var(--gr-color-felt-lit) 0%, transparent 70%),
+    var(--gr-color-felt);
+  text-decoration: none;
+  color: inherit;
+}
+
+.tile:hover {
+  border-color: color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 2px;
+}
+
+/* Shut, and dimmed so the eye skips it without hiding what is coming. */
+.tile--shut {
+  background: rgb(0 0 0 / 0.3);
+  opacity: 0.55;
+}
+
+.tile__mark {
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-xl);
+  line-height: 1;
+  color: var(--gr-color-ink);
+}
+
+.tile__blurb {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+.tile__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+  margin-top: var(--gr-space-1);
+}
+
+/* Lit, because people are in there now. Nothing else on this page glows. */
+.tile__live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    0 0 3px var(--gr-color-neon),
+    0 0 9px var(--gr-color-neon),
+    0 0 18px var(--gr-color-neon-deep);
+  flex: none;
+}
+
+/* A machine is upright, like a cabinet against a wall. It is not a table. */
+.room__machines {
+  display: flex;
+  gap: var(--gr-space-3);
+  flex-wrap: wrap;
+}
+
+.cabinet {
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  padding: var(--gr-space-3) var(--gr-space-3) var(--gr-space-2);
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-md) var(--gr-radius-md) var(--gr-radius-sm) var(--gr-radius-sm);
+  background: linear-gradient(180deg, var(--gr-color-smoke), var(--gr-color-shadow));
+  text-align: center;
+}
+
+.cabinet--shut {
+  opacity: 0.5;
+}
+
+.cabinet__screen {
+  height: 74px;
+  border-radius: var(--gr-radius-sm);
+  background:
+    repeating-linear-gradient(180deg, rgb(0 0 0 / 0.6) 0 3px, rgb(0 0 0 / 0.4) 3px 6px),
+    var(--gr-color-night);
+  border: 1px solid rgb(0 0 0 / 0.7);
+  display: grid;
+  place-items: center;
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-lg);
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+}
+
+.cabinet__name {
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-base);
+  color: var(--gr-color-ink-dim);
+}
+
+.cabinet__note {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+}
+
+/* ---------------------------------------------------------------- profile */
+
+.profile {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--gr-space-4);
+  align-items: start;
+}
+
+@media (min-width: 720px) {
+  .profile {
+    grid-template-columns: 260px 1fr;
+  }
+}
+
+.profile__figures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-4);
+  min-width: 0;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-2);
+  text-align: center;
+}
+
+.who__face {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--gr-color-smoke);
+  border: 3px solid var(--gr-color-neon);
+  box-shadow: 0 0 8px var(--gr-color-neon), 0 0 22px rgb(11 63 212 / 0.6);
+  display: grid;
+  place-items: center;
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-xl);
+  color: var(--gr-color-ink);
+}
+
+.who__name {
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-lg);
+  line-height: 1;
+}
+
+.purse {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: var(--gr-space-3) 0;
+}
+
+/* Gold, because it is money. Nothing else on this page may borrow it. */
+.purse__count {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-2xl);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--gr-color-chip-hi);
+  font-variant-numeric: tabular-nums;
+}
+
+.purse small {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+}
+
+/*
+ * Figures read as one row rather than as separate cards: they are a set, and
+ * the hairlines between them say so more quietly than borders would.
+ */
+.figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: 1px;
+  background: color-mix(in srgb, var(--gr-color-ink) 10%, transparent);
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-sm);
+  overflow: hidden;
+}
+
+.figure {
+  background: var(--gr-color-night);
+  padding: var(--gr-space-3) var(--gr-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.figure b {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-lg);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  color: var(--gr-color-ink);
+}
+
+.figure__money {
+  color: var(--gr-color-chip-hi);
+}
+
+.figure span {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+}
+
+.scroller {
+  overflow-x: auto;
+}
+
+.history {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--gr-text-sm);
+}
+
+.history th {
+  text-align: left;
+  font-weight: 500;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+  padding: 0 0 var(--gr-space-2);
+  border-bottom: var(--gr-edge-soft);
+}
+
+.history td {
+  padding: var(--gr-space-2) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--gr-color-ink) 6%, transparent);
+}
+
+.history__code {
+  font-family: var(--gr-font-data);
+}
+
+.history__num {
+  text-align: right;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.history .up {
+  color: var(--gr-color-good);
+}
+
+.history .down {
+  color: var(--gr-color-bad);
+}
+
+.account__me {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--gr-radius-sm);
+}
+
+.account__me:hover .account__name {
+  color: var(--gr-color-ink-lit);
+}
+
+.account__me:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 3px;
+}

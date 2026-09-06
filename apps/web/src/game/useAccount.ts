@@ -6,14 +6,18 @@ export interface AccountProfile {
   avatar: string | null;
   accentColor: number | null;
   chips: number;
+  /** What every game can answer, whatever the game was. */
   stats: {
     games: number;
     wins: number;
     chipsWon: number;
-    bestTurn: number;
-    farkles: number;
-    hotDice: number;
   };
+  /**
+   * What one game can answer, under that game's own name. Untyped beyond
+   * "numbers by name" on purpose: a game names its own figures and nothing
+   * here knows what they mean.
+   */
+  byGame: Record<string, Record<string, number>>;
 }
 
 export interface Account {

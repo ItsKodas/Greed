@@ -250,6 +250,24 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     });
   });
 
+  /**
+   * Which game a table belongs to.
+   *
+   * Codes are unique across the whole room, so a shared link never has to name
+   * a game — this is what turns one back into an address. Answers for any
+   * table that exists, signed in or not, because the point of a code is that
+   * you can follow it before you have decided anything.
+   */
+  app.get("/api/table/:code", (request, response) => {
+    const code = String(request.params["code"] ?? "").toUpperCase();
+    if (!rooms.has(code)) {
+      response.status(404).json({ error: "No table with that code." });
+      return;
+    }
+    // Every table is a Greed table today; when there are two, the table says.
+    response.json({ code, game: GREED.id });
+  });
+
   app.get("/api/games", (request, response) => {
     void (async () => {
       const id = request.session.userId;

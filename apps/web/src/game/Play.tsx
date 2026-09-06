@@ -1,9 +1,10 @@
 import { RULESETS } from "@greed/rules";
-import { Avatar, SeatAvatar } from "./Avatar.js";
+import { SeatAvatar } from "./Avatar.js";
 import { Sign } from "./Sign.js";
+import { AccountBadge } from "../account/AccountBadge.js";
 import "@greed/game-greed/theme.css";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
 import { useSound } from "./useSound.js";
 import { Chat } from "./Chat.js";
@@ -16,7 +17,6 @@ import type { RoomActions } from "./useRoom.js";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
 import type { ChatMessage } from "@greed/shared";
 import type { RoomView } from "@greed/shared";
-import "./game.css";
 
 export function Play() {
   const params = useParams();
@@ -52,7 +52,7 @@ export function Play() {
   // lands back in the right place.
   useEffect(() => {
     if (room !== null && room.code !== urlCode) {
-      navigate(`/${room.code}`, { replace: true });
+      navigate(`/greed/${room.code}`, { replace: true });
     }
   }, [room, urlCode, navigate]);
 
@@ -63,8 +63,12 @@ export function Play() {
   return (
     <main className="play">
       <header className="play__head">
+        {/* The sign goes back to the room; the game name says which one you
+            are standing in. */}
         <h1 className="play__mark">
-          <Sign />
+          <Link to="/" aria-label="Back to The Back Room">
+            <Sign />
+          </Link>
         </h1>
         <span className="play__game">Greed</span>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
@@ -148,41 +152,6 @@ function LeaveButton({ room, onLeave }: { room: RoomView; onLeave: () => void })
  * server actually has Discord configured — offering a button that answers 503
  * would be worse than offering nothing.
  */
-function AccountBadge({ account }: { account: Account }) {
-  if (account.loading) {
-    return null;
-  }
-  if (account.profile === null) {
-    return account.available ? (
-      <a className="btn btn--ghost btn--small" href="/auth/discord">
-        Sign in
-      </a>
-    ) : (
-      <span className="account__guest">playing as a guest</span>
-    );
-  }
-  const low = account.profile.chips < 2000;
-  return (
-    <span className="account">
-      <Avatar
-        name={account.profile.name}
-        avatar={account.profile.avatar}
-        accentColor={account.profile.accentColor}
-        className="account__face"
-      />
-      <span className="account__name">{account.profile.name}</span>
-      <span className="account__chips">{account.profile.chips.toLocaleString("en-US")}</span>
-      {low ? (
-        <button type="button" className="btn btn--ghost btn--small" onClick={account.claimDaily}>
-          Top up
-        </button>
-      ) : null}
-      <button type="button" className="account__out" onClick={account.signOut}>
-        sign out
-      </button>
-    </span>
-  );
-}
 
 /**
  * The stake. Only offered when everyone at the table is signed in and there
