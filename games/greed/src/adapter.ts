@@ -1,4 +1,5 @@
 import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
+import { TableError } from "@greed/core";
 import type { BotMove, Clock, GameAdapter } from "@greed/core";
 import { comboGateKeyFor } from "./gatekey.js";
 import { decide, thinkingTime } from "./bot.js";
@@ -71,7 +72,8 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
               for (const refund of paid) {
                 await deps.give(refund, room.buyIn);
               }
-              throw new Error(`${seat.name} cannot cover the buy-in.`);
+              // A refusal, not a fault: it is shown to the player as it is.
+              throw new TableError(`${seat.name} cannot cover the buy-in.`);
             }
           }
         }
@@ -86,7 +88,7 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
         return;
       }
       default:
-        throw new Error("That is not something you can do here.");
+        throw new TableError("That is not something you can do here.");
     }
   },
 
@@ -165,7 +167,13 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
       return null;
     }
     const turn = room.view(null).turn;
-    if (turn === null) {
+    /*
+     * Nothing to decide while the busting dice are still on screen or the game
+     * is over. Without this the bot is asked again on every broadcast, tries to
+     * roll into a finished turn, is refused, and the table books it again — a
+     * loop that looks exactly like a bot that has stopped playing.
+     */
+    if (turn === null || turn.phase === "farkled" || turn.phase === "over") {
       return null;
     }
     const skill = seat.skill ?? "normal";
@@ -173,6 +181,19 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
       seatId: seat.id,
       delayMs: thinkingTime(skill),
       play() {
+        /*
+         * A turn starts with a throw. The bot is asked what to keep only once
+         * there are dice to look at — asked before that it has nothing to
+         * decide, says so, and the table books it again on the next broadcast,
+         * which is a loop that looks exactly like a bot that has stopped.
+         */
+        if (turn.phase === "awaiting_roll") {
+          room.doRoll(seat.id);
+          return;
+        }
+        if (turn.phase !== "selecting") {
+          return;
+        }
         const choice = decide({
           dice: turn.dice,
           kept: room.keptThisTurn,

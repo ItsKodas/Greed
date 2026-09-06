@@ -273,12 +273,12 @@ export function useRoom(): RoomHook {
     (amount: number) => socketRef.current?.emit("lobby:setBuyIn", { amount }),
     [],
   );
-  const start = useCallback(() => socketRef.current?.emit("game:start"), []);
+  const start = useCallback(() => socketRef.current?.emit("game:action", { type: "start" }), []);
 
   const playAgain = useCallback(() => {
     setHeldLocally(null);
     setPendingRoll(null);
-    socketRef.current?.emit("game:playAgain");
+    socketRef.current?.emit("game:action", { type: "playAgain" });
   }, []);
 
   /**
@@ -293,10 +293,10 @@ export function useRoom(): RoomHook {
     }
     setPendingRoll({ count, fromSeq: roomRef.current?.turn?.rollSeq ?? 0 });
     setHeldLocally(null);
-    socket.emit("game:roll");
+    socket.emit("game:action", { type: "roll" });
   }, []);
 
-  const bank = useCallback(() => socketRef.current?.emit("game:bank"), []);
+  const bank = useCallback(() => socketRef.current?.emit("game:action", { type: "bank" }), []);
 
   const toggle = useCallback((index: number) => {
     const socket = socketRef.current;
@@ -313,7 +313,7 @@ export function useRoom(): RoomHook {
       return next;
     });
     pendingToggles.current += 1;
-    socket.emit("game:toggle", { index }, () => {
+    socket.emit("game:action", { type: "toggle", index }, () => {
       pendingToggles.current -= 1;
       if (pendingToggles.current === 0) {
         // The server has now seen every click; its picture is the true one.

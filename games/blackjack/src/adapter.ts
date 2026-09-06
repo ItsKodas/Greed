@@ -1,6 +1,7 @@
 import { TableError } from "@greed/core";
 import type { GameAdapter } from "@greed/core";
 import { BLACKJACK } from "./listing.js";
+import { value } from "./hand.js";
 import { Table } from "./table.js";
 
 /**
@@ -133,8 +134,8 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
         players: played.map((seat) => ({
           userId: seat.userId,
           name: seat.name,
-          // No score in blackjack, so the hand's own total stands in.
-          score: seat.total ?? 0,
+          // No score in blackjack, so what the hand was worth stands in.
+          score: value(seat.cards).total,
           isBot: seat.isBot,
         })),
         winnerIds: played

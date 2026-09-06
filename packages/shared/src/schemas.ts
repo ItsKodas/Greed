@@ -23,6 +23,8 @@ const code = z
 
 export const createSchema = z.object({
   name,
+  /** Which game. Absent means Greed, so links made before there were two still work. */
+  game: z.string().max(24).optional(),
   ruleset: z.string().max(40).optional(),
 });
 
@@ -85,3 +87,16 @@ export const mintCodeSchema = z.object({
 });
 
 export type MintCodePayload = z.infer<typeof mintCodeSchema>;
+
+/**
+ * One action at a table.
+ *
+ * Only the type is checked here. What else the payload carries is the game's
+ * to validate, because only the game knows what "double" needs — and a schema
+ * in the middle that had to know would be a third place the rules live.
+ */
+export const actionSchema = z
+  .object({ type: z.string().min(1).max(24) })
+  .catchall(z.unknown());
+
+export type ActionPayload = z.infer<typeof actionSchema>;

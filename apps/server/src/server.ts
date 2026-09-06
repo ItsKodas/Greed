@@ -1,42 +1,40 @@
 import { randomInt } from "node:crypto";
-import { createServer as createHttpServer } from "node:http";
 import type { Server as HttpServer } from "node:http";
+import { createServer as createHttpServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import express from "express";
-import session from "express-session";
-import { Server } from "socket.io";
-import type { DefaultEventsMap } from "socket.io";
-import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
+import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@greed/core";
+import { Catalogue } from "@greed/core";
+import type { Store } from "@greed/economy";
+import { judgeDaily, MemoryStore } from "@greed/economy";
+import { BLACKJACK, blackjackAdapter } from "@greed/game-blackjack";
+import { GREED, RoomError, greedAdapter } from "@greed/game-greed";
 import type { Die } from "@greed/rules";
+
+import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
 // From the subpath, not the barrel: the client imports the barrel, and pulling
 // zod in through it would ship a validation library to every browser.
 import {
+  actionSchema,
   addBotSchema,
   chatSchema,
   createSchema,
   joinSchema,
   mintCodeSchema,
-  watchSchema,
   removeSeatSchema,
   resumeSchema,
   setBuyInSchema,
   setRulesSchema,
-  toggleSchema,
+  watchSchema,
 } from "@greed/shared/schemas";
-import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
-import { decide, thinkingTime } from "@greed/game-greed";
-import type { BotSkill } from "@greed/game-greed";
-import { comboGateKeyFor } from "@greed/game-greed";
+import express from "express";
+import session from "express-session";
+import type { DefaultEventsMap } from "socket.io";
+import { Server } from "socket.io";
 import { readAdmins } from "./admin.js";
-import { mountAuth, readAuthConfig } from "./auth.js";
 import type { AuthConfig } from "./auth.js";
-import { MemoryStore, judgeDaily } from "@greed/economy";
-import type { Store } from "@greed/economy";
-import { GREED, Room, RoomError } from "@greed/game-greed";
-import { Catalogue } from "@greed/core";
-import type { SeatIdentity } from "@greed/core";
+import { mountAuth, readAuthConfig } from "./auth.js";
 
 /**
  * What the room offers. One entry today; the point of the list is that adding
@@ -112,12 +110,18 @@ interface SocketIdentity {
   name: string | null;
 }
 
+/** A table, and the game being played at it. */
+interface Seated {
+  game: GameAdapter<PlayTable>;
+  table: PlayTable;
+}
+
 export interface GreedServer {
   http: HttpServer;
   store: Store;
   io: Server<ClientToServer, ServerToClient>;
-  /** Rooms currently in memory. Exposed for tests and the health check. */
-  rooms: Map<string, Room>;
+  /** Tables currently in memory. Exposed for tests and the health check. */
+  rooms: Map<string, Seated>;
   close: () => Promise<void>;
 }
 
@@ -161,7 +165,13 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     identifyRequest,
   } = options;
 
-  const rooms = new Map<string, Room>();
+  /**
+   * Open tables, each with the game it is being played under.
+   *
+   * The pair rather than the table alone: the socket layer knows how to seat
+   * people and pass messages, and has to ask the game for everything else.
+   */
+  const rooms = new Map<string, Seated>();
   /**
    * Which table each socket is at, and as whom. A null seat is someone
    * watching: at the table, in the room, sent every state, holding nothing.
@@ -283,8 +293,8 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return {
           ...game,
           tables: mine.length,
-          seated: mine.reduce((total, room) => total + room.seats.length, 0),
-          watching: mine.reduce((total, room) => total + room.view().watching, 0),
+          seated: mine.reduce((total, room) => total + room.table.seats.length, 0),
+          watching: mine.reduce((total, room) => total + seatsWatching(room.table), 0),
         };
       }),
     });
@@ -307,6 +317,35 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     // Every table is a Greed table today; when there are two, the table says.
     response.json({ code, game: GREED.id });
   });
+
+  /**
+   * What a game is handed when it needs to move money.
+   *
+   * The only way a game touches a balance. It cannot reach the store, so it
+   * cannot invent a way to pay somebody that the economy has not agreed to —
+   * every route to a player's chips goes through these four.
+   */
+  const deps: GameDeps = {
+    take: async (userId, amount) => (amount <= 0 ? true : store.adjustChips(userId, -amount)),
+    give: async (userId, amount) => {
+      if (amount > 0) {
+        await store.adjustChips(userId, amount);
+      }
+    },
+    record: (userId, bump) => store.bumpStats(userId, bump),
+    finished: (record) => store.recordGame(record),
+  };
+
+  /** Every game this server can host, by id. */
+  const ADAPTERS = new Map<string, GameAdapter<PlayTable>>([
+    [GREED.id, greedAdapter({ roll }) as GameAdapter<PlayTable>],
+    [BLACKJACK.id, blackjackAdapter() as GameAdapter<PlayTable>],
+  ]);
+
+  /** How many people are stood around a table, whatever the game calls it. */
+  function seatsWatching(table: PlayTable): number {
+    return (table.view(null) as { watching?: number }).watching ?? 0;
+  }
 
   const admins = readAdmins(process.env);
 
@@ -440,9 +479,9 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     throw new Error("could not find a free room code");
   }
 
-  function botName(room: Room): string {
-    const taken = new Set(room.seats.map((seat) => seat.name));
-    return BOT_NAMES.find((name) => !taken.has(name)) ?? `Bot ${room.seats.length + 1}`;
+  function botName(table: PlayTable): string {
+    const taken = new Set(table.seats.map((seat) => seat.name));
+    return BOT_NAMES.find((name) => !taken.has(name)) ?? `Bot ${table.seats.length + 1}`;
   }
 
   /** True while this socket is inside its allowance. */
@@ -457,44 +496,41 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     return budget.count <= max;
   }
 
-  function armClock(room: Room): void {
-    const existing = turnClocks.get(room.code);
+  /**
+   * Starts or clears the countdown on whoever is to act.
+   *
+   * The server does not know what a turn is; it asks the game whether one is
+   * running out and when. A game with no clock simply never answers.
+   */
+  function armClock(code: string, seated: Seated): void {
+    const existing = turnClocks.get(code);
     if (existing !== undefined) {
       clearTimeout(existing);
-      turnClocks.delete(room.code);
+      turnClocks.delete(code);
     }
 
-    const seconds = room.ruleset.turnTimerSeconds;
-    const view = room.view();
-    const active = room.activeSeat();
-    // No clock before the game starts, once it is over, while nobody is
-    // watching, or on a bot — a bot moves in a second and cannot stall.
-    if (
-      room.status !== "playing" ||
-      seconds === null ||
-      view.turn === null ||
-      room.isEmpty ||
-      active?.isBot === true
-    ) {
-      room.endsAt = null;
+    const clock = seated.game.clock?.(seated.table) ?? null;
+    // No clock while nobody is watching, or on a bot: a bot moves in a second
+    // and cannot stall the table.
+    const seat = clock === null ? undefined : seated.table.seats.find((s) => s.id === clock.seatId);
+    if (clock === null || seated.table.isEmpty || seat?.isBot === true) {
       return;
     }
 
-    const seatId = view.turn.seatId;
-    room.endsAt = Date.now() + seconds * 1000;
     turnClocks.set(
-      room.code,
+      code,
       later(() => {
-        turnClocks.delete(room.code);
-        const still = rooms.get(room.code);
+        turnClocks.delete(code);
+        const still = rooms.get(code);
         if (still === undefined) {
           return;
         }
-        still.timeout(seatId);
-        broadcast(room.code);
-      }, seconds * 1000),
+        still.game.timeout?.(still.table, clock.seatId);
+        broadcast(code);
+      }, Math.max(0, clock.endsAt - Date.now())),
     );
   }
+
 
   /**
    * Sends the table to everyone at it, one at a time.
@@ -509,7 +545,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
    * Greed's view is the same for everyone, so today this sends identical
    * payloads and costs one small object per seat at a table of at most eight.
    */
-  function sendState(code: string, room: Room): void {
+  function sendState(code: string, table: PlayTable): void {
     const members = io.sockets.adapter.rooms.get(code);
     if (members === undefined) {
       return;
@@ -518,24 +554,27 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       // Null while a socket is in the room but between seats — mid-resume, or
       // after its seat was taken away. It still gets the table, as nobody.
       const seat = sockets.get(socketId)?.seatId ?? null;
-      io.to(socketId).emit("room:state", room.view(seat));
+      io.to(socketId).emit("room:state", table.view(seat) as never);
     }
   }
 
   function broadcast(code: string): void {
-    const room = rooms.get(code);
-    if (room === undefined) {
+    const seated = rooms.get(code);
+    if (seated === undefined) {
       return;
     }
-    armClock(room);
-    sendState(code, room);
-    scheduleFarklePause(room);
-    scheduleBot(room);
-    if (room.status === "over" && !settled.has(code)) {
+    armClock(code, seated);
+    sendState(code, seated.table);
+    schedulePause(code, seated);
+    scheduleBot(code, seated);
+    if (seated.game.isSettled(seated.table) && !settled.has(code)) {
       settled.add(code);
-      void settle(room).catch((error) => console.error("settling failed", error));
+      void seated.game
+        .settle(seated.table, deps)
+        .catch((error) => console.error("settling failed", error));
     }
   }
+
 
   /**
    * Leaves the busting dice on screen for a beat, then moves play on.
@@ -544,23 +583,30 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
    * through a socket handler — it calls the room directly. Scheduling it there
    * meant a bot that farkled froze the table for good.
    */
-  function scheduleFarklePause(room: Room): void {
-    if (room.view().turn?.phase !== "farkled" || farklePauses.has(room.code)) {
+  function schedulePause(code: string, seated: Seated): void {
+    if (farklePauses.has(code)) {
+      return;
+    }
+    const pause = seated.game.pause?.(seated.table) ?? null;
+    if (pause === null) {
       return;
     }
     farklePauses.set(
-      room.code,
+      code,
       later(() => {
-        farklePauses.delete(room.code);
-        const still = rooms.get(room.code);
-        if (still === undefined || still.view().turn?.phase !== "farkled") {
+        farklePauses.delete(code);
+        const still = rooms.get(code);
+        // Checked again on the way out: whatever wanted the pause may have
+        // been resolved by somebody else while it was running.
+        if (still === undefined || still.game.pause?.(still.table) == null) {
           return;
         }
-        still.advanceTurn();
-        broadcast(room.code);
+        pause.run();
+        broadcast(code);
       }, farklePauseMs),
     );
   }
+
 
   /**
    * Books the active bot's next move.
@@ -569,90 +615,52 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
    * there is no privileged path for it to cheat down and nothing to keep in
    * sync with the human rules.
    */
-  function scheduleBot(room: Room): void {
-    const pendingMove = botMoves.get(room.code);
-    if (pendingMove !== undefined) {
-      clearTimeout(pendingMove);
-      botMoves.delete(room.code);
+  function scheduleBot(code: string, seated: Seated): void {
+    const pending = botMoves.get(code);
+    if (pending !== undefined) {
+      clearTimeout(pending);
+      botMoves.delete(code);
     }
 
-    const seat = room.activeSeat();
-    if (seat === null || !seat.isBot || seat.skill === null) {
-      return;
-    }
-    const phase = room.view().turn?.phase;
-    if (phase === undefined || phase === "farkled" || phase === "over") {
+    const move = seated.game.botMove?.(seated.table) ?? null;
+    if (move === null) {
       return;
     }
 
-    const skill = seat.skill;
-    const delay = botDelayMs ?? thinkingTime(skill);
     botMoves.set(
-      room.code,
+      code,
       later(() => {
-        botMoves.delete(room.code);
-        const still = rooms.get(room.code);
+        botMoves.delete(code);
+        const still = rooms.get(code);
         if (still === undefined) {
           return;
         }
-        try {
-          playBotTurn(still, seat.id, skill);
-        } catch (error) {
-          console.error("bot move failed", error);
+        // Asked again rather than trusting the one booked earlier: the table
+        // may have moved on while the bot was thinking.
+        const now = still.game.botMove?.(still.table) ?? null;
+        if (now === null || now.seatId !== move.seatId) {
+          return;
         }
-        broadcast(room.code);
-      }, delay),
+        try {
+          now.play();
+        } catch (error) {
+          console.error("a bot could not move", error);
+        }
+        broadcast(code);
+      }, botDelayMs ?? move.delayMs),
     );
   }
 
-  function playBotTurn(room: Room, seatId: string, skill: BotSkill): void {
-    const turn = room.view().turn;
-    if (turn === null || turn.seatId !== seatId) {
-      return;
-    }
-    if (turn.phase === "awaiting_roll") {
-      room.doRoll(seatId);
-      return;
-    }
-    if (turn.phase !== "selecting") {
-      return;
-    }
-    const seat = room.seats.find((candidate) => candidate.id === seatId);
-    if (seat === undefined) {
-      return;
-    }
-
-    const decision = decide({
-      dice: turn.dice,
-      kept: room.keptThisTurn,
-      onBoard: seat.onBoard,
-      mustBeat: room.deficitOnFinalTurn(),
-      rules: room.ruleset,
-      gateKey: comboGateKeyFor(room.ruleset),
-      skill,
-    });
-    if (decision === null) {
-      return;
-    }
-    for (const index of decision.keep) {
-      room.toggle(seatId, index);
-    }
-    if (decision.action === "bank") {
-      room.bank(seatId);
-    } else {
-      room.doRoll(seatId);
-    }
-  }
 
   /** Clears a table once nobody has been sitting at it for a while. */
   function reapWhenEmpty(code: string): void {
     const room = rooms.get(code);
-    if (room === undefined || !room.isEmpty) {
+    if (room === undefined || !room.table.isEmpty) {
       return;
     }
     later(() => {
       const still = rooms.get(code);
-      if (still?.isEmpty === true) {
+      if (still?.table.isEmpty === true) {
         turnClocks.delete(code);
         farklePauses.delete(code);
         botMoves.delete(code);
@@ -662,7 +670,18 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   }
 
   /** Runs a seated action, turning a RoomError into a message not a crash. */
-  function guard(socketId: string, run: (room: Room, seatId: string) => void): void {
+  /**
+   * Runs something on a table on behalf of a socket, or explains why not.
+   *
+   * Everything a player can do goes through here: the rate limit, the check
+   * that they hold a seat, the refusal, and the broadcast afterwards. A game
+   * that wanted its own path around it would be a game that could not be
+   * trusted with the same rules as the others.
+   */
+  function guard(
+    socketId: string,
+    run: (seated: Seated, seatId: string) => void | Promise<void>,
+  ): void {
     const seat = sockets.get(socketId);
     const socket = io.sockets.sockets.get(socketId);
     if (seat === undefined || socket === undefined) {
@@ -672,8 +691,8 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       socket.emit("room:error", "Slow down.");
       return;
     }
-    const room = rooms.get(seat.code);
-    if (room === undefined) {
+    const seated = rooms.get(seat.code);
+    if (seated === undefined) {
       socket.emit("room:error", "That table is gone.");
       return;
     }
@@ -681,18 +700,26 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       socket.emit("room:error", "You are watching this table, not playing at it.");
       return;
     }
-    try {
-      run(room, seat.seatId);
-      broadcast(seat.code);
-    } catch (error) {
-      if (error instanceof RoomError) {
-        socket.emit("room:error", error.message);
-        return;
+    void (async () => {
+      try {
+        await run(seated, seat.seatId as string);
+        broadcast(seat.code);
+      } catch (error) {
+        /*
+         * Only a refusal is shown to the player. Anything else is a bug, and a
+         * bug reported as though it were a rule leaves nothing in the log to
+         * find it by — which is exactly how it hides.
+         */
+        if (error instanceof RoomError) {
+          socket.emit("room:error", error.message);
+          return;
+        }
+        console.error("unexpected error handling an action", error);
+        socket.emit("room:error", "Something went wrong.");
       }
-      console.error("unexpected error handling an action", error);
-      socket.emit("room:error", "Something went wrong.");
-    }
+    })();
   }
+
 
   /** The signed-in profile behind a socket, or null for a guest. */
   function userIdOf(socket: { id: string; request: unknown }): string | null {
@@ -715,63 +742,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     return socket.data.name ?? sent;
   }
 
-  /**
-   * Settles a finished game: the pot goes to the winners, split evenly, with
-   * any remainder to the earliest-seated of them. Recorded either way, so a
-   * friendly game still shows up in a history.
-   */
-  async function settle(room: Room): Promise<void> {
-    const winners = room.seats.filter((seat) => room.winnerIds.includes(seat.id));
-    const share = winners.length > 0 ? Math.floor(room.pot / winners.length) : 0;
-    const remainder = room.pot - share * winners.length;
 
-    for (const [index, seat] of winners.entries()) {
-      if (seat.userId === null) {
-        continue;
-      }
-      const amount = share + (index === 0 ? remainder : 0);
-      if (amount > 0) {
-        await store.adjustChips(seat.userId, amount);
-      }
-    }
-
-    for (const seat of room.seats) {
-      // Someone who arrived mid-game paid no stake and took no turn, so there
-      // is nothing to settle and nothing to record against them.
-      if (seat.userId === null || seat.waiting) {
-        continue;
-      }
-      const won = room.winnerIds.includes(seat.id);
-      await store.bumpStats(seat.userId, {
-        shared: {
-          games: 1,
-          wins: won ? 1 : 0,
-          chipsWon: won ? share - room.buyIn : -room.buyIn,
-        },
-        // Named here rather than in the store: a best turn is a maximum and a
-        // count of farkles is a sum, and only the game knows which is which.
-        game: GREED.id,
-        max: { bestTurn: seat.score },
-      });
-    }
-
-    await store.recordGame({
-      code: room.code,
-      rulesetName: room.ruleset.name,
-      buyIn: room.buyIn,
-      pot: room.pot,
-      players: room.seats
-        .filter((seat) => !seat.waiting)
-        .map((seat) => ({
-          userId: seat.userId,
-          name: seat.name,
-          score: seat.score,
-          isBot: seat.isBot,
-        })),
-      winnerIds: winners.map((seat) => seat.userId ?? seat.id),
-      endedAt: Date.now(),
-    });
-  }
 
   // Middleware, not the connection handler, because it settles before the
   // client's first message is delivered. Resolving the name inside `connection`
@@ -813,12 +784,15 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       try {
-        const chosen =
-          RULESETS.find((candidate) => candidate.name === parsed.data.ruleset) ?? DEFAULT_RULESET;
+        const game = ADAPTERS.get(parsed.data.game ?? GREED.id);
+        if (game === undefined) {
+          ack({ ok: false, error: "No such game." });
+          return;
+        }
         const code = makeCode();
-        const room = new Room(code, roll, chosen);
-        rooms.set(code, room);
-        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
+        const table = game.create(code, { ruleset: parsed.data.ruleset });
+        rooms.set(code, { game, table });
+        table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code, seatId: socket.id });
         void socket.join(code);
         ack({ ok: true, code, seatId: socket.id });
@@ -840,7 +814,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       try {
-        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
+        room.table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code: parsed.data.code, seatId: socket.id });
         void socket.join(parsed.data.code);
         ack({ ok: true, code: parsed.data.code, seatId: socket.id });
@@ -862,11 +836,11 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       try {
-        room.reconnect(parsed.data.seatId);
-        sockets.set(socket.id, { code: room.code, seatId: parsed.data.seatId });
-        void socket.join(room.code);
-        ack({ ok: true, code: room.code, seatId: parsed.data.seatId });
-        broadcast(room.code);
+        room.table.reconnect(parsed.data.seatId);
+        sockets.set(socket.id, { code: room.table.code, seatId: parsed.data.seatId });
+        void socket.join(room.table.code);
+        ack({ ok: true, code: room.table.code, seatId: parsed.data.seatId });
+        broadcast(room.table.code);
       } catch (error) {
         ack(fail(error, "Could not rejoin."));
       }
@@ -883,7 +857,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         ack({ ok: false, error: "No table with that code." });
         return;
       }
-      room.watch(socket.id);
+      room.table.watch(socket.id);
       sockets.set(socket.id, { code: parsed.data.code, seatId: null });
       void socket.join(parsed.data.code);
       ack({ ok: true, code: parsed.data.code, seatId: "" });
@@ -902,17 +876,17 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       if (seat.seatId === null) {
-        room.unwatch(socket.id);
+        room.table.unwatch(socket.id);
         broadcast(seat.code);
         reapWhenEmpty(seat.code);
         return;
       }
       // Deliberate, so the seat goes now rather than being held for a
       // reconnection that is not coming.
-      if (room.status === "lobby") {
-        room.removeSeat(seat.seatId);
+      if (room.table.status === "lobby") {
+        room.table.removeSeat(seat.seatId);
       } else {
-        room.disconnect(seat.seatId);
+        room.table.disconnect(seat.seatId);
       }
       broadcast(seat.code);
       reapWhenEmpty(seat.code);
@@ -923,9 +897,13 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       if (!parsed.success) {
         return;
       }
-      guard(socket.id, (room, seatId) => {
-        requireHost(room, seatId, "add players");
-        room.addBot(`bot:${randomInt(1, 1_000_000)}`, botName(room), parsed.data.skill);
+      guard(socket.id, (seated, seatId) => {
+        requireHost(seated.table, seatId, "add players");
+        const table = seated.table as { addBot?: (id: string, name: string, skill: string) => void };
+        if (table.addBot === undefined) {
+          throw new RoomError("This game has no bots.");
+        }
+        table.addBot(`bot:${randomInt(1, 1_000_000)}`, botName(seated.table), parsed.data.skill);
       });
     });
 
@@ -934,9 +912,9 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       if (!parsed.success) {
         return;
       }
-      guard(socket.id, (room, seatId) => {
-        requireHost(room, seatId, "remove players");
-        room.removeSeat(parsed.data.seatId);
+      guard(socket.id, (seated, seatId) => {
+        requireHost(seated.table, seatId, "remove players");
+        seated.table.removeSeat(parsed.data.seatId);
       });
     });
 
@@ -945,9 +923,15 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       if (!parsed.success) {
         return;
       }
-      guard(socket.id, (room, seatId) => {
-        requireHost(room, seatId, "change the rules");
-        room.updateRules(parsed.data);
+      guard(socket.id, (seated, seatId) => {
+        requireHost(seated.table, seatId, "change the rules");
+        // A lobby option belongs to whichever game defines it; a game without
+        // one simply does not answer to this.
+        const table = seated.table as { updateRules?: (changes: unknown) => void };
+        if (table.updateRules === undefined) {
+          throw new RoomError("This game has no rules to change.");
+        }
+        table.updateRules(parsed.data);
       });
     });
 
@@ -956,83 +940,40 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       if (!parsed.success) {
         return;
       }
-      guard(socket.id, (room, seatId) => {
-        requireHost(room, seatId, "set the stake");
-        room.setBuyIn(parsed.data.amount);
+      guard(socket.id, (seated, seatId) => {
+        requireHost(seated.table, seatId, "set the stake");
+        const table = seated.table as { setBuyIn?: (amount: number) => void };
+        if (table.setBuyIn === undefined) {
+          throw new RoomError("This game does not have a table stake.");
+        }
+        table.setBuyIn(parsed.data.amount);
       });
     });
 
-    socket.on("game:start", () => {
-      const seat = sockets.get(socket.id);
-      const room = seat === undefined ? undefined : rooms.get(seat.code);
-      if (seat === undefined || room === undefined) {
-        return;
-      }
-      if (room.buyIn === 0) {
-        guard(socket.id, (target, seatId) => target.start(seatId));
-        return;
-      }
-      // Take every stake before dealing, and put back anything already taken
-      // if one of them cannot pay. Nobody ends up half-way into a game.
-      void (async () => {
-        if (seat.seatId === null || seat.seatId !== room.hostId) {
-          socket.emit("room:error", "Only the host can start the game.");
-          return;
-        }
-        const paid: string[] = [];
-        for (const player of room.seats) {
-          if (player.userId === null) {
-            continue;
-          }
-          const ok = await store.adjustChips(player.userId, -room.buyIn);
-          if (!ok) {
-            for (const refund of paid) {
-              await store.adjustChips(refund, room.buyIn);
-            }
-            socket.emit("room:error", `${player.name} cannot cover the buy-in.`);
-            return;
-          }
-          paid.push(player.userId);
-        }
-        try {
-          room.start(seat.seatId);
-          broadcast(seat.code);
-        } catch (error) {
-          for (const refund of paid) {
-            await store.adjustChips(refund, room.buyIn);
-          }
-          socket.emit("room:error", error instanceof RoomError ? error.message : "Could not start.");
-        }
-      })();
-    });
-
-    socket.on("game:roll", () => {
-      guard(socket.id, (room, seatId) => room.doRoll(seatId));
-    });
-
-    socket.on("game:toggle", (payload, ack) => {
-      const parsed = toggleSchema.safeParse(payload);
+    /**
+     * Everything a player does at a table, whatever the game.
+     *
+     * One event rather than a verb each. The server does not know what "hit"
+     * or "bank" mean and has no business knowing — it checks that somebody may
+     * act, hands the action to the game, and reports the refusal if there is
+     * one. Adding a game adds no events here.
+     */
+    socket.on("game:action", (payload, ack) => {
+      const parsed = actionSchema.safeParse(payload);
       if (!parsed.success) {
         ack?.();
         return;
       }
-      guard(socket.id, (room, seatId) => room.toggle(seatId, parsed.data.index));
-      // Always acknowledged, refused or not: the client is counting these to
+      guard(socket.id, async (seated, seatId) => {
+        await seated.game.act(seated.table, seatId, parsed.data, deps);
+        // A table that has been dealt again must be allowed to settle again.
+        if (!seated.game.isSettled(seated.table)) {
+          settled.delete(seated.table.code);
+        }
+      });
+      // Always acknowledged, refused or not: a client counting these needs to
       // know when its own optimistic picture can be dropped.
       ack?.();
-    });
-
-    socket.on("game:playAgain", () => {
-      guard(socket.id, (room, seatId) => {
-        room.playAgain(seatId);
-        // The finished game already paid out; the next one must be allowed to
-        // settle in its own right.
-        settled.delete(room.code);
-      });
-    });
-
-    socket.on("game:bank", () => {
-      guard(socket.id, (room, seatId) => room.bank(seatId));
     });
 
     socket.on("chat:send", (payload) => {
@@ -1048,9 +989,9 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         socket.emit("room:error", "Easy on the chat.");
         return;
       }
-      const room = rooms.get(seat.code);
-      const who = room?.seats.find((candidate) => candidate.id === seat.seatId);
-      if (room === undefined || who === undefined) {
+      const seated = rooms.get(seat.code);
+      const who = seated?.table.seats.find((candidate) => candidate.id === seat.seatId);
+      if (seated === undefined || who === undefined) {
         return;
       }
       // Plain text only, and never rendered as markup on the other side.
@@ -1075,7 +1016,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       if (seat.seatId === null) {
-        room.unwatch(socket.id);
+        room.table.unwatch(socket.id);
         broadcast(seat.code);
         reapWhenEmpty(seat.code);
         return;
@@ -1083,7 +1024,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       // Captured, so the timer below is not re-reading a field that has since
       // been narrowed away by the watcher check above.
       const seatId = seat.seatId;
-      room.disconnect(seatId);
+      room.table.disconnect(seatId);
       broadcast(seat.code);
 
       // Hold the seat long enough for a page refresh to reclaim it.
@@ -1092,11 +1033,13 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         if (still === undefined) {
           return;
         }
-        const held = still.view().seats.find((candidate) => candidate.id === seatId);
+        // Asked of the table rather than the view: every game has seats, and
+        // not every game's view is shaped the same.
+        const held = still.table.seats.find((candidate) => candidate.id === seatId);
         if (held?.connected === true) {
           return; // they came back
         }
-        still.removeSeat(seatId);
+        still.table.removeSeat(seatId);
         broadcast(seat.code);
       }, reconnectGraceMs);
 
@@ -1184,8 +1127,8 @@ export function resolveSessionSecret(provided: string | undefined): string {
   return "greed-development-secret";
 }
 
-function requireHost(room: Room, seatId: string, what: string): void {
-  if (seatId !== room.hostId) {
+function requireHost(table: PlayTable, seatId: string, what: string): void {
+  if (seatId !== table.hostId) {
     throw new RoomError(`Only the host can ${what}.`);
   }
 }

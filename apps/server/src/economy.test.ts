@@ -154,18 +154,18 @@ describe("playing for chips", () => {
     host.emit("lobby:setRules", { targetScore: 2000 });
     await stateWhere(host, (view) => view.ruleset.targetScore === 2000);
 
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
     // The stake is gone the moment the game is dealt.
     expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 500);
 
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) === 6);
     for (let index = 0; index < 6; index += 1) {
-      host.emit("game:toggle", { index });
+      host.emit("game:action", { type: "toggle", index });
     }
     await stateWhere(host, (view) => (view.turn?.selection ?? 0) > 0);
-    host.emit("game:bank");
+    host.emit("game:action", { type: "bank" });
     await stateWhere(host, (view) => view.status === "over");
 
     // Solo table, so the pot is their own stake coming back.
@@ -200,7 +200,7 @@ describe("playing for chips", () => {
     await stateWhere(host, (view) => view.buyIn === 500);
 
     const complaint = nextError(host);
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     expect(await complaint).toMatch(/cannot cover/i);
     // And the balance is untouched, not partly taken.
     expect((await store.get(ada.id))?.chips).toBe(10);
@@ -349,7 +349,7 @@ describe("who a seat belongs to", () => {
     host.emit("lobby:setRules", { targetScore: 2000 });
     await stateWhere(host, (view) => view.ruleset.targetScore === 2000);
 
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
     expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 500);
 
@@ -361,13 +361,13 @@ describe("who a seat belongs to", () => {
     // Their stake was never taken, because they are not in this game.
     expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 500);
 
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) === 6);
     for (let index = 0; index < 6; index += 1) {
-      host.emit("game:toggle", { index });
+      host.emit("game:action", { type: "toggle", index });
     }
     await stateWhere(host, (view) => (view.turn?.selection ?? 0) > 0);
-    host.emit("game:bank");
+    host.emit("game:action", { type: "bank" });
     const over = await stateWhere(host, (view) => view.status === "over");
 
     // The latecomer is not among the winners of a game they never played.

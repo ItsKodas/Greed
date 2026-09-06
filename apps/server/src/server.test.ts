@@ -180,9 +180,9 @@ describe("rejecting malformed input", () => {
     if (!ack.ok) {
       throw new Error("create failed");
     }
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) > 0);
 
     // Deliberately not a number. Before validation this reached the engine.
@@ -194,7 +194,7 @@ describe("rejecting malformed input", () => {
     });
 
     // The server is still answering, which is the whole point.
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     const state = await stateWhere(host, (view) => (view.turn?.rollSeq ?? 0) >= 1);
     expect(state.status).toBe("playing");
   });
@@ -211,7 +211,7 @@ describe("host-only controls", () => {
     await join(guest, "Bo", ack.code);
 
     const complaint = nextError(guest);
-    guest.emit("game:start");
+    guest.emit("game:action", { type: "start" });
     expect(await complaint).toMatch(/host/i);
   });
 
@@ -265,21 +265,21 @@ describe("playing a turn", () => {
     if (!ack.ok) {
       throw new Error("create failed");
     }
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
 
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) === 6);
 
-    host.emit("game:toggle", { index: 0 });
-    host.emit("game:toggle", { index: 1 });
+    host.emit("game:action", { type: "toggle", index: 0 });
+    host.emit("game:action", { type: "toggle", index: 1 });
     const picked = await stateWhere(host, (view) => (view.turn?.selection ?? 0) === 200);
     expect(picked.turn?.selectionValid).toBe(true);
 
-    host.emit("game:toggle", { index: 2 });
+    host.emit("game:action", { type: "toggle", index: 2 });
     await stateWhere(host, (view) => (view.turn?.selection ?? 0) === 1000);
 
-    host.emit("game:bank");
+    host.emit("game:action", { type: "bank" });
     const banked = await stateWhere(host, (view) => (view.seats[0]?.score ?? 0) === 1000);
     expect(banked.seats[0]?.onBoard).toBe(true);
   });
@@ -293,15 +293,15 @@ describe("playing a turn", () => {
     if (!ack.ok) {
       throw new Error("create failed");
     }
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) === 6);
-    host.emit("game:toggle", { index: 0 });
+    host.emit("game:action", { type: "toggle", index: 0 });
     await stateWhere(host, (view) => (view.turn?.selection ?? 0) === 100);
 
     const complaint = nextError(host);
-    host.emit("game:bank");
+    host.emit("game:action", { type: "bank" });
     expect(await complaint).toMatch(/on the board/i);
   });
 
@@ -317,10 +317,10 @@ describe("playing a turn", () => {
     }
     const guest = await client();
     await join(guest, "Bo", ack.code);
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
 
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => view.turn?.phase === "farkled");
     // The pause is the server's job; nobody has to click anything.
     const passed = await stateWhere(host, (view) => view.turn?.seatId === view.seats[1]?.id);
@@ -340,17 +340,17 @@ describe("bots", () => {
     }
     host.emit("lobby:addBot", { skill: "normal" });
     await stateWhere(host, (view) => view.seats.length === 2);
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
 
     // Ada banks, then the bot plays unaided.
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) === 6);
-    host.emit("game:toggle", { index: 0 });
-    host.emit("game:toggle", { index: 1 });
-    host.emit("game:toggle", { index: 2 });
+    host.emit("game:action", { type: "toggle", index: 0 });
+    host.emit("game:action", { type: "toggle", index: 1 });
+    host.emit("game:action", { type: "toggle", index: 2 });
     await stateWhere(host, (view) => (view.turn?.selection ?? 0) === 1000);
-    host.emit("game:bank");
+    host.emit("game:action", { type: "bank" });
 
     const botScored = await stateWhere(
       host,
@@ -371,10 +371,10 @@ describe("bots", () => {
     }
     host.emit("lobby:addBot", { skill: "normal" });
     await stateWhere(host, (view) => view.seats.length === 2);
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
 
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (view) => view.turn?.seatId === view.seats[1]?.id);
     // The bot farkles too; play must come back to Ada rather than stalling.
     const back = await stateWhere(host, (view) => view.turn?.seatId === view.seats[0]?.id);
@@ -432,16 +432,18 @@ describe("leaving and coming back", () => {
     const guest = await client();
     await join(guest, "Bo", ack.code);
     await stateWhere(host, (view) => view.seats.length === 2);
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (view) => view.status === "playing");
 
     host.close();
     guest.close();
     await new Promise((resolve) => setTimeout(resolve, 80));
 
-    const room = server.rooms.get(ack.code);
-    expect(room?.status).toBe("playing");
-    expect(room?.winnerIds).toEqual([]);
+    const seated = server.rooms.get(ack.code);
+    expect(seated?.table.status).toBe("playing");
+    // Nobody has won: a table everyone dropped from is paused, not decided.
+    const table = seated?.table as { winnerIds?: string[] } | undefined;
+    expect(table?.winnerIds).toEqual([]);
   });
 });
 
@@ -615,19 +617,19 @@ describe("playing again at the same table", () => {
     host.emit("lobby:setRules", { targetScore: 2000 });
     await stateWhere(host, (state) => state.ruleset.targetScore === 2000);
 
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (state) => state.status === "playing");
-    host.emit("game:roll");
+    host.emit("game:action", { type: "roll" });
     await stateWhere(host, (state) => (state.turn?.dice.length ?? 0) === 6);
     for (let index = 0; index < 6; index += 1) {
-      host.emit("game:toggle", { index });
+      host.emit("game:action", { type: "toggle", index });
     }
     await stateWhere(host, (state) => (state.turn?.selection ?? 0) > 0);
-    host.emit("game:bank");
+    host.emit("game:action", { type: "bank" });
     const over = await stateWhere(host, (state) => state.status === "over");
     expect(over.seats[0]?.score).toBeGreaterThanOrEqual(2000);
 
-    host.emit("game:playAgain");
+    host.emit("game:action", { type: "playAgain" });
     const again = await stateWhere(host, (state) => state.status === "lobby");
 
     // Same table, same seat, scores wiped, ready to be dealt again.
@@ -639,7 +641,7 @@ describe("playing again at the same table", () => {
     expect(again.ruleset.targetScore).toBe(2000);
 
     // And it can actually be dealt again.
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (state) => state.status === "playing");
   });
 
@@ -647,11 +649,11 @@ describe("playing again at the same table", () => {
     await start(() => [1, 1, 1, 1, 1, 1] as Die[]);
     const host = await client();
     await create(host, "Ada");
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (state) => state.status === "playing");
 
     const complaint = nextError(host);
-    host.emit("game:playAgain");
+    host.emit("game:action", { type: "playAgain" });
     expect(await complaint).toMatch(/still going/i);
   });
 });
@@ -681,14 +683,14 @@ describe("watching a table", () => {
     const host = await client();
     const created = await create(host, "Ada");
     const code = created.ok ? created.code : "";
-    host.emit("game:start");
+    host.emit("game:action", { type: "start" });
     await stateWhere(host, (state) => state.status === "playing");
 
     const watcher = await client();
     await new Promise((resolve) => watcher.emit("lobby:watch", { code }, resolve));
 
     const complaint = nextError(watcher);
-    watcher.emit("game:roll");
+    watcher.emit("game:action", { type: "roll" });
     expect(await complaint).toMatch(/watching/i);
   });
 

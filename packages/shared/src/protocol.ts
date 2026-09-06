@@ -96,19 +96,16 @@ export interface ClientToServer {
   "lobby:setRules": (payload: Partial<HouseRules>) => void;
   "lobby:setBuyIn": (payload: { amount: number }) => void;
   "lobby:removeSeat": (payload: { seatId: string }) => void;
-  "game:start": () => void;
-  /** Puts a finished table back in its lobby, keeping everyone at it. */
-  "game:playAgain": () => void;
-  "game:roll": () => void;
   /**
-   * The ack carries nothing; it only says the server has dealt with this
-   * toggle. The client shows the die moving the instant it is clicked, and
-   * needs to know when the state coming back has caught up with the clicks
-   * already made — otherwise a second click is undone by the answer to the
-   * first.
+   * Anything a player does at a table, whatever the game.
+   *
+   * One event rather than a verb each. What is in the payload is the game's
+   * business — "roll", "hit", "double" — and the server does not read it, so a
+   * new game adds no events here. The ack carries nothing; it only says the
+   * server has dealt with it, which is what a client showing a move before the
+   * reply needs in order to know when to stop.
    */
-  "game:toggle": (payload: { index: number }, ack?: () => void) => void;
-  "game:bank": () => void;
+  "game:action": (payload: { type: string; [key: string]: unknown }, ack?: () => void) => void;
   "chat:send": (payload: { text: string }) => void;
 }
 
