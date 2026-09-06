@@ -46,4 +46,6 @@ ENV PORT=3001
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD node -e "fetch('http://localhost:'+(process.env.PORT||3001)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["npm", "run", "start", "-w", "@greed/server"]
+# `serve`, not `start`: compose hands the environment in, so the .env lookup
+# `start` does would find nothing and say so on every boot.
+CMD ["npm", "run", "serve", "-w", "@greed/server"]
