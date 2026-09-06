@@ -28,6 +28,9 @@ export const createSchema = z.object({
 
 export const joinSchema = z.object({ name, code });
 
+/** Watching needs no name — a watcher is nobody at the table. */
+export const watchSchema = z.object({ code });
+
 export const resumeSchema = z.object({
   seatId: z.string().min(1).max(64),
   code,
@@ -63,6 +66,7 @@ export const setRulesSchema = z.object({
 
 export type CreatePayload = z.infer<typeof createSchema>;
 export type JoinPayload = z.infer<typeof joinSchema>;
+export type WatchPayload = z.infer<typeof watchSchema>;
 export type ResumePayload = z.infer<typeof resumeSchema>;
 export type SetRulesPayload = z.infer<typeof setRulesSchema>;
 

@@ -358,6 +358,16 @@ function Join({
           >
             Take a seat
           </button>
+          {/* Needs no name: a watcher is nobody at the table. Useful when it is
+              full, or when you only want to see how it goes. */}
+          <button
+            type="button"
+            className="btn btn--ghost btn--wide"
+            disabled={!connected || busy || code.length !== 5}
+            onClick={() => actions.watch(code)}
+          >
+            Just watch
+          </button>
         </div>
 
         <div className="panel">
@@ -487,7 +497,10 @@ function Lobby({
       <ShareCode code={room.code} />
 
       <div className="panel lobby__seating">
-        <p className="panel__label">Seated · {room.seats.length} of 8</p>
+        <p className="panel__label">
+          Seated · {room.seats.length} of 8
+          {room.watching > 0 ? ` · ${room.watching} watching` : ""}
+        </p>
         <div className="lobby__seats">
           {room.seats.map((seat) => (
             <div className="seat" key={seat.id}>

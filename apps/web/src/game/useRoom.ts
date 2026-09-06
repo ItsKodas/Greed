@@ -62,6 +62,8 @@ function writeSeat(seat: StoredSeat | null): void {
 export interface RoomActions {
   create: (name: string, ruleset: string) => void;
   join: (name: string, code: string) => void;
+  /** Watch a table without taking a seat at it. */
+  watch: (code: string) => void;
   addBot: (skill: "easy" | "normal" | "hard") => void;
   removeSeat: (seatId: string) => void;
   start: () => void;
@@ -232,6 +234,24 @@ export function useRoom(): RoomHook {
     });
   }, []);
 
+  const watch = useCallback((code: string) => {
+    const socket = socketRef.current;
+    if (socket === null) {
+      return;
+    }
+    setBusy(true);
+    socket.emit("lobby:watch", { code }, (result) => {
+      setBusy(false);
+      if (result.ok) {
+        // No seat, so nothing to store and nothing to reclaim on a refresh.
+        writeSeat(null);
+        setSeatId(null);
+      } else {
+        setError(result.error);
+      }
+    });
+  }, []);
+
   const addBot = useCallback(
     (skill: "easy" | "normal" | "hard") => socketRef.current?.emit("lobby:addBot", { skill }),
     [],
@@ -325,6 +345,7 @@ export function useRoom(): RoomHook {
     actions: {
       create,
       join,
+      watch,
       addBot,
       removeSeat,
       setRules,

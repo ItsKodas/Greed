@@ -17,6 +17,7 @@ import {
   chatSchema,
   createSchema,
   joinSchema,
+  watchSchema,
   removeSeatSchema,
   resumeSchema,
   setBuyInSchema,
@@ -117,7 +118,11 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   } = options;
 
   const rooms = new Map<string, Room>();
-  const sockets = new Map<string, { code: string; seatId: string }>();
+  /**
+   * Which table each socket is at, and as whom. A null seat is someone
+   * watching: at the table, in the room, sent every state, holding nothing.
+   */
+  const sockets = new Map<string, { code: string; seatId: string | null }>();
   const turnClocks = new Map<string, NodeJS.Timeout>();
   const farklePauses = new Map<string, NodeJS.Timeout>();
   const botMoves = new Map<string, NodeJS.Timeout>();
@@ -478,6 +483,10 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       socket.emit("room:error", "That table is gone.");
       return;
     }
+    if (seat.seatId === null) {
+      socket.emit("room:error", "You are watching this table, not playing at it.");
+      return;
+    }
     try {
       run(room, seat.seatId);
       broadcast(seat.code);
@@ -669,6 +678,24 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       }
     });
 
+    socket.on("lobby:watch", (payload, ack) => {
+      const parsed = watchSchema.safeParse(payload);
+      if (!parsed.success) {
+        ack({ ok: false, error: "That is not a table code." });
+        return;
+      }
+      const room = rooms.get(parsed.data.code);
+      if (room === undefined) {
+        ack({ ok: false, error: "No table with that code." });
+        return;
+      }
+      room.watch(socket.id);
+      sockets.set(socket.id, { code: parsed.data.code, seatId: null });
+      void socket.join(parsed.data.code);
+      ack({ ok: true, code: parsed.data.code, seatId: "" });
+      broadcast(parsed.data.code);
+    });
+
     socket.on("lobby:leave", () => {
       const seat = sockets.get(socket.id);
       if (seat === undefined) {
@@ -678,6 +705,12 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       void socket.leave(seat.code);
       const room = rooms.get(seat.code);
       if (room === undefined) {
+        return;
+      }
+      if (seat.seatId === null) {
+        room.unwatch(socket.id);
+        broadcast(seat.code);
+        reapWhenEmpty(seat.code);
         return;
       }
       // Deliberate, so the seat goes now rather than being held for a
@@ -748,7 +781,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       // Take every stake before dealing, and put back anything already taken
       // if one of them cannot pay. Nobody ends up half-way into a game.
       void (async () => {
-        if (seat.seatId !== room.hostId) {
+        if (seat.seatId === null || seat.seatId !== room.hostId) {
           socket.emit("room:error", "Only the host can start the game.");
           return;
         }
@@ -847,7 +880,16 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       if (room === undefined) {
         return;
       }
-      room.disconnect(seat.seatId);
+      if (seat.seatId === null) {
+        room.unwatch(socket.id);
+        broadcast(seat.code);
+        reapWhenEmpty(seat.code);
+        return;
+      }
+      // Captured, so the timer below is not re-reading a field that has since
+      // been narrowed away by the watcher check above.
+      const seatId = seat.seatId;
+      room.disconnect(seatId);
       broadcast(seat.code);
 
       // Hold the seat long enough for a page refresh to reclaim it.
@@ -856,11 +898,11 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         if (still === undefined) {
           return;
         }
-        const held = still.view().seats.find((candidate) => candidate.id === seat.seatId);
+        const held = still.view().seats.find((candidate) => candidate.id === seatId);
         if (held?.connected === true) {
           return; // they came back
         }
-        still.removeSeat(seat.seatId);
+        still.removeSeat(seatId);
         broadcast(seat.code);
       }, reconnectGraceMs);
 

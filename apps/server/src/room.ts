@@ -80,6 +80,15 @@ export class Room {
   ruleset: Ruleset;
   seats: Seat[] = [];
   status: RoomStatus = "lobby";
+  /**
+   * Sockets watching without a seat.
+   *
+   * Held by socket rather than by person on purpose: watching is something a
+   * connection does, not something an account is, and nothing about it should
+   * outlive the tab it happens in. They do not keep an abandoned table alive
+   * either — `isEmpty` counts seats, not eyes.
+   */
+  private readonly watchers = new Set<string>();
   winnerIds: string[] = [];
   lastEvent: string | null = null;
   /** Chips each seat puts in. Zero means a friendly game. */
@@ -211,6 +220,14 @@ export class Room {
   }
 
   /** The seat whose turn it is, or null outside a running game. */
+  watch(socketId: string): void {
+    this.watchers.add(socketId);
+  }
+
+  unwatch(socketId: string): void {
+    this.watchers.delete(socketId);
+  }
+
   activeSeat(): Seat | null {
     if (this.status !== "playing" || this.turn === null) {
       return null;
@@ -605,6 +622,7 @@ export class Room {
     return {
       code: this.code,
       status: this.status,
+      watching: this.watchers.size,
       seats,
       turn: this.turn === null ? null : this.turnView(this.turn),
       ruleset: this.ruleset,

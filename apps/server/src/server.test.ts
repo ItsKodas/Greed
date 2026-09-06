@@ -655,3 +655,54 @@ describe("playing again at the same table", () => {
     expect(await complaint).toMatch(/still going/i);
   });
 });
+
+describe("watching a table", () => {
+  it("shows the table without giving out a seat", async () => {
+    await start(() => [1, 2, 3, 4, 5, 6] as Die[]);
+    const host = await client();
+    const created = await create(host, "Ada");
+    const code = created.ok ? created.code : "";
+
+    const watcher = await client();
+    const result = await new Promise<Ack>((resolve) =>
+      watcher.emit("lobby:watch", { code }, resolve),
+    );
+    expect(result.ok).toBe(true);
+
+    // They see the table, and the table knows they are there.
+    const seen = await stateWhere(watcher, (state) => state.watching === 1);
+    expect(seen.code).toBe(code);
+    expect(seen.seats).toHaveLength(1);
+    expect(await stateWhere(host, (state) => state.watching === 1)).toBeTruthy();
+  });
+
+  it("will not let a watcher play", async () => {
+    await start(() => [1, 2, 3, 4, 5, 6] as Die[]);
+    const host = await client();
+    const created = await create(host, "Ada");
+    const code = created.ok ? created.code : "";
+    host.emit("game:start");
+    await stateWhere(host, (state) => state.status === "playing");
+
+    const watcher = await client();
+    await new Promise((resolve) => watcher.emit("lobby:watch", { code }, resolve));
+
+    const complaint = nextError(watcher);
+    watcher.emit("game:roll");
+    expect(await complaint).toMatch(/watching/i);
+  });
+
+  it("stops counting them when they go", async () => {
+    await start(() => [1, 2, 3, 4, 5, 6] as Die[]);
+    const host = await client();
+    const created = await create(host, "Ada");
+    const code = created.ok ? created.code : "";
+
+    const watcher = await client();
+    await new Promise((resolve) => watcher.emit("lobby:watch", { code }, resolve));
+    await stateWhere(host, (state) => state.watching === 1);
+
+    watcher.emit("lobby:leave");
+    expect(await stateWhere(host, (state) => state.watching === 0)).toBeTruthy();
+  });
+});

@@ -65,6 +65,8 @@ export interface RoomView {
   code: string;
   status: RoomStatus;
   seats: SeatView[];
+  /** How many people are watching without a seat. */
+  watching: number;
   turn: TurnView | null;
   ruleset: Ruleset;
   /** Chips each seat stakes. Zero for a friendly game. */
@@ -87,6 +89,8 @@ export interface ClientToServer {
   ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
   "lobby:resume": (payload: { seatId: string; code: string }, ack: (result: Ack) => void) => void;
+  /** Watch a table without taking a seat at it. */
+  "lobby:watch": (payload: { code: string }, ack: (result: Ack) => void) => void;
   "lobby:leave": () => void;
   "lobby:addBot": (payload: { skill: BotSkill }) => void;
   "lobby:setRules": (payload: Partial<HouseRules>) => void;

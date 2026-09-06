@@ -247,6 +247,14 @@
   gap: var(--gr-space-2);
 }
 
+/* Sits with the seats because that is what it is about: who else is here. */
+.rail__watching {
+  align-self: center;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-bone-dim);
+  padding: 0 var(--gr-space-2);
+}
+
 .table__main {
   grid-area: main;
 }

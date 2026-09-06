@@ -52,6 +52,7 @@ export function Table({
   const turn = room.turn;
   const over = room.status === "over";
   const yours = turn !== null && turn.seatId === seatId && !over;
+  const watching = room.watching;
   const active = room.seats.find((seat) => seat.id === turn?.seatId);
 
   /*
@@ -123,6 +124,11 @@ export function Table({
   return (
     <div className="table">
       <div className="table__rail">
+        {watching > 0 ? (
+          <span className="rail__watching">
+            {watching === 1 ? "1 watching" : `${watching} watching`}
+          </span>
+        ) : null}
         {room.seats.map((seat) => {
           const isTurn = seat.id === turn?.seatId && !over;
           const won = over && room.winnerIds.includes(seat.id);
@@ -247,7 +253,13 @@ export function Table({
           ) : null}
         </div>
 
-        {over ? (
+        {seatId === "" ? (
+          // No seat, so no controls — offering buttons that cannot do anything
+          // is worse than saying plainly what you are.
+          <p className="panel__note">
+            You are watching this table. Leave and take a seat to play the next game.
+          </p>
+        ) : over ? (
           <>
             {/*
               * "Back to the lobby" used to sit here and call leave, which took
