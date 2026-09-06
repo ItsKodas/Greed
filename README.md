@@ -30,7 +30,12 @@ That starts the game server on `:3001` and the client on `:5173`. Open
 whoever you want to play against. One to eight players; a table of one is solo
 practice, and the host can seat bots.
 
-`npm test` runs 329 tests, `npm run lint` and `npm run typecheck` check the rest,
+The dev server listens on every interface, so anyone on the same network can
+open `http://<your-address>:5173` and sit down. Vite prints the address it is
+reachable at when it starts. Signing in from another device needs a little
+more: see the note by `CLIENT_ORIGIN` in [`.env.example`](.env.example).
+
+`npm test` runs 332 tests, `npm run lint` and `npm run typecheck` check the rest,
 and `npm run dev` also serves the design gallery at `/style`.
 
 ### Running the whole thing

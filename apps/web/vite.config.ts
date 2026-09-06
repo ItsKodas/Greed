@@ -11,6 +11,9 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Bind every interface, not just the loopback, so other people on the
+    // network can open the game on this machine and sit down at a table.
+    host: true,
     port: 5173,
     proxy: {
       "/api": "http://localhost:3001",
