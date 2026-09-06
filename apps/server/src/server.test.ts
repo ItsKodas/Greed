@@ -553,3 +553,53 @@ describe("how much of a proxy to believe", () => {
     expect(resolveTrustProxy("10.0.0.0/8")).toBe("10.0.0.0/8");
   });
 });
+
+describe("who gets told what", () => {
+  /*
+   * The table is sent to each socket separately rather than to the room as a
+   * whole, so that a game with something face down can answer each seat
+   * differently. The risk in that change is silent: a loop that misses a
+   * socket looks exactly like a working table until somebody stops updating.
+   */
+  it("reaches every seat at the table", async () => {
+    await start(() => [1, 2, 3, 4, 5, 6] as Die[]);
+
+    const host = await client();
+    const created = await create(host, "Ada");
+    const code = created.ok ? created.code : "";
+
+    const guest = await client();
+    await join(guest, "Bo", code);
+
+    const third = await client();
+    await join(third, "Cass", code);
+
+    // One action, and every socket at the table must hear about it.
+    const heard = [host, guest, third].map((socket) =>
+      stateWhere(socket, (state) => state.seats.length === 3),
+    );
+    host.emit("lobby:setRules", { targetScore: 5000 });
+    const views = await Promise.all(heard);
+
+    expect(views).toHaveLength(3);
+    for (const view of views) {
+      expect(view.seats).toHaveLength(3);
+    }
+  });
+
+  it("tells each seat about itself", async () => {
+    await start();
+    const host = await client();
+    const created = await create(host, "Ada");
+    const code = created.ok ? created.code : "";
+    const guest = await client();
+    const joined = await join(guest, "Bo", code);
+
+    const hostView = await stateWhere(host, (state) => state.seats.length === 2);
+    const guestView = await stateWhere(guest, (state) => state.seats.length === 2);
+
+    // Same table, and each socket holds the seat it was given.
+    expect(hostView.code).toBe(guestView.code);
+    expect(created.ok && joined.ok && created.seatId !== joined.seatId).toBe(true);
+  });
+});

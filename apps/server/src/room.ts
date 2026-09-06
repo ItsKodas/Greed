@@ -533,7 +533,19 @@ export class Room {
     };
   }
 
-  view(): RoomView {
+  /**
+   * The table as one seat may see it.
+   *
+   * Greed hides nothing — six dice on a table are six dice on a table, and
+   * every seat is told the same thing, so `forSeatId` changes nothing here.
+   * The parameter exists because the caller must be in the habit of asking on
+   * behalf of somebody: a game with a card face down cannot be bolted onto a
+   * server that only knows how to describe a table once.
+   *
+   * @param forSeatId The seat asking, or null for an onlooker.
+   */
+  view(forSeatId: string | null = null): RoomView {
+    void forSeatId;
     const host = this.hostId;
     const seats: SeatView[] = this.seats.map((seat) => ({
       id: seat.id,

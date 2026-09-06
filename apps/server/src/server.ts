@@ -293,13 +293,39 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     );
   }
 
+  /**
+   * Sends the table to everyone at it, one at a time.
+   *
+   * Deliberately not `io.to(code).emit(...)`. That sends one description of the
+   * table to every socket in the room, which is only safe while there is
+   * nothing at the table that one seat may see and another may not. The moment
+   * a card is face down, a single shared payload is not a rendering choice, it
+   * is dealing everybody else your hand — and by then every game would be
+   * written against the assumption that it cannot happen.
+   *
+   * Greed's view is the same for everyone, so today this sends identical
+   * payloads and costs one small object per seat at a table of at most eight.
+   */
+  function sendState(code: string, room: Room): void {
+    const members = io.sockets.adapter.rooms.get(code);
+    if (members === undefined) {
+      return;
+    }
+    for (const socketId of members) {
+      // Null while a socket is in the room but between seats — mid-resume, or
+      // after its seat was taken away. It still gets the table, as nobody.
+      const seat = sockets.get(socketId)?.seatId ?? null;
+      io.to(socketId).emit("room:state", room.view(seat));
+    }
+  }
+
   function broadcast(code: string): void {
     const room = rooms.get(code);
     if (room === undefined) {
       return;
     }
     armClock(room);
-    io.to(code).emit("room:state", room.view());
+    sendState(code, room);
     scheduleFarklePause(room);
     scheduleBot(room);
     if (room.status === "over" && !settled.has(code)) {
