@@ -5,7 +5,11 @@
 # Then open http://localhost:3001 — in production the server serves the built
 # client itself, so there is no separate web container and no CORS to arrange.
 #
-# MONGO_URL comes from .env. Two things to watch when filling it in:
+# Everything the container is configured with comes from .env — the port it
+# publishes, where it sends people after they sign in, and the database. The
+# defaults below apply only where .env is silent.
+#
+# MONGO_URL is the one worth reading twice:
 #
 #   * `localhost` inside a container means the container, not your machine.
 #     To reach a mongod on this host, use host.docker.internal:27017.
@@ -21,15 +25,21 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "${PORT:-3001}:${PORT:-3001}"
+    # Named one by one rather than handing the whole file over, so that
+    # `--env-file` switches every one of them together. A service that both
+    # interpolates from one file and env_file's another reads half its
+    # configuration from each, which is a bad way to find out where a password
+    # came from.
     environment:
-      # Passed straight through from .env. Only the bundled-db file overrides it.
       MONGO_URL: ${MONGO_URL:-}
-      # These two do override .env, because inside the container the only
-      # sensible answer is the container's own: the server serves the client,
-      # so the origin is its own port.
-      CLIENT_ORIGIN: http://localhost:3001
-      PORT: "3001"
-    env_file:
-      - path: .env
-        required: false
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI:-}
+      # Where a player's browser is, which is where they land after signing in.
+      # Note this is NOT the dev value: `npm run dev` puts the client on Vite's
+      # port and the API on another, while here the server serves the client
+      # itself, so the two are one address.
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:3001}
+      PORT: ${PORT:-3001}

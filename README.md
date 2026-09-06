@@ -45,6 +45,12 @@ docker compose up --build
 ```
 
 Then <http://localhost:3001>, where the server serves the built client itself.
+The container is configured entirely from `.env` — the port it publishes, the
+database, and where people land after signing in. One warning about that last
+one: `CLIENT_ORIGIN` is not the same in both ways of running, because Vite
+serves the client in development and the server serves it here, so keep a
+second file and pass `--env-file .env.production` when deploying.
+
 This points at whatever database `MONGO_URL` names, on the assumption that you
 run one already. Note that `localhost` inside a container is the container: to
 reach a mongod on the same machine, the URL is `host.docker.internal:27017`.
