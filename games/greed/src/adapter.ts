@@ -204,7 +204,9 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
     }
     return {
       ms: 1400,
-      then() {
+      // Not "then": an object with a then property is a thenable, and one that
+      // reached an await by accident would hang rather than fail.
+      run() {
         room.advanceTurn();
       },
     };

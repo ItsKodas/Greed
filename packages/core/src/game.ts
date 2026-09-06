@@ -86,7 +86,7 @@ export interface GameAdapter<T extends PlayTable = PlayTable> {
   /** A move a seated bot wants to make, if this game has bots. */
   botMove?(table: T): BotMove | null;
   /** A pause the game wants before play moves on, so a result can be read. */
-  pause?(table: T): { ms: number; then(): void } | null;
+  pause?(table: T): { ms: number; run(): void } | null;
 }
 
 /** What a game is handed when it needs to move money or ask who somebody is. */
