@@ -1,49 +1,35 @@
-# The whole game in two containers.
+# The game in one container, pointed at a database you already run.
 #
 #   docker compose up --build
 #
 # Then open http://localhost:3001 — in production the server serves the built
 # client itself, so there is no separate web container and no CORS to arrange.
 #
-# Nearly everything in .env is optional. With none of it set the game still
-# runs: guests type a name and play, and nothing is kept between restarts.
+# MONGO_URL comes from .env. Two things to watch when filling it in:
 #
-# The one exception is SESSION_SECRET. This stack runs with NODE_ENV=production,
-# and the server will refuse to start without one rather than sign cookies with
-# the development default, which is published in this repository.
+#   * `localhost` inside a container means the container, not your machine.
+#     To reach a mongod on this host, use host.docker.internal:27017.
+#   * Leaving it unset is not an error. The game runs on an in-memory store:
+#     profiles, chips and history vanish on restart, everything else works.
+#
+# To have this stack bring its own database instead, add the second file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.bundled-db.yml up --build
 
 services:
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   greed:
     build: .
     restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
-      # These win over .env: compose gives `environment` precedence over
-      # `env_file`, which is what this stack needs. Inside the network the
-      # database answers to `mongo`, not to whatever localhost URL a
-      # developer has in .env, and the server serves the client itself so
-      # the origin is its own port. Everything else in .env passes through.
-      MONGO_URL: mongodb://mongo:27017/greed
+      # Passed straight through from .env. Only the bundled-db file overrides it.
+      MONGO_URL: ${MONGO_URL:-}
+      # These two do override .env, because inside the container the only
+      # sensible answer is the container's own: the server serves the client,
+      # so the origin is its own port.
       CLIENT_ORIGIN: http://localhost:3001
       PORT: "3001"
     env_file:
       - path: .env
         required: false
-    depends_on:
-      mongo:
-        condition: service_healthy
-
-volumes:
-  mongo-data:

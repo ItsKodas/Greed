@@ -30,7 +30,7 @@ That starts the game server on `:3001` and the client on `:5173`. Open
 whoever you want to play against. One to eight players; a table of one is solo
 practice, and the host can seat bots.
 
-`npm test` runs 317 tests, `npm run lint` and `npm run typecheck` check the rest,
+`npm test` runs 329 tests, `npm run lint` and `npm run typecheck` check the rest,
 and `npm run dev` also serves the design gallery at `/style`.
 
 ### Running the whole thing
@@ -40,6 +40,15 @@ docker compose up --build
 ```
 
 Then <http://localhost:3001>, where the server serves the built client itself.
+This points at whatever database `MONGO_URL` names, on the assumption that you
+run one already. Note that `localhost` inside a container is the container: to
+reach a mongod on the same machine, the URL is `host.docker.internal:27017`.
+
+If there is no database to point at, the second file brings one:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.bundled-db.yml up --build
+```
 
 ### What is optional
 

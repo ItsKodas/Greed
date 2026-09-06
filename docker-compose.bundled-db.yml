@@ -1,0 +1,30 @@
+# Adds a database to the stack, for when there is no existing one to point at.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.bundled-db.yml up --build
+#
+# This overrides MONGO_URL, so whatever is in .env is ignored while these two
+# files are used together — inside the network the database answers to `mongo`.
+# The data lives in the mongo-data volume and survives `down`; `down -v`
+# deletes it.
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  greed:
+    environment:
+      MONGO_URL: mongodb://mongo:27017/greed
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:
