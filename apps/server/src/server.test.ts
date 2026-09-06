@@ -706,3 +706,36 @@ describe("watching a table", () => {
     expect(await stateWhere(host, (state) => state.watching === 0)).toBeTruthy();
   });
 });
+
+describe("what the room offers", () => {
+  it("lists every game, and says which can be opened", async () => {
+    await start();
+    const port = (server as GreedServer).http.address() as AddressInfo;
+    const body = (await (await fetch(`http://localhost:${port.port}/api/room`)).json()) as {
+      games: Array<{ id: string; open: boolean; shape: string; tables: number }>;
+    };
+
+    const ids = body.games.map((game) => game.id);
+    expect(ids).toContain("greed");
+    // Listed but not yet openable, so the room can show what is coming.
+    expect(body.games.find((game) => game.id === "greed")?.open).toBe(true);
+    expect(body.games.find((game) => game.id === "blackjack")?.open).toBe(false);
+    // A machine is not a table, and says so.
+    expect(body.games.find((game) => game.id === "slots")?.shape).toBe("machine");
+  });
+
+  it("counts the tables people are actually at", async () => {
+    await start();
+    const port = (server as GreedServer).http.address() as AddressInfo;
+    const host = await client();
+    await create(host, "Ada");
+    await stateWhere(host, (state) => state.seats.length === 1);
+
+    const body = (await (await fetch(`http://localhost:${port.port}/api/room`)).json()) as {
+      games: Array<{ id: string; tables: number; seated: number }>;
+    };
+    const greed = body.games.find((game) => game.id === "greed");
+    expect(greed?.tables).toBe(1);
+    expect(greed?.seated).toBe(1);
+  });
+});

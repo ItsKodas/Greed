@@ -8,3 +8,5 @@
 export { MAX_NAME, MAX_SEATS, MIN_SEATS, TableError } from "./types.js";
 export type { BotSkill, Seat, SeatIdentity, TableStatus } from "./types.js";
 export { Seating } from "./seating.js";
+export { Catalogue } from "./catalogue.js";
+export type { GameListing } from "./catalogue.js";

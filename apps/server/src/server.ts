@@ -25,18 +25,41 @@ import {
   toggleSchema,
 } from "@greed/shared/schemas";
 import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
-import { decide, thinkingTime } from "./bot.js";
-import type { BotSkill } from "./bot.js";
-import { comboGateKeyFor } from "./gatekey.js";
+import { decide, thinkingTime } from "@greed/game-greed";
+import type { BotSkill } from "@greed/game-greed";
+import { comboGateKeyFor } from "@greed/game-greed";
 import { mountAuth, readAuthConfig } from "./auth.js";
 import type { AuthConfig } from "./auth.js";
 import { MemoryStore } from "@greed/economy";
 import type { Store } from "@greed/economy";
-import { Room, RoomError } from "./room.js";
+import { GREED, Room, RoomError } from "@greed/game-greed";
+import { Catalogue } from "@greed/core";
 import type { SeatIdentity } from "@greed/core";
 
-/** This game's id, as the economy files its figures under. */
-const GREED = "greed";
+/**
+ * What the room offers. One entry today; the point of the list is that adding
+ * the second one is an entry rather than a change to the server.
+ */
+const CATALOGUE = new Catalogue()
+  .add(GREED)
+  .add({
+    id: "blackjack",
+    name: "Blackjack",
+    blurb: "Beat the dealer to twenty-one.",
+    shape: "table",
+    minSeats: 1,
+    maxSeats: 6,
+    open: false,
+  })
+  .add({
+    id: "slots",
+    name: "Slots",
+    blurb: "One player, one lever.",
+    shape: "machine",
+    minSeats: 1,
+    maxSeats: 1,
+    open: false,
+  });
 
 
 export interface GreedServerOptions {
@@ -201,6 +224,30 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       }
       response.json(await store.claimDaily(id));
     })();
+  });
+
+  /**
+   * What is on offer, and how busy it is.
+   *
+   * The room picker needs to show a table with people at it differently from
+   * an empty one, and that is a question about tables rather than about any
+   * game — so it is answered here rather than by each game separately.
+   */
+  app.get("/api/room", (_request, response) => {
+    // Every open table is a Greed table today. When there are two games, a
+    // table will carry its game's id and this counts by that instead.
+    const live = [...rooms.values()];
+    response.json({
+      games: CATALOGUE.all().map((game) => {
+        const mine = game.id === GREED.id ? live : [];
+        return {
+          ...game,
+          tables: mine.length,
+          seated: mine.reduce((total, room) => total + room.seats.length, 0),
+          watching: mine.reduce((total, room) => total + room.view().watching, 0),
+        };
+      }),
+    });
   });
 
   app.get("/api/games", (request, response) => {
@@ -556,7 +603,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         },
         // Named here rather than in the store: a best turn is a maximum and a
         // count of farkles is a sum, and only the game knows which is which.
-        game: GREED,
+        game: GREED.id,
         max: { bestTurn: seat.score },
       });
     }
