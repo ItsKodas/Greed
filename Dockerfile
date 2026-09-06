@@ -10,9 +10,15 @@ FROM node:24-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+# Every workspace, because npm reads the lockfile against the whole set: a
+# manifest missing here is not a smaller install, it is a failed one.
+COPY packages/core/package.json packages/core/
+COPY packages/economy/package.json packages/economy/
 COPY packages/rules/package.json packages/rules/
 COPY packages/shared/package.json packages/shared/
 COPY packages/ui/package.json packages/ui/
+COPY games/greed/package.json games/greed/
+COPY games/blackjack/package.json games/blackjack/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 RUN npm ci
@@ -26,14 +32,23 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
+# Every workspace, because npm reads the lockfile against the whole set: a
+# manifest missing here is not a smaller install, it is a failed one.
+COPY packages/core/package.json packages/core/
+COPY packages/economy/package.json packages/economy/
 COPY packages/rules/package.json packages/rules/
 COPY packages/shared/package.json packages/shared/
 COPY packages/ui/package.json packages/ui/
+COPY games/greed/package.json games/greed/
+COPY games/blackjack/package.json games/blackjack/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev
 
 COPY packages/ packages/
+# The games too: the server runs their TypeScript, so their source has to be
+# in the image as surely as the server's own.
+COPY games/ games/
 COPY apps/server/ apps/server/
 COPY --from=build /app/apps/web/dist apps/web/dist
 
