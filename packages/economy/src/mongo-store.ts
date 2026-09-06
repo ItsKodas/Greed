@@ -7,7 +7,14 @@ import {
   STARTING_CHIPS,
   emptyStats,
 } from "./store.js";
-import type { DailyResult, GameRecord, Profile, ProfileStats, Store } from "./store.js";
+import type {
+  DailyResult,
+  GameRecord,
+  Profile,
+  ProfileStats,
+  StatBump,
+  Store,
+} from "./store.js";
 
 interface UserDoc {
   _id: mongoose.Types.ObjectId;
@@ -18,6 +25,7 @@ interface UserDoc {
   chips: number;
   lastDailyClaim: Date | null;
   stats: ProfileStats;
+  byGame: Record<string, Record<string, number>>;
 }
 
 const statsSchema = new mongoose.Schema<ProfileStats>(
@@ -25,9 +33,6 @@ const statsSchema = new mongoose.Schema<ProfileStats>(
     games: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
     chipsWon: { type: Number, default: 0 },
-    bestTurn: { type: Number, default: 0 },
-    farkles: { type: Number, default: 0 },
-    hotDice: { type: Number, default: 0 },
   },
   { _id: false },
 );
@@ -41,6 +46,9 @@ const userSchema = new mongoose.Schema<UserDoc>(
     chips: { type: Number, default: STARTING_CHIPS },
     lastDailyClaim: { type: Date, default: null },
     stats: { type: statsSchema, default: () => emptyStats() },
+    // Free-form on purpose: each game names its own figures and the store has
+    // no business knowing what they are called.
+    byGame: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
   },
   { timestamps: true },
 );
@@ -77,6 +85,7 @@ function toProfile(doc: UserDoc): Profile {
     chips: doc.chips,
     lastDailyClaim: doc.lastDailyClaim === null ? null : doc.lastDailyClaim.getTime(),
     stats: doc.stats,
+    byGame: doc.byGame ?? {},
   };
 }
 
@@ -90,6 +99,36 @@ export class MongoStore implements Store {
     this.games = connection.model<GameRecord>("Game", gameSchema);
   }
 
+  /**
+   * Moves Greed's figures out of the shared profile and under its own name.
+   *
+   * `bestTurn`, `farkles` and `hotDice` were three of the six things a player
+   * was, back when there was one game. Every profile written before that
+   * changed still has them there, so they are lifted across once. Runs on
+   * connect, touches only documents that still carry them, and is safe to run
+   * again — after the first pass the filter matches nothing.
+   */
+  private static async liftGreedFigures(connection: mongoose.Connection): Promise<void> {
+    const users = connection.collection("users");
+    const stale = { "stats.bestTurn": { $exists: true } };
+    if ((await users.countDocuments(stale, { limit: 1 })) === 0) {
+      return;
+    }
+    const result = await users.updateMany(stale, [
+      {
+        $set: {
+          "byGame.greed": {
+            bestTurn: { $ifNull: ["$stats.bestTurn", 0] },
+            farkles: { $ifNull: ["$stats.farkles", 0] },
+            hotDice: { $ifNull: ["$stats.hotDice", 0] },
+          },
+        },
+      },
+      { $unset: ["stats.bestTurn", "stats.farkles", "stats.hotDice"] },
+    ]);
+    console.log(`greed: moved dice figures on ${result.modifiedCount} profile(s)`);
+  }
+
   static async connect(url: string): Promise<MongoStore> {
     const connection = await mongoose
       .createConnection(url, {
@@ -101,6 +140,7 @@ export class MongoStore implements Store {
         serverSelectionTimeoutMS: 5_000,
       })
       .asPromise();
+    await MongoStore.liftGreedFigures(connection);
     return new MongoStore(connection);
   }
 
@@ -115,7 +155,12 @@ export class MongoStore implements Store {
       {
         $set: { name: input.name, avatar: input.avatar, accentColor: input.accentColor },
         // Only on insert, so signing in again never resets a balance.
-        $setOnInsert: { chips: STARTING_CHIPS, lastDailyClaim: null, stats: emptyStats() },
+        $setOnInsert: {
+          chips: STARTING_CHIPS,
+          lastDailyClaim: null,
+          stats: emptyStats(),
+          byGame: {},
+        },
       },
       { upsert: true, returnDocument: "after" },
     );
@@ -179,23 +224,29 @@ export class MongoStore implements Store {
     };
   }
 
-  async bumpStats(id: string, changes: Partial<ProfileStats>): Promise<void> {
+  async bumpStats(id: string, bump: StatBump): Promise<void> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return;
     }
     const inc: Record<string, number> = {};
     const max: Record<string, number> = {};
-    for (const [key, value] of Object.entries(changes)) {
-      if (typeof value !== "number") {
-        continue;
-      }
-      // A best is a high-water mark, not a running total.
-      if (key === "bestTurn") {
-        max["stats.bestTurn"] = value;
-      } else {
+
+    for (const [key, value] of Object.entries(bump.shared ?? {})) {
+      if (typeof value === "number") {
         inc[`stats.${key}`] = value;
       }
     }
+    if (bump.game !== undefined) {
+      // The game's own figures, filed under its name. Mongo creates the path
+      // on the way in, so a game's first figure needs no setup.
+      for (const [key, value] of Object.entries(bump.add ?? {})) {
+        inc[`byGame.${bump.game}.${key}`] = value;
+      }
+      for (const [key, value] of Object.entries(bump.max ?? {})) {
+        max[`byGame.${bump.game}.${key}`] = value;
+      }
+    }
+
     const update: Record<string, unknown> = {};
     if (Object.keys(inc).length > 0) {
       update["$inc"] = inc;
@@ -207,6 +258,7 @@ export class MongoStore implements Store {
       await this.users.updateOne({ _id: id }, update);
     }
   }
+
 
   async recordGame(record: GameRecord): Promise<void> {
     await this.games.create(record);

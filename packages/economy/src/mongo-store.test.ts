@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import mongoose from "mongoose";
 import { MongoStore } from "./mongo-store.js";
 import { DAILY_GRANT, STARTING_CHIPS } from "./store.js";
 
@@ -88,17 +89,21 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
   it("holds the best turn as a high-water mark under racing writes", async () => {
     const player = await newPlayer();
     await Promise.all(
-      [400, 1200, 800].map((bestTurn) => store.bumpStats(player.id, { bestTurn })),
+      [400, 1200, 800].map((bestTurn) =>
+        store.bumpStats(player.id, { game: "greed", max: { bestTurn } }),
+      ),
     );
-    expect((await store.get(player.id))?.stats.bestTurn).toBe(1200);
+    expect((await store.get(player.id))?.byGame["greed"]?.["bestTurn"]).toBe(1200);
   });
 
   it("adds up the counting stats rather than overwriting them", async () => {
     const player = await newPlayer();
     await Promise.all(
-      Array.from({ length: 6 }, () => store.bumpStats(player.id, { farkles: 1 })),
+      Array.from({ length: 6 }, () =>
+        store.bumpStats(player.id, { game: "greed", add: { farkles: 1 } }),
+      ),
     );
-    expect((await store.get(player.id))?.stats.farkles).toBe(6);
+    expect((await store.get(player.id))?.byGame["greed"]?.["farkles"]).toBe(6);
   });
 
   it("returns games newest first, no more than asked for", async () => {
@@ -132,5 +137,34 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
       endedAt: Date.now(),
     });
     expect(await store.recentGames(mine.id, 10)).toHaveLength(0);
+  });
+
+  it("lifts dice figures out of a profile written before the split", async () => {
+    /*
+     * A profile from when there was one game: bestTurn, farkles and hotDice
+     * sat in the shared stats, because everything was Greed. Connecting moves
+     * them under the game's own name, once, and leaves the shared totals be.
+     */
+    const legacy = {
+      discordId: `legacy-${Date.now()}`,
+      name: "Ada",
+      avatar: null,
+      accentColor: null,
+      chips: 7000,
+      lastDailyClaim: null,
+      stats: { games: 9, wins: 4, chipsWon: 1200, bestTurn: 3050, farkles: 62, hotDice: 11 },
+    };
+    const direct = await mongoose.createConnection(url as string).asPromise();
+    const inserted = await direct.collection("users").insertOne(legacy);
+    await direct.close();
+
+    // Connecting is what runs the migration.
+    const migrated = await MongoStore.connect(url as string);
+    const person = await migrated.get(inserted.insertedId.toString());
+    await migrated.close();
+
+    expect(person?.byGame["greed"]).toEqual({ bestTurn: 3050, farkles: 62, hotDice: 11 });
+    expect(person?.stats).toEqual({ games: 9, wins: 4, chipsWon: 1200 });
+    expect(person?.chips).toBe(7000);
   });
 });

@@ -9,6 +9,7 @@
     "serve": "tsx src/index.ts"
   },
   "dependencies": {
+    "@greed/economy": "*",
     "@greed/rules": "*",
     "@greed/shared": "*",
     "arctic": "^3.7.0",

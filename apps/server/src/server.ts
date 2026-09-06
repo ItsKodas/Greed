@@ -29,10 +29,14 @@ import type { BotSkill } from "./bot.js";
 import { comboGateKeyFor } from "./gatekey.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
 import type { AuthConfig } from "./auth.js";
-import { MemoryStore } from "./store.js";
-import type { Store } from "./store.js";
+import { MemoryStore } from "@greed/economy";
+import type { Store } from "@greed/economy";
 import { Room, RoomError } from "./room.js";
 import type { SeatIdentity } from "./room.js";
+
+/** This game's id, as the economy files its figures under. */
+const GREED = "greed";
+
 
 export interface GreedServerOptions {
   /** Injected so tests can roll deterministically. */
@@ -534,10 +538,15 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       }
       const won = room.winnerIds.includes(seat.id);
       await store.bumpStats(seat.userId, {
-        games: 1,
-        wins: won ? 1 : 0,
-        chipsWon: won ? share - room.buyIn : -room.buyIn,
-        bestTurn: seat.score,
+        shared: {
+          games: 1,
+          wins: won ? 1 : 0,
+          chipsWon: won ? share - room.buyIn : -room.buyIn,
+        },
+        // Named here rather than in the store: a best turn is a maximum and a
+        // count of farkles is a sum, and only the game knows which is which.
+        game: GREED,
+        max: { bestTurn: seat.score },
       });
     }
 

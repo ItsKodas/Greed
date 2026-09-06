@@ -1,6 +1,6 @@
 import { Discord, generateCodeVerifier, generateState, OAuth2RequestError } from "arctic";
 import type { Express, RequestHandler, Response as ExpressResponse } from "express";
-import type { Store } from "./store.js";
+import type { Store } from "@greed/economy";
 
 /**
  * Sign in with Discord.

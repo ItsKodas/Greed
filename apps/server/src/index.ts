@@ -1,9 +1,9 @@
 import type session from "express-session";
 import { readAuthConfig } from "./auth.js";
-import { MongoStore } from "./mongo-store.js";
+import { MongoStore } from "@greed/economy";
 import { createGreedServer } from "./server.js";
-import { MemoryStore } from "./store.js";
-import type { Store } from "./store.js";
+import { MemoryStore } from "@greed/economy";
+import type { Store } from "@greed/economy";
 
 /**
  * Port precedence: an explicit --port flag, then PORT, then 3001. The flag

@@ -6,34 +6,13 @@ import type { Socket } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 import { createGreedServer } from "./server.js";
 import type { GreedServer } from "./server.js";
-import {
-  DAILY_FLOOR,
-  DAILY_GRANT,
-  MemoryStore,
-  STARTING_CHIPS,
-  emptyStats,
-  judgeDaily,
-} from "./store.js";
-import type { Profile } from "./store.js";
+import { MemoryStore, STARTING_CHIPS } from "@greed/economy";
 
 type Client = Socket<ServerToClient, ClientToServer> & { latest?: RoomView };
 
 let server: GreedServer | null = null;
 const open: Client[] = [];
 
-function profile(overrides: Partial<Profile> = {}): Profile {
-  return {
-    id: "u1",
-    discordId: "d1",
-    name: "Ada",
-    avatar: null,
-    accentColor: null,
-    chips: STARTING_CHIPS,
-    lastDailyClaim: null,
-    stats: emptyStats(),
-    ...overrides,
-  };
-}
 
 afterEach(async () => {
   for (const socket of open.splice(0)) {
@@ -43,91 +22,6 @@ afterEach(async () => {
     await server.close();
     server = null;
   }
-});
-
-describe("the daily top-up rule", () => {
-  it("is refused while a player still has chips", () => {
-    const verdict = judgeDaily(profile({ chips: DAILY_FLOOR }), Date.now());
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toBe("not-needed");
-  });
-
-  it("is granted to someone who has run dry", () => {
-    const verdict = judgeDaily(profile({ chips: 50 }), Date.now());
-    expect(verdict.ok).toBe(true);
-    expect(verdict.granted).toBe(DAILY_GRANT);
-  });
-
-  it("cannot be claimed twice in a day", () => {
-    const now = Date.now();
-    const verdict = judgeDaily(profile({ chips: 50, lastDailyClaim: now - 1000 }), now);
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toBe("too-soon");
-    expect(verdict.nextAt).toBeGreaterThan(now);
-  });
-
-  it("comes round again after the interval", () => {
-    const now = Date.now();
-    const longAgo = now - 25 * 60 * 60 * 1000;
-    expect(judgeDaily(profile({ chips: 50, lastDailyClaim: longAgo }), now).ok).toBe(true);
-  });
-});
-
-describe("the memory store", () => {
-  it("starts a new profile with the opening stack", async () => {
-    const store = new MemoryStore();
-    const person = await store.upsertDiscordUser({
-      discordId: "d1",
-      name: "Ada",
-      avatar: null,
-      accentColor: null,
-    });
-    expect(person.chips).toBe(STARTING_CHIPS);
-  });
-
-  it("does not reset a balance when the same player signs in again", async () => {
-    const store = new MemoryStore();
-    const first = await store.upsertDiscordUser({
-      discordId: "d1",
-      name: "Ada",
-      avatar: null,
-      accentColor: null,
-    });
-    await store.adjustChips(first.id, -4000);
-    const again = await store.upsertDiscordUser({
-      discordId: "d1",
-      name: "Ada Renamed",
-      avatar: null,
-      accentColor: null,
-    });
-    expect(again.chips).toBe(STARTING_CHIPS - 4000);
-    expect(again.name).toBe("Ada Renamed");
-  });
-
-  it("refuses to overdraw rather than going negative", async () => {
-    const store = new MemoryStore();
-    const person = await store.upsertDiscordUser({
-      discordId: "d1",
-      name: "Ada",
-      avatar: null,
-      accentColor: null,
-    });
-    expect(await store.adjustChips(person.id, -(STARTING_CHIPS + 1))).toBe(false);
-    expect((await store.get(person.id))?.chips).toBe(STARTING_CHIPS);
-  });
-
-  it("keeps a best turn as a high-water mark, not a total", async () => {
-    const store = new MemoryStore();
-    const person = await store.upsertDiscordUser({
-      discordId: "d1",
-      name: "Ada",
-      avatar: null,
-      accentColor: null,
-    });
-    await store.bumpStats(person.id, { bestTurn: 800 });
-    await store.bumpStats(person.id, { bestTurn: 400 });
-    expect((await store.get(person.id))?.stats.bestTurn).toBe(800);
-  });
 });
 
 describe("playing for chips", () => {

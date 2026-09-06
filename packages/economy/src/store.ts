@@ -16,15 +16,41 @@ export interface Profile {
   chips: number;
   lastDailyClaim: number | null;
   stats: ProfileStats;
+  /**
+   * Per-game figures, under the id of the game that keeps them.
+   *
+   * Deliberately untyped beyond "numbers by name". `bestTurn`, `farkles` and
+   * `hotDice` used to sit in the shared profile, where they were three of the
+   * six things a player was — and blackjack has no answer for any of them. A
+   * game names its own figures; nothing here knows what they mean.
+   */
+  byGame: Record<string, Record<string, number>>;
 }
 
+/** What every game can answer about a player, whatever the game is. */
 export interface ProfileStats {
   games: number;
   wins: number;
   chipsWon: number;
-  bestTurn: number;
-  farkles: number;
-  hotDice: number;
+}
+
+/**
+ * One update to a player's figures.
+ *
+ * The caller says which of its own figures are running totals and which are
+ * high-water marks, because only the game knows: a best turn is a maximum, a
+ * count of farkles is a sum, and the store cannot tell them apart by name
+ * without knowing the game — which is exactly what it must not know.
+ */
+export interface StatBump {
+  /** Totals every game shares. */
+  shared?: Partial<ProfileStats>;
+  /** The game these figures belong to. Required if either map is given. */
+  game?: string;
+  /** Added to whatever is there. */
+  add?: Record<string, number>;
+  /** Kept only if larger than what is there. */
+  max?: Record<string, number>;
 }
 
 export interface GameRecord {
@@ -63,7 +89,7 @@ export interface Store {
    */
   adjustChips(id: string, delta: number): Promise<boolean>;
   claimDaily(id: string): Promise<DailyResult>;
-  bumpStats(id: string, changes: Partial<ProfileStats>): Promise<void>;
+  bumpStats(id: string, bump: StatBump): Promise<void>;
   recordGame(record: GameRecord): Promise<void>;
   recentGames(userId: string, limit: number): Promise<GameRecord[]>;
   close(): Promise<void>;
@@ -77,7 +103,7 @@ export const DAILY_GRANT = 5_000;
 export const DAILY_INTERVAL_MS = 20 * 60 * 60 * 1000;
 
 export function emptyStats(): ProfileStats {
-  return { games: 0, wins: 0, chipsWon: 0, bestTurn: 0, farkles: 0, hotDice: 0 };
+  return { games: 0, wins: 0, chipsWon: 0 };
 }
 
 /**
@@ -130,6 +156,7 @@ export class MemoryStore implements Store {
       chips: STARTING_CHIPS,
       lastDailyClaim: null,
       stats: emptyStats(),
+      byGame: {},
     };
     this.people.set(profile.id, profile);
     return profile;
@@ -164,17 +191,24 @@ export class MemoryStore implements Store {
     return verdict;
   }
 
-  async bumpStats(id: string, changes: Partial<ProfileStats>): Promise<void> {
+  async bumpStats(id: string, bump: StatBump): Promise<void> {
     const profile = this.people.get(id);
     if (profile === undefined) {
       return;
     }
-    for (const [key, value] of Object.entries(changes) as Array<[keyof ProfileStats, number]>) {
-      if (key === "bestTurn") {
-        profile.stats.bestTurn = Math.max(profile.stats.bestTurn, value);
-      } else {
-        profile.stats[key] += value;
-      }
+    for (const [key, value] of Object.entries(bump.shared ?? {})) {
+      profile.stats[key as keyof ProfileStats] += value;
+    }
+    if (bump.game === undefined) {
+      return;
+    }
+    profile.byGame[bump.game] ??= {};
+    const figures = profile.byGame[bump.game];
+    for (const [key, value] of Object.entries(bump.add ?? {})) {
+      figures[key] = (figures[key] ?? 0) + value;
+    }
+    for (const [key, value] of Object.entries(bump.max ?? {})) {
+      figures[key] = Math.max(figures[key] ?? 0, value);
     }
   }
 
