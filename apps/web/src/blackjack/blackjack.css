@@ -49,7 +49,6 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--gr-text-lg);
   color: var(--gr-color-ink-lit);
-  margin-left: auto;
 }
 
 /* --------------------------------------------------------------- the seats */
@@ -133,7 +132,11 @@
 
 .bj__chips {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Four across rather than two: a chip is a thing you tap, not a panel. At
+     two per row they filled the side of the page and outshouted the felt. */
+  /* minmax(0,…) rather than 1fr: a plain 1fr will not shrink a track below its
+     content, so the widest chip pushed the row out past the panel it sits in. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--gr-space-2);
 }
 
@@ -144,13 +147,14 @@
  */
 .bj__chip {
   aspect-ratio: 1;
+  padding: 0;
   border-radius: 50%;
   border: 2px dashed color-mix(in srgb, var(--gr-color-chip) 60%, transparent);
   background: radial-gradient(circle at 50% 34%, var(--gr-color-smoke-lit), var(--gr-color-shadow));
   color: var(--gr-color-chip-hi);
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
-  font-size: var(--gr-text-sm);
+  font-size: var(--gr-text-xs);
   cursor: pointer;
   box-shadow: var(--gr-lift-low);
 }
@@ -193,6 +197,12 @@
   gap: 3px;
   min-height: 74px;
   align-items: flex-start;
+}
+
+/* Nothing dealt yet, so nothing to hold room for — a waiting seat would
+   otherwise be a name above an empty box the size of a hand. */
+.hand:empty {
+  min-height: 0;
 }
 
 .card {
