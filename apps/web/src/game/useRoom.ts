@@ -70,6 +70,13 @@ export interface RoomActions {
 
 export interface RoomHook {
   room: RoomView | null;
+  /**
+   * Which dice this player has picked up, when that is ahead of the server.
+   * Null once the server has caught up and its own answer should be shown.
+   */
+  heldLocally: boolean[] | null;
+  /** A roll has been asked for and the dice it produces have not arrived. */
+  rollingLocally: boolean;
   chat: ChatMessage[];
   seatId: string | null;
   error: string | null;
@@ -87,6 +94,26 @@ export function useRoom(): RoomHook {
   const [connected, setConnected] = useState(false);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  /*
+   * What this player has clicked but the server has not answered for yet.
+   *
+   * Every reply arrives a full round trip after the click that caused it, so a
+   * table that waits for one before moving a die feels broken over any real
+   * distance. The dice move at once and the server confirms behind them.
+   *
+   * `pendingToggles` is what makes that safe. While any click is unanswered,
+   * incoming state is a picture of the past — adopting it would undo clicks
+   * the player has already made and seen. So the local picture stands until
+   * the count reaches zero, at which point the server has seen everything and
+   * its answer is the better one.
+   */
+  const [heldLocally, setHeldLocally] = useState<boolean[] | null>(null);
+  const pendingToggles = useRef(0);
+  /** Set on click, cleared when the roll it belongs to arrives. */
+  const [rollingLocally, setRollingLocally] = useState(false);
+  /* Read by callbacks that must not be rebuilt on every state broadcast. */
+  const roomRef = useRef<RoomView | null>(null);
+  roomRef.current = room;
 
   useEffect(() => {
     // No `transports` list on purpose. Naming one makes it the only one tried:
@@ -113,7 +140,16 @@ export function useRoom(): RoomHook {
       });
     });
     socket.on("disconnect", () => setConnected(false));
-    socket.on("room:state", (state) => setRoom(state));
+    socket.on("room:state", (state) => {
+      setRoom(state);
+      // A roll of our own has landed, so the local stand-in has done its job.
+      if (state.turn !== null) {
+        setRollingLocally(false);
+      }
+      if (pendingToggles.current === 0) {
+        setHeldLocally(null);
+      }
+    });
     socket.on("room:error", (message) => setError(message));
     // Kept client-side rather than in room state: the table broadcasts on
     // every roll, and shipping the backlog each time would be waste.
@@ -193,9 +229,45 @@ export function useRoom(): RoomHook {
     [],
   );
   const start = useCallback(() => socketRef.current?.emit("game:start"), []);
-  const roll = useCallback(() => socketRef.current?.emit("game:roll"), []);
+
+  const roll = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket === null) {
+      return;
+    }
+    // The tumble starts on the press and runs until the dice arrive, so the
+    // wait for the server is spent watching dice roll rather than watching
+    // nothing happen. What they land on is still the server's to say.
+    setRollingLocally(true);
+    setHeldLocally(null);
+    socket.emit("game:roll");
+  }, []);
+
   const bank = useCallback(() => socketRef.current?.emit("game:bank"), []);
-  const toggle = useCallback((index: number) => socketRef.current?.emit("game:toggle", { index }), []);
+
+  const toggle = useCallback((index: number) => {
+    const socket = socketRef.current;
+    if (socket === null) {
+      return;
+    }
+    setHeldLocally((current) => {
+      const base = current ?? roomRef.current?.turn?.held ?? null;
+      if (base === null) {
+        return current;
+      }
+      const next = [...base];
+      next[index] = next[index] !== true;
+      return next;
+    });
+    pendingToggles.current += 1;
+    socket.emit("game:toggle", { index }, () => {
+      pendingToggles.current -= 1;
+      if (pendingToggles.current === 0) {
+        // The server has now seen every click; its picture is the true one.
+        setHeldLocally(null);
+      }
+    });
+  }, []);
 
   const leave = useCallback(() => {
     writeSeat(null);
@@ -210,6 +282,8 @@ export function useRoom(): RoomHook {
 
   return {
     room,
+    heldLocally,
+    rollingLocally,
     chat,
     seatId,
     error,

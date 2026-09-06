@@ -92,7 +92,14 @@ export interface ClientToServer {
   "lobby:removeSeat": (payload: { seatId: string }) => void;
   "game:start": () => void;
   "game:roll": () => void;
-  "game:toggle": (payload: { index: number }) => void;
+  /**
+   * The ack carries nothing; it only says the server has dealt with this
+   * toggle. The client shows the die moving the instant it is clicked, and
+   * needs to know when the state coming back has caught up with the clicks
+   * already made — otherwise a second click is undone by the answer to the
+   * first.
+   */
+  "game:toggle": (payload: { index: number }, ack?: () => void) => void;
   "game:bank": () => void;
   "chat:send": (payload: { text: string }) => void;
 }

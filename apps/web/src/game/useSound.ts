@@ -1,6 +1,6 @@
 import type { RoomView } from "@greed/shared";
 import { useEffect, useRef } from "react";
-import { play, unlock } from "./audio.js";
+import { play, preload, unlock } from "./audio.js";
 import { ROLL_SETTLE_MS } from "./useRollAnimation.js";
 
 /**
@@ -27,7 +27,13 @@ export function isScoringStraight(dice: readonly number[], room: RoomView): bool
 export function useSound(room: RoomView | null, seatId: string | null): void {
   const previous = useRef<RoomView | null>(null);
 
-  // Browsers will not start audio until the user has touched the page.
+  // Browsers will not start audio until the user has touched the page — but
+  // nothing stops us fetching the files before then, which is most of the wait
+  // when the server is far away.
+  useEffect(() => {
+    void preload();
+  }, []);
+
   useEffect(() => {
     const wake = () => unlock();
     window.addEventListener("pointerdown", wake, { once: true });
@@ -47,6 +53,15 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
 
     const turn = room.turn;
     const was = before?.turn ?? null;
+    /*
+     * Whether the change we are looking at is this player's own doing.
+     *
+     * Their picks and their rolls are sounded the moment they click, because
+     * waiting for the state to come back is the very delay this avoids. Only
+     * one of the two may speak, so the state-driven cue stands aside for the
+     * seat that is playing and still speaks for everyone else at the table.
+     */
+    const ours = turn !== null && turn.seatId === seatId;
 
     if (before !== null && before.status !== "over" && room.status === "over") {
       play("win");
@@ -60,7 +75,9 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
     // A new throw. Keyed on the counter, not the faces, so rolling the same
     // thing twice running still makes a noise.
     if (turn.rollSeq > 0 && turn.rollSeq !== (was?.rollSeq ?? 0) && turn.dice.length > 0) {
-      play("shake");
+      if (!ours) {
+        play("shake");
+      }
       window.setTimeout(() => play("land"), ROLL_SETTLE_MS);
       if (turn.phase === "farkled") {
         window.setTimeout(() => play("farkle"), ROLL_SETTLE_MS + 260);
@@ -83,8 +100,8 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
       return;
     }
 
-    // Dice picked up or put back down.
-    if (was !== null && was.dice.length === turn.dice.length) {
+    // Dice picked up or put back down — someone else's; ours already sounded.
+    if (!ours && was !== null && was.dice.length === turn.dice.length) {
       const held = turn.held.filter(Boolean).length;
       const heldBefore = was.held.filter(Boolean).length;
       if (held > heldBefore) {

@@ -35,6 +35,17 @@ let samples: Manifest = {};
 let ready = false;
 /** Files already fetched and decoded, by URL. */
 const decoded = new Map<string, AudioBuffer>();
+/**
+ * Files fetched but not yet decoded.
+ *
+ * Fetching needs nothing from the browser; decoding needs an AudioContext, and
+ * a browser will not give us one until the player has touched the page. So the
+ * two are split: bytes are pulled as soon as the page loads, and turned into
+ * buffers the moment we are allowed to. On a server across an ocean that is
+ * the difference between a die landing silently and landing with a knock.
+ */
+const fetched = new Map<string, ArrayBuffer>();
+let preloading: Promise<void> | null = null;
 
 function readVolume(): number {
   try {
@@ -83,7 +94,9 @@ export function unlock(): void {
     master = context.createGain();
     master.gain.value = volume;
     master.connect(context.destination);
-    void loadManifest();
+    // Anything already downloaded can become playable right now; anything not
+    // yet asked for gets asked for here.
+    void preload().then(decodeWaiting);
   } catch {
     context = null;
   }
@@ -102,6 +115,65 @@ async function loadManifest(): Promise<void> {
   }
 }
 
+/** Every sample the manifest names, in one flat list. */
+function everySample(): string[] {
+  return Object.values(samples).flatMap((list) => list ?? []);
+}
+
+/**
+ * Pulls every sample down ahead of time.
+ *
+ * Worth doing eagerly because the whole set is a few hundred kilobytes, and
+ * because the cost of not doing it is paid per file rather than once: a cue
+ * picks a random file from its group, so without this the first roll, the
+ * second, and the third each stall on a different download.
+ *
+ * Safe to call more than once; safe to call before any sound is wanted.
+ */
+export function preload(): Promise<void> {
+  preloading ??= (async () => {
+    if (!ready) {
+      await loadManifest();
+    }
+    await Promise.all(
+      everySample().map(async (url) => {
+        if (fetched.has(url) || decoded.has(url)) {
+          return;
+        }
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            fetched.set(url, await response.arrayBuffer());
+          }
+        } catch {
+          // A sample that will not download is not worth failing over; the
+          // cue falls back to its synthesised voice.
+        }
+      }),
+    );
+    // If the player has already touched the page, there is a context waiting.
+    await decodeWaiting();
+  })();
+  return preloading;
+}
+
+/** Turns whatever has been fetched into buffers, once there is a context. */
+async function decodeWaiting(): Promise<void> {
+  if (context === null) {
+    return;
+  }
+  for (const [url, bytes] of [...fetched]) {
+    try {
+      // decodeAudioData detaches the buffer, so hand it a copy: a failed
+      // decode must not leave an unusable husk behind in the cache.
+      decoded.set(url, await context.decodeAudioData(bytes.slice(0)));
+      fetched.delete(url);
+    } catch {
+      fetched.delete(url);
+    }
+  }
+}
+
 async function buffer(url: string): Promise<AudioBuffer | null> {
   const cached = decoded.get(url);
   if (cached !== undefined) {
@@ -109,6 +181,20 @@ async function buffer(url: string): Promise<AudioBuffer | null> {
   }
   if (context === null) {
     return null;
+  }
+  // Downloaded already but not yet decoded — the common case for a cue that
+  // fires in the same moment the player first touches the page.
+  const waiting = fetched.get(url);
+  if (waiting !== undefined) {
+    try {
+      const audio = await context.decodeAudioData(waiting.slice(0));
+      fetched.delete(url);
+      decoded.set(url, audio);
+      return audio;
+    } catch {
+      fetched.delete(url);
+      return null;
+    }
   }
   try {
     const response = await fetch(url);

@@ -744,12 +744,16 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       guard(socket.id, (room, seatId) => room.doRoll(seatId));
     });
 
-    socket.on("game:toggle", (payload) => {
+    socket.on("game:toggle", (payload, ack) => {
       const parsed = toggleSchema.safeParse(payload);
       if (!parsed.success) {
+        ack?.();
         return;
       }
       guard(socket.id, (room, seatId) => room.toggle(seatId, parsed.data.index));
+      // Always acknowledged, refused or not: the client is counting these to
+      // know when its own optimistic picture can be dropped.
+      ack?.();
     });
 
     socket.on("game:bank", () => {

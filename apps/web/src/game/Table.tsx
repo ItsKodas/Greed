@@ -1,3 +1,5 @@
+import { scoreSelection } from "@greed/rules";
+import { play } from "./audio.js";
 import type { RoomView } from "@greed/shared";
 import { SeatAvatar } from "./Avatar.js";
 import { useEffect, useState } from "react";
@@ -33,19 +35,61 @@ interface TableProps {
   room: RoomView;
   seatId: string;
   actions: RoomActions;
+  /** This player's picks, while they are ahead of the server. */
+  heldLocally: boolean[] | null;
+  /** A roll asked for whose dice have not come back yet. */
+  rollingLocally: boolean;
 }
 
-export function Table({ room, seatId, actions }: TableProps) {
+export function Table({
+  room,
+  seatId,
+  actions,
+  heldLocally,
+  rollingLocally,
+}: TableProps) {
   const turn = room.turn;
   const over = room.status === "over";
   const yours = turn !== null && turn.seatId === seatId && !over;
   const active = room.seats.find((seat) => seat.id === turn?.seatId);
 
-  const canAct = yours && turn.phase === "selecting" && turn.selectionValid;
+  /*
+   * Which dice are picked up, and what that is worth.
+   *
+   * Both are the server's to decide, and both are shown from this player's own
+   * clicks until the server's answer arrives — a round trip later. The score is
+   * worked out here with the very same function the server runs, from the same
+   * rules the room was dealt with, so what is shown early is not a guess and
+   * cannot disagree with what follows.
+   */
+  const held = heldLocally ?? turn?.held ?? [];
+  const ahead = heldLocally !== null && turn !== null;
+  const localScore = ahead
+    ? scoreSelection(
+        turn.dice.filter((_, index) => held[index] === true),
+        room.ruleset,
+      )
+    : null;
+  const selection = localScore?.points ?? turn?.selection ?? 0;
+  const selectionValid = localScore?.valid ?? turn?.selectionValid ?? false;
+  const keptCount = held.filter(Boolean).length;
+  const nextRollCount = ahead
+    ? // Clearing the table earns all six back; that is the hot-dice rule and it
+      // is worth showing without waiting to be told.
+      turn.dice.length - keptCount === 0
+      ? 6
+      : turn.dice.length - keptCount
+    : (turn?.nextRollCount ?? 0);
+
+  const canAct = yours && turn.phase === "selecting" && selectionValid;
   const canRollFresh = yours && turn.phase === "awaiting_roll";
-  const total = turn === null ? 0 : turn.kept + turn.selection;
+  const total = turn === null ? 0 : turn.kept + selection;
   const left = useCountdown(over ? null : (turn?.endsAt ?? null));
-  const { rolling, faces } = useRollAnimation(turn?.dice ?? [], turn?.rollSeq ?? 0);
+  const settled = useRollAnimation(turn?.dice ?? [], turn?.rollSeq ?? 0);
+  // Tumbling covers both the animation itself and the wait for the dice, so a
+  // press is answered immediately even when the answer is still in flight.
+  const rolling = settled.rolling || rollingLocally;
+  const faces = settled.faces;
 
   // The rarest thing in the game — 720 of the 46,656 six-dice rolls — so it
   // gets a moment of its own once the dice have settled.
@@ -113,13 +157,19 @@ export function Table({ room, seatId, actions }: TableProps) {
                   key={`slot-${index}`}
                   face={(rolling ? faces[index] : face) ?? face}
                   skin={room.ruleset.skin}
-                  held={!rolling && turn.held[index] === true}
+                  held={!rolling && held[index] === true}
                   dead={!rolling && turn.dead[index] === true}
                   rolling={rolling}
                   index={index}
                   celebrating={celebrating}
                   interactive={!rolling && yours && turn.phase === "selecting"}
-                  onClick={() => actions.toggle(index)}
+                  onClick={() => {
+                    // Sounded here rather than off the state that comes back,
+                    // so a die answers the finger that moved it. useSound
+                    // leaves our own seat's picks alone for this reason.
+                    play(held[index] === true ? "drop" : "pick");
+                    actions.toggle(index);
+                  }}
                 />
               ))}
             </div>
@@ -133,9 +183,9 @@ export function Table({ room, seatId, actions }: TableProps) {
                 : turn?.phase === "farkled"
               ? "Farkle — nothing scores. The turn is lost."
               : yours && turn?.phase === "selecting"
-                ? turn.selectionValid
-                  ? `Worth ${fmt(turn.selection)}. Roll ${turn.nextRollCount} more, or bank ${fmt(total)}.`
-                  : turn.held.some(Boolean)
+                ? selectionValid
+                  ? `Worth ${fmt(selection)}. Roll ${nextRollCount} more, or bank ${fmt(total)}.`
+                  : held.some(Boolean)
                     ? "That set has a die that scores nothing."
                     : "Click the dice you want to keep."
                 : ""}
@@ -153,7 +203,7 @@ export function Table({ room, seatId, actions }: TableProps) {
           </div>
           <div className="stat">
             <span>Selected</span>
-            <b>{fmt(turn?.selection ?? 0)}</b>
+            <b>{fmt(selection)}</b>
           </div>
           <div className="stat">
             <span>If you bank</span>
@@ -181,7 +231,10 @@ export function Table({ room, seatId, actions }: TableProps) {
               type="button"
               className="btn btn--wide"
               disabled={!(canRollFresh || canAct)}
-              onClick={actions.roll}
+              onClick={() => {
+                play("shake");
+                actions.roll();
+              }}
             >
               {canRollFresh ? "Roll 6" : `Roll ${turn?.nextRollCount ?? 6}`}
             </button>
