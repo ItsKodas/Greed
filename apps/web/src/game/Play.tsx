@@ -70,7 +70,10 @@ export function Play() {
             <Sign />
           </Link>
         </h1>
-        <span className="play__game">Greed</span>
+        {/* GRE-E-D, with the second E lit — the mark the game opened with. */}
+        <span className="play__game">
+          GRE<em>E</em>D
+        </span>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
         {room !== null ? <LeaveButton room={room} onLeave={actions.leave} /> : null}
         <AccountBadge account={account} />

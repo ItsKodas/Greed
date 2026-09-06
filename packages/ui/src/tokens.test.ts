@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { color, font } from "./tokens.js";
@@ -175,6 +176,21 @@ describe("font", () => {
   });
 });
 
+/** Every game's palette override, found rather than listed. */
+function gameThemes(): Array<{ game: string; css: string }> {
+  const games = fileURLToPath(new URL("../../../games", import.meta.url));
+  const found: Array<{ game: string; css: string }> = [];
+  for (const game of readdirSync(games)) {
+    const theme = join(games, game, "src", "theme.css");
+    try {
+      found.push({ game, css: readFileSync(theme, "utf8") });
+    } catch {
+      // A game is allowed to want the building's colours exactly as they are.
+    }
+  }
+  return found;
+}
+
 describe("references", () => {
   it("never mentions a token it does not declare", () => {
     /*
@@ -187,6 +203,27 @@ describe("references", () => {
     const referenced = [...css.matchAll(/var\((--gr-[a-z0-9-]+)/g)].map((m) => m[1]);
     for (const name of referenced) {
       expect(declared, `tokens.css uses ${name} without declaring it`).toContain(name);
+    }
+  });
+
+  it("lets a game repaint only tokens that exist", () => {
+    /*
+     * A game's theme is nothing but overrides, so a misspelt name here is the
+     * quietest possible bug: the declaration is simply never read by anything,
+     * the room keeps the building's colour, and there is no error anywhere.
+     * The same failure the check above exists to catch, one file further out.
+     */
+    const declared = new Set([...css.matchAll(/(--gr-[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    const themes = gameThemes();
+    // A game with no theme is fine; no themes at all means this stopped looking.
+    expect(themes.length).toBeGreaterThan(0);
+
+    for (const { game, css: theme } of themes) {
+      const set = [...theme.matchAll(/(--gr-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
+      expect(set.length, `${game} declares a theme with nothing in it`).toBeGreaterThan(0);
+      for (const name of set) {
+        expect(declared, `${game} sets ${name}, which is not a token`).toContain(name);
+      }
     }
   });
 });

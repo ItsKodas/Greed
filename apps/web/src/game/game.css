@@ -42,8 +42,8 @@
   color: var(--gr-color-neon-core);
   transform: rotate(-2.4deg);
   text-shadow:
-    0 0 2px #fff,
-    0 0 5px #fff,
+    0 0 2px var(--gr-color-neon-core),
+    0 0 5px var(--gr-color-neon-core),
     0 0 10px var(--gr-color-neon),
     0 0 20px var(--gr-color-neon),
     0 0 40px var(--gr-color-neon-deep);
@@ -66,10 +66,20 @@
 /* Which game you are in, said plainly beside the sign for the building. */
 .play__game {
   font-family: var(--gr-font-display);
-  font-size: var(--gr-text-lg);
+  font-size: var(--gr-text-xl);
   color: var(--gr-color-ink);
   letter-spacing: 0.02em;
   flex: 1;
+}
+
+/*
+ * One letter picked out in the room's own colour. Greed has been written
+ * GRE-E-D since the first screen and it is the game's whole mark; a game that
+ * wants nothing of the sort simply writes its name without an em.
+ */
+.play__game em {
+  font-style: normal;
+  color: var(--gr-color-neon);
 }
 
 .play__code {
@@ -319,7 +329,7 @@
 }
 
 .seat--active {
-  background: rgb(46 123 255 / 0.13);
+  background: color-mix(in srgb, var(--gr-color-neon) 13%, transparent);
   border-color: var(--gr-color-neon);
   border-left-color: var(--gr-color-neon);
 }
@@ -333,7 +343,7 @@
 
 .seat--won {
   border-left-color: var(--gr-color-neon-hi);
-  background: rgb(46 123 255 / 0.2);
+  background: color-mix(in srgb, var(--gr-color-neon) 20%, transparent);
 }
 
 .avatar__image {
@@ -599,7 +609,7 @@
 .btn--ghost:hover:not(:disabled) {
   border-color: var(--gr-color-neon);
   color: var(--gr-color-neon-hi);
-  background: rgb(46 123 255 / 0.08);
+  background: color-mix(in srgb, var(--gr-color-neon) 8%, transparent);
 }
 
 .btn--wide {
@@ -676,7 +686,7 @@
 
 .variant--on {
   border-color: var(--gr-color-neon);
-  background: rgb(46 123 255 / 0.13);
+  background: color-mix(in srgb, var(--gr-color-neon) 13%, transparent);
 }
 
 .variant:focus-visible {
@@ -1108,7 +1118,7 @@
 .rules__choice--on,
 .rules__toggle--on {
   border-color: var(--gr-color-neon);
-  background: rgb(46 123 255 / 0.16);
+  background: color-mix(in srgb, var(--gr-color-neon) 16%, transparent);
   color: var(--gr-color-ink);
 }
 

@@ -3,12 +3,21 @@
  *
  * A game owns its materials; the building owns its interface. So this file
  * repaints the surfaces you play on — walnut, leather, worn baize, and the
- * bone of the dice — and touches nothing that carries meaning.
+ * bone of the dice — and changes no colour's meaning, only what it is made of.
  *
- * Left alone deliberately: neon, because the sign and the controls belong to
- * the building and should look the same in every room; chip, because a player
- * learns once that gold is their money and it has to hold at every table;
- * good and bad, because up is up.
+ * The tube changes colour with the room. What glowing *means* does not: a lit
+ * edge is still something happening now, in whatever colour the room is lit. The building's sign is blue and every
+ * room used to borrow it; Greed lights it in the brass it was drawn in
+ * originally, which is the colour this game has had since its first screen.
+ *
+ * Left alone deliberately: chip, because a player learns once that gold is
+ * their money and it has to hold at every table; good and bad, because up is
+ * up wherever it happened.
+ *
+ * The cost of lighting this room brass is that brass and chip gold are
+ * neighbours — which is the exact thing the move to a blue sign was made to
+ * avoid. It is survivable here because money is always a figure and never a
+ * border, a label or a lit edge, so the two never sit in the same role.
  */
 :root[data-game="greed"] {
   --gr-color-night: #241811;
@@ -20,6 +29,18 @@
   --gr-color-felt: #16241c;
   --gr-color-felt-lit: #1e3227;
   --gr-color-felt-deep: #101a14;
+
+  /*
+   * The original brass, to the digit. The core is warm rather than white
+   * because the gas burning inside an orange tube is not white, and the deep
+   * wash is pushed further orange so the glow thrown on the wall is not a
+   * second gold.
+   */
+  --gr-color-neon-core: #fff3e0;
+  --gr-color-neon-hi: #e8c168;
+  --gr-color-neon: #c08a2e;
+  --gr-color-neon-dim: #7a5a21;
+  --gr-color-neon-deep: #a85410;
 
   /*
    * Warm, but deliberately not golden. Bone at full cream sits close enough to

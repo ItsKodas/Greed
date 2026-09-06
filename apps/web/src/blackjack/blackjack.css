@@ -76,7 +76,7 @@
 .bj__seat--turn {
   border-color: var(--gr-color-neon);
   border-left-color: var(--gr-color-neon);
-  background: rgb(46 123 255 / 0.13);
+  background: color-mix(in srgb, var(--gr-color-neon) 13%, transparent);
 }
 
 .bj__seat--waiting,
@@ -190,9 +190,17 @@
   color: var(--gr-color-chip);
 }
 
-/* --------------------------------------------------------------- the cards */
+/* ---------------------------------------------------------------- the cards */
 
-.hand {
+/*
+ * Prefixed, unlike everything else in this file.
+ *
+ * `.card` and `.hand` are the two most obvious names a card game could pick,
+ * and they were already taken: Greed's scorecard is a `.card`. Every page
+ * loads every game's stylesheet, so the collision silently dressed Greed's
+ * points table as a playing card. A game's own classes get its own prefix.
+ */
+.bj-hand {
   display: flex;
   gap: 3px;
   min-height: 74px;
@@ -201,11 +209,11 @@
 
 /* Nothing dealt yet, so nothing to hold room for — a waiting seat would
    otherwise be a name above an empty box the size of a hand. */
-.hand:empty {
+.bj-hand:empty {
   min-height: 0;
 }
 
-.card {
+.bj-card {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
@@ -223,21 +231,21 @@
   line-height: 1;
 }
 
-.card--red {
+.bj-card--red {
   color: #b0202a;
 }
 
-.card__rank {
+.bj-card__rank {
   font-size: var(--gr-text-lg);
 }
 
-.card__pip {
+.bj-card__pip {
   font-size: var(--gr-text-base);
 }
 
 /* The back of a card nobody has been told the face of. Patterned rather than
    plain, so it is obviously a card and obviously not readable. */
-.card--down {
+.bj-card--down {
   background:
     repeating-linear-gradient(
       45deg,

@@ -99,6 +99,13 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
   /** The pot to the winners, split evenly, remainder to the earliest seated. */
   async settle(room, deps) {
     const winners = room.seats.filter((seat) => room.winnerIds.includes(seat.id));
+    /*
+     * A game with nothing staked is a friendly, and a friendly goes on nobody's
+     * record. Counting it made a win rate mean two different things at once —
+     * six wins from nine, most of them practice — and left a history of rows
+     * that all read +0. It is still a real game; it is just not a result.
+     */
+    const forChips = room.buyIn > 0;
     const share = winners.length > 0 ? Math.floor(room.pot / winners.length) : 0;
     const remainder = room.pot - share * winners.length;
 
@@ -114,7 +121,7 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
 
     for (const seat of room.seats) {
       // Somebody who arrived mid-game paid no stake and took no turn.
-      if (seat.userId === null || seat.waiting) {
+      if (seat.userId === null || seat.waiting || !forChips) {
         continue;
       }
       const won = room.winnerIds.includes(seat.id);
@@ -128,6 +135,10 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
         // A best turn is a maximum and only the game knows that.
         max: { bestTurn: seat.score },
       });
+    }
+
+    if (!forChips) {
+      return;
     }
 
     await deps.finished({
