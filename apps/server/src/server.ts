@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import session from "express-session";
 import { Server } from "socket.io";
+import type { DefaultEventsMap } from "socket.io";
 import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
 import type { Die } from "@greed/rules";
 import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
@@ -59,6 +60,15 @@ export interface GreedServerOptions {
    * it because a real identity would otherwise need a Discord round-trip.
    */
   identify?: (socket: { id: string; request: unknown }) => string | null;
+}
+
+/**
+ * What we hang off a socket: the display name its account owns, resolved once
+ * at connection. Null for a guest, who has no account to be checked against.
+ */
+interface SocketIdentity {
+  userId: string | null;
+  name: string | null;
 }
 
 export interface GreedServer {
@@ -123,7 +133,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
 
   const app = express();
   const http = createHttpServer(app);
-  const io = new Server<ClientToServer, ServerToClient>(http, {
+  const io = new Server<ClientToServer, ServerToClient, DefaultEventsMap, SocketIdentity>(http, {
     cors: { origin: clientOrigin, methods: ["GET", "POST"] },
   });
 
@@ -454,6 +464,18 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   }
 
   /**
+   * The name a socket sits under.
+   *
+   * A signed-in player gets the name on their profile, whatever they sent —
+   * their seat, the chat and the game history all have to agree with the
+   * account the chips come out of, and the client is in no position to promise
+   * that. Guests have no profile to check against, so their own name stands.
+   */
+  function seatNameFor(socket: { data: SocketIdentity }, sent: string): string {
+    return socket.data.name ?? sent;
+  }
+
+  /**
    * Settles a finished game: the pot goes to the winners, split evenly, with
    * any remainder to the earliest-seated of them. Recorded either way, so a
    * friendly game still shows up in a history.
@@ -502,6 +524,31 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     });
   }
 
+  // Middleware, not the connection handler, because it settles before the
+  // client's first message is delivered. Resolving the name inside `connection`
+  // would leave a window where an early lobby:create still used a typed one.
+  io.use((socket, next) => {
+    const userId = userIdOf(socket);
+    socket.data.userId = userId;
+    if (userId === null) {
+      socket.data.name = null;
+      next();
+      return;
+    }
+    void store
+      .get(userId)
+      .then((profile) => {
+        socket.data.name = profile?.name ?? null;
+        next();
+      })
+      .catch(() => {
+        // A store that will not answer should not keep someone out; they sit
+        // down under the name they sent, as a guest would.
+        socket.data.name = null;
+        next();
+      });
+  });
+
   io.on("connection", (socket) => {
     socket.on("lobby:create", (payload, ack) => {
       const parsed = createSchema.safeParse(payload);
@@ -515,7 +562,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         const code = makeCode();
         const room = new Room(code, roll, chosen);
         rooms.set(code, room);
-        room.join(socket.id, parsed.data.name, userIdOf(socket));
+        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.userId);
         sockets.set(socket.id, { code, seatId: socket.id });
         void socket.join(code);
         ack({ ok: true, code, seatId: socket.id });
@@ -537,7 +584,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       try {
-        room.join(socket.id, parsed.data.name, userIdOf(socket));
+        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.userId);
         sockets.set(socket.id, { code: parsed.data.code, seatId: socket.id });
         void socket.join(parsed.data.code);
         ack({ ok: true, code: parsed.data.code, seatId: socket.id });

@@ -312,3 +312,90 @@ describe("playing for chips", () => {
     expect((await store.get(ada.id))?.chips).toBe(10);
   });
 });
+
+describe("who a seat belongs to", () => {
+  /** A table where the only connection is signed in as `profileName`. */
+  async function tableAs(profileName: string | null) {
+    const store = new MemoryStore();
+    let userId: string | null = null;
+    if (profileName !== null) {
+      const person = await store.upsertDiscordUser({
+        discordId: "d1",
+        name: profileName,
+        avatar: null,
+        accentColor: null,
+      });
+      userId = person.id;
+    }
+    server = createGreedServer({
+      store,
+      auth: null,
+      serveClient: false,
+      identify: () => userId,
+    });
+    await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
+    return (server.http.address() as AddressInfo).port;
+  }
+
+  function client(port: number): Promise<Client> {
+    return new Promise((resolve) => {
+      const socket: Client = connect(`http://localhost:${port}`, {
+        transports: ["websocket"],
+        forceNew: true,
+      });
+      open.push(socket);
+      socket.on("room:state", (state) => {
+        socket.latest = state;
+      });
+      socket.on("connect", () => resolve(socket));
+    });
+  }
+
+  function stateWhere(socket: Client, ok: (state: RoomView) => boolean, ms = 2500) {
+    if (socket.latest !== undefined && ok(socket.latest)) {
+      return Promise.resolve(socket.latest);
+    }
+    return new Promise<RoomView>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("no matching state")), ms);
+      const listener = (state: RoomView) => {
+        if (ok(state)) {
+          clearTimeout(timer);
+          socket.off("room:state", listener);
+          resolve(state);
+        }
+      };
+      socket.on("room:state", listener);
+    });
+  }
+
+  it("seats a signed-in player under their profile name, not one they sent", async () => {
+    const port = await tableAs("Ada");
+    const host = await client(port);
+    // The client claims to be someone else entirely.
+    await new Promise((resolve) => host.emit("lobby:create", { name: "Not Ada" }, resolve));
+    const view = await stateWhere(host, (state) => state.seats.length === 1);
+    expect(view.seats[0]?.name).toBe("Ada");
+  });
+
+  it("does the same when joining an existing table", async () => {
+    const port = await tableAs("Ada");
+    const host = await client(port);
+    const created = await new Promise<Ack>((resolve) =>
+      host.emit("lobby:create", { name: "Ada" }, resolve),
+    );
+    const code = created.ok ? created.code : "";
+
+    const other = await client(port);
+    await new Promise((resolve) => other.emit("lobby:join", { name: "Impostor", code }, resolve));
+    const view = await stateWhere(other, (state) => state.seats.length === 2);
+    expect(view.seats.map((seat) => seat.name)).toEqual(["Ada", "Ada"]);
+  });
+
+  it("lets a guest keep the name they typed", async () => {
+    const port = await tableAs(null);
+    const host = await client(port);
+    await new Promise((resolve) => host.emit("lobby:create", { name: "Whoever" }, resolve));
+    const view = await stateWhere(host, (state) => state.seats.length === 1);
+    expect(view.seats[0]?.name).toBe("Whoever");
+  });
+});

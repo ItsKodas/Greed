@@ -64,7 +64,13 @@ export function Play() {
       ) : null}
 
       {room === null ? (
-        <Join actions={actions} busy={busy} connected={connected} invited={urlCode} />
+        <Join
+          actions={actions}
+          busy={busy}
+          connected={connected}
+          invited={urlCode}
+          account={account}
+        />
       ) : room.status === "lobby" ? (
         <Lobby room={room} seatId={seatId} actions={actions} chat={chat} account={account} />
       ) : (
@@ -232,41 +238,54 @@ function Join({
   busy,
   connected,
   invited,
+  account,
 }: {
   actions: RoomActions;
   busy: boolean;
   connected: boolean;
   /** A table code from the address bar, when someone followed a link. */
   invited: string;
+  account: Account;
 }) {
-  const [name, setName] = useState("");
+  const [typed, setTyped] = useState("");
   const [code, setCode] = useState(invited);
   const [ruleset, setRuleset] = useState(RULESETS[0]?.name ?? "Classic");
-  const ready = name.trim().length > 0 && connected && !busy;
+
+  // Someone signed in already has a name, and the server will seat them under
+  // it whatever this sends — so asking for one would be a question with no
+  // answer that counts. Hold the field back until we know which they are,
+  // rather than showing it and snatching it away.
+  const signedInName = account.profile?.name ?? null;
+  const askName = !account.loading && signedInName === null;
+  const name = signedInName ?? typed;
+  const ready = !account.loading && name.trim().length > 0 && connected && !busy;
 
   if (invited.length > 0) {
     return (
       <div className="join">
         <p className="join__pitch">
-          You have been invited to table <strong>{invited}</strong>. Put in a name and sit down.
+          You have been invited to table <strong>{invited}</strong>.{" "}
+          {askName ? "Put in a name and sit down." : "Take a seat."}
         </p>
-        <label className="field">
-          <span className="field__label">Your name</span>
-          <input
-            className="field__input"
-            value={name}
-            maxLength={20}
-            placeholder="Ada"
-            // biome-ignore lint/a11y/noAutofocus: this screen exists only to take a name after following an invitation
-            autoFocus
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && ready) {
-                actions.join(name, invited);
-              }
-            }}
-          />
-        </label>
+        {askName ? (
+          <label className="field">
+            <span className="field__label">Your name</span>
+            <input
+              className="field__input"
+              value={typed}
+              maxLength={20}
+              placeholder="Ada"
+              // biome-ignore lint/a11y/noAutofocus: this screen exists only to take a name after following an invitation
+              autoFocus
+              onChange={(event) => setTyped(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && ready) {
+                  actions.join(name, invited);
+                }
+              }}
+            />
+          </label>
+        ) : null}
         <div className="join__invited">
           <button
             type="button"
@@ -289,16 +308,18 @@ function Join({
         roll nothing scoring and you lose the lot.
       </p>
 
-      <label className="field">
-        <span className="field__label">Your name</span>
-        <input
-          className="field__input"
-          value={name}
-          maxLength={20}
-          placeholder="Ada"
-          onChange={(event) => setName(event.target.value)}
-        />
-      </label>
+      {askName ? (
+        <label className="field">
+          <span className="field__label">Your name</span>
+          <input
+            className="field__input"
+            value={typed}
+            maxLength={20}
+            placeholder="Ada"
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        </label>
+      ) : null}
 
       <div className="join__split">
         <div className="panel">
