@@ -89,10 +89,12 @@ export function useRoom(): RoomHook {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const socket: GameSocket = io(SERVER_URL, {
-      transports: ["websocket", "polling"],
-      withCredentials: true,
-    });
+    // No `transports` list on purpose. Naming one makes it the only one tried:
+    // tryAllTransports defaults to false, so a websocket-first client that
+    // cannot open a websocket gives up rather than falling back, and plenty of
+    // proxies do not pass an upgrade through. Socket.IO's own default opens on
+    // polling and upgrades when it can, which degrades instead of failing.
+    const socket: GameSocket = io(SERVER_URL, { withCredentials: true });
     socketRef.current = socket;
 
     socket.on("connect", () => {

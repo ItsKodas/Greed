@@ -134,6 +134,23 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   }
 
   const app = express();
+
+  /*
+   * Behind a proxy that terminates TLS — Cloudflare, nginx, a tunnel — Express
+   * sees a plain http connection and only learns otherwise from
+   * X-Forwarded-Proto. Until it is told to believe that header it treats the
+   * request as insecure and express-session declines to send a cookie marked
+   * `secure` at all, so signing in appears to do nothing whatsoever.
+   *
+   * A number is a count of proxies to trust nearest-first. One suits a single
+   * proxy in front; set TRUST_PROXY when there are more, or to a specific
+   * address or subnet.
+   */
+  const trustProxy = process.env["TRUST_PROXY"] ?? (isProduction() ? "1" : "");
+  if (trustProxy.length > 0) {
+    const hops = Number(trustProxy);
+    app.set("trust proxy", Number.isNaN(hops) ? trustProxy : hops);
+  }
   const http = createHttpServer(app);
   const io = new Server<ClientToServer, ServerToClient, DefaultEventsMap, SocketIdentity>(http, {
     cors: { origin: clientOrigin, methods: ["GET", "POST"] },
@@ -147,7 +164,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env["NODE_ENV"] === "production",
+      secure: isProduction(),
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
   });
@@ -832,6 +849,11 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   return { http, io, rooms, store, close };
 }
 
+/** Whether this is a real deployment rather than someone's laptop. */
+function isProduction(): boolean {
+  return process.env["NODE_ENV"] === "production";
+}
+
 /**
  * The key that signs session cookies, and therefore the thing standing between
  * a stranger and someone else's chips.
@@ -846,7 +868,7 @@ export function resolveSessionSecret(provided: string | undefined): string {
   if (provided !== undefined && provided.length > 0) {
     return provided;
   }
-  if (process.env["NODE_ENV"] === "production") {
+  if (isProduction()) {
     throw new Error(
       "SESSION_SECRET must be set in production. Generate one with " +
         "`node -e \"console.log(require('node:crypto').randomBytes(32).toString('hex'))\"` " +

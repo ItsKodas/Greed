@@ -43,3 +43,6 @@ services:
       # itself, so the two are one address.
       CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:3001}
       PORT: ${PORT:-3001}
+      # Only needed when more than one proxy sits in front; production already
+      # assumes one.
+      TRUST_PROXY: ${TRUST_PROXY:-}
