@@ -1,5 +1,3 @@
-import type { GameListing } from "@greed/core";
-
 /**
  * Greed: six dice, bank it or lose it.
  *
@@ -12,14 +10,5 @@ export type { Roller, Seat } from "./room.js";
 export { decide, thinkingTime } from "./bot.js";
 export { comboGateKeyFor } from "./gatekey.js";
 export type { BotSkill, BotContext } from "./bot.js";
-
-/** How Greed lists itself in the room. */
-export const GREED: GameListing = {
-  id: "greed",
-  name: "Greed",
-  blurb: "Six dice. Bank it or lose it.",
-  shape: "table",
-  minSeats: 1,
-  maxSeats: 8,
-  open: true,
-};
+export { GREED } from "./listing.js";
+export { greedAdapter } from "./adapter.js";

@@ -10,3 +10,12 @@ export type { BotSkill, Seat, SeatIdentity, TableStatus } from "./types.js";
 export { Seating } from "./seating.js";
 export { Catalogue } from "./catalogue.js";
 export type { GameListing } from "./catalogue.js";
+export type {
+  BotMove,
+  Clock,
+  FinishedGame,
+  GameAdapter,
+  GameDeps,
+  PlayTable,
+  StatBumpLike,
+} from "./game.js";
