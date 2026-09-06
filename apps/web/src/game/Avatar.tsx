@@ -3,7 +3,7 @@ import { useState } from "react";
 
 /**
  * Discord gives an accent colour as a 24-bit number. Null means they never set
- * one, and the table's own brass is a better answer than a made-up colour.
+ * one, and the room's own blue is a better answer than a made-up colour.
  */
 export function accentOf(accentColor: number | null): string | undefined {
   if (accentColor === null) {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { color } from "../tokens.js";
-import { SURFACES, brass, felt, leather, paper, surfaceStyle, vignette, wood } from "./surfaces.js";
+import { SURFACES, card, felt, glass, plaster, surfaceStyle, vignette } from "./surfaces.js";
 
-const surfaces = { wood, felt, leather, brass, paper };
+const surfaces = { plaster, felt, glass, card };
 
 /**
  * Reference split of a background-image into top-level comma-separated
@@ -59,44 +59,43 @@ describe("every surface", () => {
   });
 });
 
-describe("wood", () => {
-  it("defaults to the walnut palette", () => {
-    const value = wood();
-    expect(value).toContain(color.walnut);
-    expect(value).toContain(color.walnutLit);
+describe("plaster", () => {
+  it("defaults to the room's own darkness", () => {
+    const value = plaster();
+    expect(value).toContain(color.shadow);
+    expect(value).toContain(color.slate);
   });
 
-  it("draws directional grain, not isotropic noise", () => {
-    // A stretched baseFrequency is what makes it read as grain rather than sand.
-    expect(wood()).toContain("repeating-linear-gradient");
+  it("has no direction and no motif — only grain over a gradient", () => {
+    const value = plaster();
+    expect(value).not.toContain("repeating-linear-gradient");
+    // Two noise layers: tooth up close, unevenness across the wall.
+    expect(value.match(/feTurbulence/g)).toHaveLength(2);
   });
 });
 
 describe("felt", () => {
-  it("defaults to the baize palette", () => {
-    expect(felt()).toContain(color.baizeDeep);
+  it("defaults to the felt palette", () => {
+    expect(felt()).toContain(color.feltDeep);
   });
 });
 
-describe("leather", () => {
-  it("defaults to the leather palette and mottles radially", () => {
-    const value = leather();
-    expect(value).toContain(color.leatherDeep);
-    expect(value).toContain("radial-gradient");
+describe("glass", () => {
+  it("burns white in the middle and blue through the glass", () => {
+    const value = glass();
+    expect(value).toContain(color.neonCore);
+    expect(value).toContain(color.neon);
+    expect(value).toContain(color.neonDeep);
+  });
+
+  it("falls off radially, because light does", () => {
+    expect(glass()).toContain("radial-gradient");
   });
 });
 
-describe("brass", () => {
-  it("uses several stops so it reads as metal rather than a flat fill", () => {
-    const value = brass();
-    expect(value).toContain(color.brassHi);
-    expect(value).toContain(color.brassDim);
-  });
-});
-
-describe("paper", () => {
-  it("defaults to the bone palette", () => {
-    expect(paper()).toContain(color.boneDeep);
+describe("card", () => {
+  it("defaults to the printed-stock palette", () => {
+    expect(card()).toContain(color.smoke);
   });
 });
 

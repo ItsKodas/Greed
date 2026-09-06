@@ -1,4 +1,4 @@
-import { brass, felt, leather, paper, vignette, wood } from "@greed/ui";
+import { card, felt, glass, plaster, vignette } from "@greed/ui";
 
 interface Tile {
   id: string;
@@ -8,13 +8,17 @@ interface Tile {
 }
 
 const tiles: Tile[] = [
-  { id: "wood", name: "wood", note: "seed 1", background: wood({ seed: 1 }) },
-  { id: "wood-alt", name: "wood", note: "seed 2", background: wood({ seed: 2 }) },
+  { id: "plaster", name: "plaster", note: "seed 1", background: plaster({ seed: 1 }) },
+  { id: "plaster-alt", name: "plaster", note: "seed 2", background: plaster({ seed: 2 }) },
   { id: "felt", name: "felt", note: "seed 1", background: felt({ seed: 1 }) },
-  { id: "leather", name: "leather", note: "seed 1", background: leather({ seed: 1 }) },
-  { id: "brass", name: "brass", note: "seed 1", background: brass({ seed: 1 }) },
-  { id: "paper", name: "paper", note: "seed 1", background: paper({ seed: 1 }) },
-  { id: "vignette", name: "vignette", note: "over wood", background: `${vignette()}, ${wood({ seed: 4 })}` },
+  { id: "glass", name: "glass", note: "lit", background: glass({ seed: 1 }) },
+  { id: "card", name: "card", note: "seed 1", background: card({ seed: 1 }) },
+  {
+    id: "vignette",
+    name: "vignette",
+    note: "over plaster",
+    background: `${vignette()}, ${plaster({ seed: 4 })}`,
+  },
 ];
 
 export function TextureTiles() {

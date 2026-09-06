@@ -6,7 +6,7 @@ import { color, font } from "./tokens.js";
 const cssPath = fileURLToPath(new URL("./tokens.css", import.meta.url));
 const css = readFileSync(cssPath, "utf8");
 
-/** Turn `walnutLit` into `--gr-color-walnut-lit`. */
+/** Turn `neonHi` into `--gr-color-neon-hi`. */
 function cssName(key: string): string {
   return `--gr-color-${key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`;
 }
@@ -14,34 +14,37 @@ function cssName(key: string): string {
 describe("color", () => {
   it("carries the approved palette entries", () => {
     expect(Object.keys(color).sort()).toEqual([
-      "baize",
-      "baizeDeep",
-      "baizeLit",
-      "bone",
-      "boneDeep",
-      "boneDim",
-      "boneLit",
-      "brass",
-      "brassDim",
-      "brassHi",
-      "chalk",
-      "emerald",
-      "leather",
-      "leatherDeep",
-      "leatherLit",
-      "oxblood",
-      "walnut",
-      "walnutDeep",
-      "walnutLit",
+      "bad",
+      "chip",
+      "chipDim",
+      "chipHi",
+      "felt",
+      "feltDeep",
+      "feltLit",
+      "good",
+      "ink",
+      "inkDim",
+      "inkFaint",
+      "inkLit",
+      "neon",
+      "neonCore",
+      "neonDeep",
+      "neonDim",
+      "neonHi",
+      "night",
+      "shadow",
+      "slate",
+      "smoke",
+      "smokeLit",
     ]);
   });
 
   it("uses the exact approved values", () => {
-    expect(color.walnut).toBe("#241811");
-    expect(color.baize).toBe("#16241c");
-    expect(color.brass).toBe("#c08a2e");
-    expect(color.bone).toBe("#e8dcc4");
-    expect(color.oxblood).toBe("#7e2b22");
+    expect(color.night).toBe("#0f141c");
+    expect(color.neon).toBe("#2e7bff");
+    expect(color.chip).toBe("#e0b048");
+    expect(color.ink).toBe("#dfe7f2");
+    expect(color.felt).toBe("#12241f");
   });
 
   it("is written in lowercase hex throughout", () => {
@@ -100,27 +103,31 @@ describe("tokens.css", () => {
     const declared = [...css.matchAll(/(--gr-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
     expect(declared.sort()).toEqual(
       [
-        "--gr-color-baize",
-        "--gr-color-baize-deep",
-        "--gr-color-baize-lit",
-        "--gr-color-bone",
-        "--gr-color-bone-deep",
-        "--gr-color-bone-dim",
-        "--gr-color-bone-lit",
-        "--gr-color-brass",
-        "--gr-color-brass-dim",
-        "--gr-color-brass-hi",
-        "--gr-color-chalk",
-        "--gr-color-emerald",
-        "--gr-color-leather",
-        "--gr-color-leather-deep",
-        "--gr-color-leather-lit",
-        "--gr-color-oxblood",
-        "--gr-color-walnut",
-        "--gr-color-walnut-deep",
-        "--gr-color-walnut-lit",
+        "--gr-color-bad",
+        "--gr-color-chip",
+        "--gr-color-chip-dim",
+        "--gr-color-chip-hi",
+        "--gr-color-felt",
+        "--gr-color-felt-deep",
+        "--gr-color-felt-lit",
+        "--gr-color-good",
+        "--gr-color-ink",
+        "--gr-color-ink-dim",
+        "--gr-color-ink-faint",
+        "--gr-color-ink-lit",
+        "--gr-color-neon",
+        "--gr-color-neon-core",
+        "--gr-color-neon-deep",
+        "--gr-color-neon-dim",
+        "--gr-color-neon-hi",
+        "--gr-color-night",
+        "--gr-color-shadow",
+        "--gr-color-slate",
+        "--gr-color-smoke",
+        "--gr-color-smoke-lit",
         "--gr-font-data",
         "--gr-font-display",
+        "--gr-font-sign",
         "--gr-font-ui",
         "--gr-text-xs",
         "--gr-text-sm",
@@ -165,5 +172,21 @@ describe("font", () => {
     expect(font.ui).toContain("IBM Plex Sans");
     expect(font.data).toContain("IBM Plex Mono");
     expect(font.data).toContain("monospace");
+  });
+});
+
+describe("references", () => {
+  it("never mentions a token it does not declare", () => {
+    /*
+     * A var() pointing at a name that no longer exists does not fail loudly —
+     * the declaration is simply dropped, and a border quietly becomes
+     * currentColor. Renaming the palette left two of these behind, so it is
+     * checked now rather than noticed later.
+     */
+    const declared = new Set([...css.matchAll(/(--gr-[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    const referenced = [...css.matchAll(/var\((--gr-[a-z0-9-]+)/g)].map((m) => m[1]);
+    for (const name of referenced) {
+      expect(declared, `tokens.css uses ${name} without declaring it`).toContain(name);
+    }
   });
 });

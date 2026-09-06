@@ -1,13 +1,12 @@
 export { encodeSvg, svgDataUri, turbulence, type TurbulenceOptions } from "./svg.js";
 export {
   SURFACES,
-  brass,
+  card,
   felt,
-  leather,
-  paper,
+  glass,
+  plaster,
   surfaceStyle,
   vignette,
-  wood,
   type SurfaceName,
   type SurfaceOptions,
   type SurfaceStyle,

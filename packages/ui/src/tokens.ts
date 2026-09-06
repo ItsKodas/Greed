@@ -4,33 +4,34 @@
  * A test asserts the two agree.
  */
 export const color = Object.freeze({
-  walnut: "#241811",
-  walnutLit: "#3a281c",
-  walnutDeep: "#170f0a",
-  baize: "#16241c",
-  baizeLit: "#1e3227",
-  baizeDeep: "#101a14",
-  brass: "#c08a2e",
-  brassHi: "#e8c168",
-  brassDim: "#7a5a21",
-  bone: "#e8dcc4",
-  boneLit: "#f3ead6",
-  boneDim: "#a2957d",
-  boneDeep: "#cfc1a4",
-  oxblood: "#7e2b22",
-  // The green E of the letter dice. Distinguishing the two E faces is a rule,
-  // not decoration: $GREED needs one of each colour.
-  emerald: "#1f7a45",
-  // Screen-printed lettering on the felt: a soft yellow, not a metal.
-  chalk: "#d9c47a",
-  leather: "#4a3225",
-  leatherLit: "#5b3e2c",
-  leatherDeep: "#33221a",
+  night: "#0f141c",
+  slate: "#171f2a",
+  shadow: "#070a0f",
+  smoke: "#222c39",
+  smokeLit: "#2c3846",
+  felt: "#12241f",
+  feltLit: "#18302a",
+  feltDeep: "#0c1815",
+  neonCore: "#ffffff",
+  neonHi: "#7ba9ff",
+  neon: "#2e7bff",
+  neonDim: "#1b4a91",
+  neonDeep: "#0b3fd4",
+  chip: "#e0b048",
+  chipHi: "#f5d68a",
+  chipDim: "#8a6b28",
+  ink: "#dfe7f2",
+  inkLit: "#f2f6fb",
+  inkDim: "#8b97a8",
+  inkFaint: "#5d6878",
+  good: "#3fbf7a",
+  bad: "#c2543f",
 });
 
 export type ColorName = keyof typeof color;
 
 export const font = Object.freeze({
+  sign: '"Dancing Script", cursive',
   display: '"Bevan", Georgia, serif',
   ui: '"IBM Plex Sans", system-ui, sans-serif',
   data: '"IBM Plex Mono", ui-monospace, monospace',

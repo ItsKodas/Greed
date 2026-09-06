@@ -1,6 +1,7 @@
 /*
  * The table. Everything here draws from the --gr-* tokens; the look is the
- * approved back-room direction: walnut ground, worn baize tray, brass rail.
+ * The Back Room: a dark room with one lit sign, felt on the tables, and gold
+ * kept for money alone.
  */
 
 .play {
@@ -18,33 +19,73 @@
 }
 
 .play__mark {
-  font-family: var(--gr-font-display);
-  font-weight: 400;
-  font-size: var(--gr-text-2xl);
-  line-height: 1;
   margin: 0;
-  flex: 1;
+  display: flex;
+  align-items: center;
 }
 
-.play__mark em {
-  font-style: normal;
-  color: var(--gr-color-brass);
+/*
+ * The sign. A lit tube built from the inside out: the first two shadows are
+ * white and tight, which is the gas burning out the middle of the glass, and
+ * they are what make a stroke read as round rather than as a letter with a
+ * halo behind it. It only works on a joined script at one even weight.
+ */
+.sign {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: fit-content;
+  font-family: var(--gr-font-sign);
+  font-weight: 700;
+  font-size: var(--gr-text-xl);
+  line-height: 1.16;
+  color: var(--gr-color-neon-core);
+  transform: rotate(-2.4deg);
+  text-shadow:
+    0 0 2px #fff,
+    0 0 5px #fff,
+    0 0 10px var(--gr-color-neon),
+    0 0 20px var(--gr-color-neon),
+    0 0 40px var(--gr-color-neon-deep);
+  margin: 2px var(--gr-space-3) 2px 2px;
+}
+
+/*
+ * The article, small and hung above. Most three-word signs are drawn this way,
+ * and it earns its place here: "The" is the word nobody reads, and at full size
+ * it took a third of the width to say nothing.
+ */
+.sign__the {
+  font-size: 0.44em;
+  /* Measured against its own reduced size, so a smaller step than it looks. */
+  margin-left: 1.9em;
+  margin-bottom: -0.88em;
+  transform: rotate(-2deg);
+}
+
+/* Which game you are in, said plainly beside the sign for the building. */
+.play__game {
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-lg);
+  color: var(--gr-color-ink);
+  letter-spacing: 0.02em;
+  flex: 1;
 }
 
 .play__code {
   font-family: var(--gr-font-data);
   font-size: var(--gr-text-lg);
   letter-spacing: 0.28em;
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-ink-lit);
 }
 
 .play__link {
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-oxblood);
+  color: var(--gr-color-bad);
 }
 
 .play__link--up {
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .play__error,
@@ -56,14 +97,14 @@
 }
 
 .play__error {
-  background: rgb(126 43 34 / 0.25);
-  border: 1px solid var(--gr-color-oxblood);
-  color: var(--gr-color-bone);
+  background: rgb(194 84 63 / 0.25);
+  border: 1px solid var(--gr-color-bad);
+  color: var(--gr-color-ink);
 }
 
 .play__event {
-  color: var(--gr-color-bone-dim);
-  border-left: 2px solid var(--gr-color-brass-dim);
+  color: var(--gr-color-ink-dim);
+  border-left: 2px solid var(--gr-color-neon-dim);
 }
 
 /* ---------------------------------------------------------------- join */
@@ -77,7 +118,7 @@
 .join__pitch {
   margin: 0;
   max-width: 58ch;
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   font-size: var(--gr-text-lg);
 }
 
@@ -88,7 +129,7 @@
 }
 
 .join__warn {
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   font-size: var(--gr-text-sm);
   margin: 0;
 }
@@ -101,7 +142,7 @@
 .field__label {
   display: block;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-brass);
+  color: var(--gr-color-ink-dim);
   margin-bottom: var(--gr-space-1);
 }
 
@@ -111,13 +152,13 @@
   border-radius: var(--gr-radius-sm);
   background: rgb(0 0 0 / 0.36);
   border: var(--gr-edge-soft);
-  color: var(--gr-color-bone);
+  color: var(--gr-color-ink);
   font-family: var(--gr-font-ui);
   font-size: var(--gr-text-base);
 }
 
 .field__input:focus-visible {
-  outline: 2px solid var(--gr-color-brass);
+  outline: 2px solid var(--gr-color-neon);
   outline-offset: 1px;
 }
 
@@ -126,7 +167,7 @@
   font-size: var(--gr-text-xl);
   letter-spacing: 0.3em;
   text-align: center;
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-ink-lit);
   margin-bottom: var(--gr-space-3);
 }
 
@@ -171,7 +212,7 @@
   font-family: var(--gr-font-data);
   font-size: var(--gr-text-xs);
   text-align: center;
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   background: rgb(0 0 0 / 0.3);
   border: var(--gr-edge-hair);
   border-radius: var(--gr-radius-sm);
@@ -179,7 +220,7 @@
 }
 
 .lobby__link:focus-visible {
-  outline: 2px solid var(--gr-color-brass);
+  outline: 2px solid var(--gr-color-neon);
   outline-offset: 2px;
 }
 
@@ -188,20 +229,20 @@
 .btn.lobby__copy {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--gr-color-brass) 30%, transparent),
-    color-mix(in srgb, var(--gr-color-brass-dim) 24%, transparent)
+    color-mix(in srgb, var(--gr-color-neon) 30%, transparent),
+    color-mix(in srgb, var(--gr-color-neon-dim) 24%, transparent)
   );
-  border: 1px solid var(--gr-color-brass-dim);
-  color: var(--gr-color-bone-lit);
+  border: 1px solid var(--gr-color-neon-dim);
+  color: var(--gr-color-ink-lit);
 }
 
 .btn.lobby__copy:hover {
-  border-color: var(--gr-color-brass);
-  color: var(--gr-color-bone-lit);
+  border-color: var(--gr-color-neon);
+  color: var(--gr-color-ink-lit);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--gr-color-brass) 44%, transparent),
-    color-mix(in srgb, var(--gr-color-brass-dim) 34%, transparent)
+    color-mix(in srgb, var(--gr-color-neon) 44%, transparent),
+    color-mix(in srgb, var(--gr-color-neon-dim) 34%, transparent)
   );
 }
 
@@ -211,7 +252,7 @@
   /* Trailing space, so the tracking does not leave the last letter short. */
   letter-spacing: 0.3em;
   text-indent: 0.3em;
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-neon-hi);
   line-height: 1;
   padding: var(--gr-space-2) 0 var(--gr-space-3);
   text-align: center;
@@ -251,7 +292,7 @@
 .rail__watching {
   align-self: center;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   padding: 0 var(--gr-space-2);
 }
 
@@ -273,26 +314,26 @@
   border-radius: var(--gr-radius-sm);
   background: rgb(0 0 0 / 0.26);
   border: var(--gr-edge-soft);
-  border-left: 3px solid var(--gr-color-brass-dim);
+  border-left: 3px solid var(--gr-color-neon-dim);
   min-width: 190px;
 }
 
 .seat--active {
-  background: rgb(192 138 46 / 0.13);
-  border-color: var(--gr-color-brass);
-  border-left-color: var(--gr-color-brass);
+  background: rgb(46 123 255 / 0.13);
+  border-color: var(--gr-color-neon);
+  border-left-color: var(--gr-color-neon);
 }
 
 /* Present, but not in this game — dimmed so the eye skips it while play
    is going on, without hiding the fact that somebody is sitting there. */
 .seat--waiting {
   opacity: 0.55;
-  border-left-color: var(--gr-color-bone-dim);
+  border-left-color: var(--gr-color-ink-dim);
 }
 
 .seat--won {
-  border-left-color: var(--gr-color-brass-hi);
-  background: rgb(192 138 46 / 0.2);
+  border-left-color: var(--gr-color-neon-hi);
+  background: rgb(46 123 255 / 0.2);
 }
 
 .avatar__image {
@@ -311,11 +352,11 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--gr-color-leather);
-  border: 2px solid var(--gr-color-brass-dim);
+  background: var(--gr-color-smoke);
+  border: 2px solid var(--gr-color-neon-dim);
   font-size: var(--gr-text-xs);
   font-weight: 600;
-  color: var(--gr-color-bone);
+  color: var(--gr-color-ink);
 }
 
 .seat__avatar {
@@ -326,8 +367,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--gr-color-leather);
-  border: 2px solid var(--gr-color-brass-dim);
+  background: var(--gr-color-smoke);
+  border: 2px solid var(--gr-color-neon-dim);
   font-weight: 600;
   font-size: var(--gr-text-sm);
 }
@@ -345,20 +386,20 @@
 
 .seat__state {
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .seat__score {
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-ink);
 }
 
 .tray {
-  background-image: linear-gradient(150deg, var(--gr-color-baize-lit), var(--gr-color-baize-deep));
+  background-image: linear-gradient(150deg, var(--gr-color-felt-lit), var(--gr-color-felt-deep));
   border-radius: var(--gr-radius-md);
   border: 1px solid rgb(0 0 0 / 0.6);
-  box-shadow: var(--gr-well), 0 0 0 6px var(--gr-color-leather), 0 0 0 7px var(--gr-color-brass-dim);
+  box-shadow: var(--gr-well), 0 0 0 6px var(--gr-color-smoke), 0 0 0 7px var(--gr-color-neon-dim);
   padding: var(--gr-space-5);
   min-height: 168px;
 }
@@ -382,7 +423,7 @@
 .tray__empty,
 .tray__note {
   margin: 0;
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   font-size: var(--gr-text-sm);
 }
 
@@ -395,13 +436,13 @@
 .die {
   /*
    * The die's shading, mixed from the palette rather than picked by eye, so
-   * changing bone or walnut in tokens.css moves the dice with it.
+   * changing ink or night in tokens.css moves the dice with it.
    */
-  --die-face: color-mix(in srgb, var(--gr-color-bone) 78%, var(--gr-color-walnut));
-  --die-edge: color-mix(in srgb, var(--gr-color-bone-dim) 68%, var(--gr-color-walnut));
-  --die-dead-face: color-mix(in srgb, var(--gr-color-bone-dim) 82%, var(--gr-color-walnut));
-  --die-dead-back: color-mix(in srgb, var(--gr-color-bone-dim) 52%, var(--gr-color-walnut));
-  --die-dead-edge: color-mix(in srgb, var(--gr-color-bone-dim) 42%, var(--gr-color-walnut));
+  --die-face: color-mix(in srgb, var(--gr-color-ink) 78%, var(--gr-color-night));
+  --die-edge: color-mix(in srgb, var(--gr-color-ink-dim) 68%, var(--gr-color-night));
+  --die-dead-face: color-mix(in srgb, var(--gr-color-ink-dim) 82%, var(--gr-color-night));
+  --die-dead-back: color-mix(in srgb, var(--gr-color-ink-dim) 52%, var(--gr-color-night));
+  --die-dead-edge: color-mix(in srgb, var(--gr-color-ink-dim) 42%, var(--gr-color-night));
 
   width: 54px;
   height: 54px;
@@ -409,7 +450,7 @@
   padding: var(--gr-space-2);
   border: none;
   border-radius: var(--gr-radius-die);
-  background-image: linear-gradient(155deg, var(--gr-color-bone-lit), var(--die-face));
+  background-image: linear-gradient(155deg, var(--gr-color-ink-lit), var(--die-face));
   box-shadow: 0 3px 0 var(--die-edge), 0 5px 10px rgb(0 0 0 / 0.6);
   display: grid;
   grid-template: repeat(3, 1fr) / repeat(3, 1fr);
@@ -425,13 +466,13 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--gr-color-walnut);
+  background: var(--gr-color-night);
   place-self: center;
 }
 
 .die--held {
   transform: translateY(-9px);
-  box-shadow: 0 3px 0 var(--die-edge), 0 12px 16px rgb(0 0 0 / 0.7), 0 0 0 3px var(--gr-color-brass);
+  box-shadow: 0 3px 0 var(--die-edge), 0 12px 16px rgb(0 0 0 / 0.7), 0 0 0 3px var(--gr-color-neon);
 }
 
 .die--dead {
@@ -441,7 +482,7 @@
 }
 
 .die:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 3px;
 }
 
@@ -460,14 +501,14 @@
 
 .panel__label {
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-brass);
+  color: var(--gr-color-ink-dim);
   margin: 0 0 var(--gr-space-3);
   font-weight: 500;
 }
 
 .panel__note {
   font-size: var(--gr-text-sm);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   margin: 0 0 var(--gr-space-3);
 }
 
@@ -485,7 +526,7 @@
 }
 
 .stat span {
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .stat b {
@@ -495,11 +536,11 @@
 }
 
 .stat--good {
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-good);
 }
 
 .stat--bad {
-  color: var(--gr-color-oxblood);
+  color: var(--gr-color-bad);
 }
 
 .btn {
@@ -509,26 +550,33 @@
   padding: var(--gr-space-3) var(--gr-space-5);
   border-radius: var(--gr-radius-sm);
   cursor: pointer;
-  border: 1px solid var(--gr-color-brass-dim);
+  border: 1px solid color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
+  /*
+   * Lit from within rather than painted blue. A solid fill of the accent makes
+   * every button shout as loudly as the sign, and the sign is meant to be the
+   * loudest thing in the room.
+   */
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--gr-color-brass) 82%, var(--gr-color-brass-hi)),
-    var(--gr-color-brass-dim)
+    color-mix(in srgb, var(--gr-color-neon) 30%, transparent),
+    color-mix(in srgb, var(--gr-color-neon-deep) 22%, transparent)
   );
-  color: var(--gr-color-walnut);
-  box-shadow: 0 1px 0 rgb(255 220 150 / 0.4) inset, var(--gr-lift-low);
+  color: var(--gr-color-ink-lit);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.08) inset, var(--gr-lift-low);
 }
 
 .btn:hover:not(:disabled) {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--gr-color-brass-hi) 78%, var(--gr-color-brass)),
-    color-mix(in srgb, var(--gr-color-brass) 60%, var(--gr-color-brass-dim))
+    color-mix(in srgb, var(--gr-color-neon) 46%, transparent),
+    color-mix(in srgb, var(--gr-color-neon-deep) 32%, transparent)
   );
+  border-color: var(--gr-color-neon);
+  color: #fff;
 }
 
 .btn:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 2px;
 }
 
@@ -536,22 +584,22 @@
   opacity: 0.36;
   cursor: not-allowed;
   background: transparent;
-  color: var(--gr-color-bone-dim);
-  border-color: rgb(232 220 196 / 0.18);
+  color: var(--gr-color-ink-dim);
+  border-color: rgb(223 231 242 / 0.18);
   box-shadow: none;
 }
 
 .btn--ghost {
   background: transparent;
-  color: var(--gr-color-bone);
-  border-color: rgb(232 220 196 / 0.28);
+  color: var(--gr-color-ink);
+  border-color: rgb(223 231 242 / 0.28);
   box-shadow: none;
 }
 
 .btn--ghost:hover:not(:disabled) {
-  border-color: var(--gr-color-brass);
-  color: var(--gr-color-brass-hi);
-  background: rgb(192 138 46 / 0.08);
+  border-color: var(--gr-color-neon);
+  color: var(--gr-color-neon-hi);
+  background: rgb(46 123 255 / 0.08);
 }
 
 .btn--wide {
@@ -585,7 +633,7 @@
   font-family: var(--gr-font-display);
   font-size: 1.5rem;
   line-height: 1;
-  color: var(--gr-color-walnut);
+  color: var(--gr-color-night);
 }
 
 /*
@@ -593,12 +641,12 @@
  * of-a-kind needs them to match, so the two faces must never look alike.
  */
 .die__letter--green {
-  color: var(--gr-color-emerald);
+  color: var(--gr-color-good);
 }
 
 /* R, following the printed dice. */
 .die__letter--red {
-  color: var(--gr-color-oxblood);
+  color: var(--gr-color-bad);
 }
 
 /* ---------------------------------------------------- variant picker */
@@ -617,22 +665,22 @@
   border-radius: var(--gr-radius-sm);
   background: rgb(0 0 0 / 0.28);
   border: var(--gr-edge-soft);
-  color: var(--gr-color-bone);
+  color: var(--gr-color-ink);
   font-family: var(--gr-font-ui);
   cursor: pointer;
 }
 
 .variant:hover {
-  border-color: var(--gr-color-brass-dim);
+  border-color: var(--gr-color-neon-dim);
 }
 
 .variant--on {
-  border-color: var(--gr-color-brass);
-  background: rgb(192 138 46 / 0.13);
+  border-color: var(--gr-color-neon);
+  background: rgb(46 123 255 / 0.13);
 }
 
 .variant:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 2px;
 }
 
@@ -645,7 +693,7 @@
 .variant__note {
   display: block;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 /* ------------------------------------------------------------- bots */
@@ -657,7 +705,7 @@
 .bots__label {
   display: block;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-brass);
+  color: var(--gr-color-ink-dim);
   margin-bottom: var(--gr-space-2);
 }
 
@@ -678,18 +726,18 @@
   border-radius: var(--gr-radius-sm);
   border: var(--gr-edge-soft);
   background: transparent;
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   cursor: pointer;
   line-height: 1;
 }
 
 .seat__drop:hover {
-  color: var(--gr-color-oxblood);
-  border-color: var(--gr-color-oxblood);
+  color: var(--gr-color-bad);
+  border-color: var(--gr-color-bad);
 }
 
 .seat__drop:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 2px;
 }
 
@@ -703,19 +751,19 @@
 
 .volume__icon {
   font-size: var(--gr-text-sm);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   width: 1em;
   text-align: center;
 }
 
 .volume input {
   width: 74px;
-  accent-color: var(--gr-color-brass);
+  accent-color: var(--gr-color-neon);
   cursor: pointer;
 }
 
 .volume input:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 3px;
 }
 
@@ -778,15 +826,15 @@
 /* ------------------------------------------------------------ leave */
 
 .btn--warn {
-  border-color: var(--gr-color-oxblood);
-  color: var(--gr-color-bone);
-  background: rgb(126 43 34 / 0.3);
+  border-color: var(--gr-color-bad);
+  color: var(--gr-color-ink);
+  background: rgb(194 84 63 / 0.3);
 }
 
 .btn--warn:hover:not(:disabled) {
-  border-color: var(--gr-color-oxblood);
-  background: rgb(126 43 34 / 0.45);
-  color: var(--gr-color-bone);
+  border-color: var(--gr-color-bad);
+  background: rgb(194 84 63 / 0.45);
+  color: var(--gr-color-ink);
 }
 
 .join__invited {
@@ -798,14 +846,14 @@
 
 /*
  * The scoring, set out the way the real table sets it out: leader dots, gem
- * names, "pts." Soft printed yellow rather than the metal brass, sunk into the
+ * names, "pts." Printed on the felt rather than lit, sunk into the
  * cloth, never bright enough to compete with the dice.
  */
 .card {
   margin: 0;
   padding-top: var(--gr-space-4);
-  border-top: 1px solid rgb(217 196 122 / 0.18);
-  color: var(--gr-color-chalk);
+  border-top: 1px solid rgb(139 151 168 / 0.18);
+  color: var(--gr-color-ink-dim);
   opacity: 0.85;
   text-shadow: 0 1px 0 rgb(0 0 0 / 0.5);
   display: grid;
@@ -844,7 +892,7 @@
 
 .card__row--banner {
   margin-top: var(--gr-space-2);
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-ink-lit);
   opacity: 1;
 }
 
@@ -866,7 +914,7 @@
 .card__face {
   font-family: var(--gr-font-display);
   font-size: var(--gr-text-sm);
-  color: var(--gr-color-chalk);
+  color: var(--gr-color-ink-dim);
 }
 
 /*
@@ -875,11 +923,11 @@
  * fresh literals. Still one edit in tokens.css to re-theme.
  */
 .card__face--red {
-  color: color-mix(in srgb, var(--gr-color-oxblood) 45%, var(--gr-color-chalk));
+  color: color-mix(in srgb, var(--gr-color-bad) 45%, var(--gr-color-ink-dim));
 }
 
 .card__face--green {
-  color: color-mix(in srgb, var(--gr-color-emerald) 45%, var(--gr-color-chalk));
+  color: color-mix(in srgb, var(--gr-color-good) 45%, var(--gr-color-ink-dim));
 }
 
 /* ----------------------------------------------------------- $GREED */
@@ -902,16 +950,16 @@
     box-shadow:
       0 3px 0 var(--die-edge),
       0 18px 26px rgb(0 0 0 / 0.6),
-      0 0 0 4px var(--gr-color-brass),
-      0 0 26px 8px rgb(232 193 104 / 0.55);
+      0 0 0 4px var(--gr-color-neon),
+      0 0 26px 8px rgb(123 169 255 / 0.55);
   }
   55% {
     transform: translateY(-6px) scale(1.05) rotate(2deg);
     box-shadow:
       0 3px 0 var(--die-edge),
       0 10px 16px rgb(0 0 0 / 0.55),
-      0 0 0 3px var(--gr-color-brass-hi),
-      0 0 18px 4px rgb(232 193 104 / 0.35);
+      0 0 0 3px var(--gr-color-neon-hi),
+      0 0 18px 4px rgb(123 169 255 / 0.35);
   }
   100% {
     transform: translateY(0) scale(1) rotate(0deg);
@@ -921,12 +969,12 @@
 .tray--greed {
   position: relative;
   overflow: hidden;
-  border-color: var(--gr-color-brass);
+  border-color: var(--gr-color-neon);
   box-shadow:
     var(--gr-well),
-    0 0 0 6px var(--gr-color-leather),
-    0 0 0 7px var(--gr-color-brass-hi),
-    0 0 34px 2px rgb(232 193 104 / 0.28);
+    0 0 0 6px var(--gr-color-smoke),
+    0 0 0 7px var(--gr-color-neon-hi),
+    0 0 34px 2px rgb(123 169 255 / 0.28);
 }
 
 /* A single sweep of light across the cloth, once. */
@@ -938,7 +986,7 @@
   background: linear-gradient(
     100deg,
     transparent 35%,
-    rgb(232 193 104 / 0.22) 50%,
+    rgb(123 169 255 / 0.22) 50%,
     transparent 65%
   );
   transform: translateX(-100%);
@@ -961,7 +1009,7 @@
   .die--greed {
     box-shadow:
       0 3px 0 var(--die-edge),
-      0 0 0 3px var(--gr-color-brass-hi);
+      0 0 0 3px var(--gr-color-neon-hi);
   }
 }
 
@@ -990,22 +1038,22 @@
 }
 
 .chat__who {
-  color: var(--gr-color-brass);
+  color: var(--gr-color-ink-dim);
   margin-right: var(--gr-space-2);
 }
 
 .chat__who--you {
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-neon-hi);
 }
 
 .chat__text {
-  color: var(--gr-color-bone);
+  color: var(--gr-color-ink);
 }
 
 .chat__quiet {
   margin: 0;
   font-size: var(--gr-text-sm);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .chat__entry {
@@ -1037,7 +1085,7 @@
 
 .rules__label {
   font-size: var(--gr-text-sm);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .rules__choices {
@@ -1053,15 +1101,15 @@
   border-radius: var(--gr-radius-sm);
   background: rgb(0 0 0 / 0.3);
   border: var(--gr-edge-soft);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   cursor: pointer;
 }
 
 .rules__choice--on,
 .rules__toggle--on {
-  border-color: var(--gr-color-brass);
-  background: rgb(192 138 46 / 0.16);
-  color: var(--gr-color-bone);
+  border-color: var(--gr-color-neon);
+  background: rgb(46 123 255 / 0.16);
+  color: var(--gr-color-ink);
 }
 
 .rules__choice:disabled,
@@ -1072,7 +1120,7 @@
 
 .rules__choice:focus-visible,
 .rules__toggle:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 2px;
 }
 
@@ -1093,7 +1141,7 @@
 .rules__note {
   margin: var(--gr-space-3) 0 0;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .lobby__wide {
@@ -1121,19 +1169,23 @@
 }
 
 .account__name {
-  color: var(--gr-color-bone);
+  color: var(--gr-color-ink);
 }
 
+/*
+ * Gold, and the only gold on the page. A number in this colour is chips —
+ * nothing else may borrow it, or it stops being findable at a glance.
+ */
 .account__chips {
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
-  color: var(--gr-color-brass-hi);
+  color: var(--gr-color-neon-hi);
 }
 
 .account__guest,
 .account__out {
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   background: none;
   border: none;
   padding: 0;
@@ -1141,12 +1193,12 @@
 }
 
 .account__out:hover {
-  color: var(--gr-color-oxblood);
+  color: var(--gr-color-bad);
 }
 
 .account__out:focus-visible,
 .account a:focus-visible {
-  outline: 2px solid var(--gr-color-brass-hi);
+  outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 2px;
 }
 
@@ -1165,4 +1217,19 @@
   .lobby__wide {
     grid-template-columns: 1fr;
   }
+}
+
+/* ------------------------------------------------------------------ money */
+
+/*
+ * Everything that is chips, wearing the one warm colour in the building. The
+ * rule only works because it is kept: a gold figure is always money.
+ */
+.rules__choice--on,
+.chips {
+  color: var(--gr-color-chip-hi);
+}
+
+.rules__note {
+  color: var(--gr-color-chip);
 }

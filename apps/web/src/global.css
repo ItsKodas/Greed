@@ -11,8 +11,8 @@
 
 body {
   margin: 0;
-  background: var(--gr-color-walnut);
-  color: var(--gr-color-bone);
+  background: var(--gr-color-night);
+  color: var(--gr-color-ink);
   font-family: var(--gr-font-ui);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;

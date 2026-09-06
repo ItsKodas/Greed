@@ -2,30 +2,57 @@
  * The single source of truth for colour. tokens.ts mirrors this file and a
  * test fails if the two disagree — never change one without the other.
  *
- * Deliberately one theme. The game is a dim back room; there is no light
- * palette by design, not by omission.
+ * Deliberately one theme. This is a dark room with a sign on the wall; there
+ * is no daylight version of it, by design rather than by omission.
+ *
+ * Two colours here carry meaning rather than mood, and the whole palette
+ * depends on them staying rationed: anything glowing is happening now, and
+ * anything gold is money.
  */
 :root {
-  --gr-color-walnut: #241811;
-  --gr-color-walnut-lit: #3a281c;
-  --gr-color-walnut-deep: #170f0a;
-  --gr-color-baize: #16241c;
-  --gr-color-baize-lit: #1e3227;
-  --gr-color-baize-deep: #101a14;
-  --gr-color-brass: #c08a2e;
-  --gr-color-brass-hi: #e8c168;
-  --gr-color-brass-dim: #7a5a21;
-  --gr-color-bone: #e8dcc4;
-  --gr-color-bone-lit: #f3ead6;
-  --gr-color-bone-dim: #a2957d;
-  --gr-color-bone-deep: #cfc1a4;
-  --gr-color-oxblood: #7e2b22;
-  --gr-color-emerald: #1f7a45;
-  --gr-color-chalk: #d9c47a;
-  --gr-color-leather: #4a3225;
-  --gr-color-leather-lit: #5b3e2c;
-  --gr-color-leather-deep: #33221a;
+  /* The room: cold and dark, so the one lit thing reads as lit. */
+  --gr-color-night: #0f141c;
+  --gr-color-slate: #171f2a;
+  --gr-color-shadow: #070a0f;
+  --gr-color-smoke: #222c39;
+  --gr-color-smoke-lit: #2c3846;
 
+  /* The felt on a table, the one surface that is still a surface. */
+  --gr-color-felt: #12241f;
+  --gr-color-felt-lit: #18302a;
+  --gr-color-felt-deep: #0c1815;
+
+  /*
+   * The sign, and the accent everything else borrows from it. A lit tube is
+   * three things at once: gas burning white in the middle, colour through the
+   * glass, and the wash it throws on the wall.
+   */
+  --gr-color-neon-core: #ffffff;
+  --gr-color-neon-hi: #7ba9ff;
+  --gr-color-neon: #2e7bff;
+  --gr-color-neon-dim: #1b4a91;
+  --gr-color-neon-deep: #0b3fd4;
+
+  /*
+   * The one warm colour in the building, and it is only ever money. A gold
+   * number anywhere is chips, so a balance is findable without reading the
+   * label beside it. Spend this on decoration and it stops meaning anything.
+   */
+  --gr-color-chip: #e0b048;
+  --gr-color-chip-hi: #f5d68a;
+  --gr-color-chip-dim: #8a6b28;
+
+  /* Type, cool like everything else under a blue sign. */
+  --gr-color-ink: #dfe7f2;
+  --gr-color-ink-lit: #f2f6fb;
+  --gr-color-ink-dim: #8b97a8;
+  --gr-color-ink-faint: #5d6878;
+
+  /* Outcomes. Never the accent, so good news cannot be mistaken for a button. */
+  --gr-color-good: #3fbf7a;
+  --gr-color-bad: #c2543f;
+
+  --gr-font-sign: "Dancing Script", cursive;
   --gr-font-display: "Bevan", Georgia, serif;
   --gr-font-ui: "IBM Plex Sans", system-ui, sans-serif;
   --gr-font-data: "IBM Plex Mono", ui-monospace, monospace;
@@ -51,8 +78,8 @@
   --gr-radius-md: 4px;
   --gr-radius-die: 9px;
 
-  --gr-edge-hair: 1px solid color-mix(in srgb, var(--gr-color-brass) 28%, transparent);
-  --gr-edge-soft: 1px solid color-mix(in srgb, var(--gr-color-bone) 14%, transparent);
+  --gr-edge-hair: 1px solid color-mix(in srgb, var(--gr-color-neon) 24%, transparent);
+  --gr-edge-soft: 1px solid color-mix(in srgb, var(--gr-color-ink) 12%, transparent);
   --gr-edge-hard: 1px solid rgb(0 0 0 / 0.5);
 
   --gr-lift-low: 0 2px 6px rgb(0 0 0 / 0.5);

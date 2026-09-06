@@ -16,8 +16,8 @@ describe("Gallery", () => {
   it("prints the hex value beside each swatch", () => {
     render(<Gallery />);
     const palette = screen.getByRole("region", { name: /palette/i });
-    expect(within(palette).getByText(color.brass)).toBeDefined();
-    expect(within(palette).getByText(color.oxblood)).toBeDefined();
+    expect(within(palette).getByText(color.neon)).toBeDefined();
+    expect(within(palette).getByText(color.chip)).toBeDefined();
   });
 
   it("shows a specimen for each of the three typefaces", () => {
@@ -32,21 +32,21 @@ describe("Gallery", () => {
     render(<Gallery />);
     const textures = screen.getByRole("region", { name: /texture/i });
     for (const name of [...SURFACES, "vignette"]) {
-      // getAllByText, not getByText: wood appears twice, once per seed.
+      // getAllByText, not getByText: plaster appears twice, once per seed.
       expect(within(textures).getAllByText(name).length).toBeGreaterThan(0);
     }
   });
 
   it("gives each texture tile a real background-image", () => {
     render(<Gallery />);
-    const tile = screen.getByTestId("texture-wood");
+    const tile = screen.getByTestId("texture-plaster");
     expect(tile.style.backgroundImage).toContain("gradient(");
   });
 
   it("varies the seed across tiles of the same surface", () => {
     render(<Gallery />);
-    const first = screen.getByTestId("texture-wood").style.backgroundImage;
-    const second = screen.getByTestId("texture-wood-alt").style.backgroundImage;
+    const first = screen.getByTestId("texture-plaster").style.backgroundImage;
+    const second = screen.getByTestId("texture-plaster-alt").style.backgroundImage;
     expect(first).not.toBe(second);
   });
 });

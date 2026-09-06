@@ -1,5 +1,6 @@
 import { RULESETS } from "@greed/rules";
 import { Avatar, SeatAvatar } from "./Avatar.js";
+import { Sign } from "./Sign.js";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
@@ -46,8 +47,9 @@ export function Play() {
     <main className="play">
       <header className="play__head">
         <h1 className="play__mark">
-          GRE<em>E</em>D
+          <Sign />
         </h1>
+        <span className="play__game">Greed</span>
         {room !== null ? <span className="play__code">{room.code}</span> : null}
         {room !== null ? <LeaveButton room={room} onLeave={actions.leave} /> : null}
         <AccountBadge account={account} />

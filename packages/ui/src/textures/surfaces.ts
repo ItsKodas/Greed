@@ -10,7 +10,14 @@ export interface SurfaceOptions {
   highlight?: string;
 }
 
-export const SURFACES = ["wood", "felt", "leather", "brass", "paper"] as const;
+/*
+ * The materials the room is actually made of.
+ *
+ * Wood, leather and brass went with the tavern. What is left is a plastered
+ * wall, the felt on a table, and the card stock a rule is printed on — and
+ * glass, which is new, because there is a sign now.
+ */
+export const SURFACES = ["plaster", "felt", "glass", "card"] as const;
 
 export type SurfaceName = (typeof SURFACES)[number];
 
@@ -20,48 +27,45 @@ export interface SurfaceStyle {
 }
 
 /**
- * Aged walnut. The stretched baseFrequency pulls the noise into a direction so
- * it reads as grain; the repeating gradient supplies the harder growth lines.
+ * A plastered wall. Fine grain over a slow gradient and nothing else: no
+ * grain direction, no joints, no motif. A drawn pattern back here reads as
+ * ruling on paper and competes with everything in front of it.
  */
-export function wood(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.walnut, highlight = color.walnutLit } = options;
+export function plaster(options: SurfaceOptions = {}): string {
+  const { seed = 1, tint = color.shadow, highlight = color.slate } = options;
   return [
-    turbulence({ seed, baseFrequency: "0.012 0.7", octaves: 3, opacity: 0.22, size: 240 }),
-    "repeating-linear-gradient(96deg, rgb(0 0 0 / 0.28) 0 2px, transparent 2px 8px, rgb(0 0 0 / 0.15) 8px 9px, transparent 9px 20px)",
-    `linear-gradient(160deg, ${highlight}, ${tint})`,
+    turbulence({ seed, baseFrequency: "0.9", octaves: 2, opacity: 0.05, size: 180 }),
+    turbulence({ seed: seed + 7, baseFrequency: "0.006", octaves: 3, opacity: 0.1, size: 700 }),
+    `linear-gradient(178deg, ${highlight}, ${tint})`,
   ].join(", ");
 }
 
-/** Worn baize. Fine, dense, isotropic — the opposite of wood. */
+/** Worn baize. Fine, dense, isotropic — the surface a game is dealt on. */
 export function felt(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.baizeDeep, highlight = color.baizeLit } = options;
+  const { seed = 1, tint = color.feltDeep, highlight = color.feltLit } = options;
   return [
     turbulence({ seed, baseFrequency: "1.6", octaves: 3, opacity: 0.3, size: 120 }),
     `linear-gradient(150deg, ${highlight}, ${tint})`,
   ].join(", ");
 }
 
-/** Worn leather. Coarse cellular noise over a radial mottle. */
-export function leather(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.leatherDeep, highlight = color.leatherLit } = options;
+/**
+ * Lit glass tubing, for anything that is meant to look switched on.
+ *
+ * Almost no noise: gas in a tube is the one thing in the room with no texture
+ * at all, and the light falls off in bands rather than mottling.
+ */
+export function glass(options: SurfaceOptions = {}): string {
+  const { seed = 1, tint = color.neon, highlight = color.neonCore } = options;
   return [
-    turbulence({ seed, baseFrequency: "0.35", octaves: 4, opacity: 0.26, size: 200, kind: "turbulence" }),
-    `radial-gradient(90% 70% at 30% 20%, ${highlight}, ${tint})`,
+    turbulence({ seed, baseFrequency: "1.2", octaves: 1, opacity: 0.05, size: 90 }),
+    `radial-gradient(60% 120% at 50% 50%, ${highlight} 0%, ${tint} 34%, ${color.neonDeep} 78%, transparent 100%)`,
   ].join(", ");
 }
 
-/** Brushed brass. Anisotropic streaks over a multi-stop metal ramp. */
-export function brass(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.brass, highlight = color.brassHi } = options;
-  return [
-    turbulence({ seed, baseFrequency: "0.02 1.4", octaves: 2, opacity: 0.18, size: 160 }),
-    `linear-gradient(150deg, ${color.brassDim} 0%, ${highlight} 34%, ${tint} 52%, ${highlight} 68%, ${color.brassDim} 100%)`,
-  ].join(", ");
-}
-
-/** Bone / paper stock. Very fine grain, barely there. */
-export function paper(options: SurfaceOptions = {}): string {
-  const { seed = 1, tint = color.boneDeep, highlight = color.boneLit } = options;
+/** Card stock, for anything printed — a rules card, a chip label. */
+export function card(options: SurfaceOptions = {}): string {
+  const { seed = 1, tint = color.smoke, highlight = color.smokeLit } = options;
   return [
     turbulence({ seed, baseFrequency: "2.4", octaves: 2, opacity: 0.14, size: 100 }),
     `linear-gradient(155deg, ${highlight}, ${tint})`,
@@ -78,11 +82,10 @@ export function vignette(options: { strength?: number } = {}): string {
 }
 
 const surfaceMakers: Record<SurfaceName, (options?: SurfaceOptions) => string> = {
-  wood,
+  plaster,
   felt,
-  leather,
-  brass,
-  paper,
+  glass,
+  card,
 };
 
 /**

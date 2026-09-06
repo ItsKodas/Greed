@@ -14,11 +14,11 @@
 
 .gallery__title em {
   font-style: normal;
-  color: var(--gr-color-brass);
+  color: var(--gr-color-neon);
 }
 
 .gallery__deck {
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   max-width: 60ch;
   margin: var(--gr-space-4) 0 0;
 }
@@ -31,7 +31,7 @@
   font-family: var(--gr-font-display);
   font-weight: 400;
   font-size: var(--gr-text-xl);
-  color: var(--gr-color-brass);
+  color: var(--gr-color-neon);
   margin: 0 0 var(--gr-space-4);
 }
 
@@ -57,7 +57,7 @@
   display: block;
   font-family: var(--gr-font-data);
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
 
 .specimen {
@@ -71,7 +71,7 @@
 
 .specimen__sample {
   margin: 0;
-  color: var(--gr-color-bone);
+  color: var(--gr-color-ink);
   line-height: 1.2;
 }
 
@@ -89,7 +89,7 @@
 
 .specimen__label {
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
   margin: var(--gr-space-1) 0 0;
 }
 
@@ -115,5 +115,5 @@
 .tile__note {
   display: block;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-bone-dim);
+  color: var(--gr-color-ink-dim);
 }
