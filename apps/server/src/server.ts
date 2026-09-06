@@ -30,7 +30,7 @@ import type { BotSkill } from "@greed/game-greed";
 import { comboGateKeyFor } from "@greed/game-greed";
 import { mountAuth, readAuthConfig } from "./auth.js";
 import type { AuthConfig } from "./auth.js";
-import { MemoryStore } from "@greed/economy";
+import { MemoryStore, judgeDaily } from "@greed/economy";
 import type { Store } from "@greed/economy";
 import { GREED, Room, RoomError } from "@greed/game-greed";
 import { Catalogue } from "@greed/core";
@@ -206,7 +206,18 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       response.json(
         profile === null
           ? { signedIn: false, signinAvailable: auth !== null }
-          : { signedIn: true, signinAvailable: auth !== null, profile },
+          : {
+              signedIn: true,
+              signinAvailable: auth !== null,
+              profile,
+              /*
+               * Whether the top-up would actually do anything. Answered here
+               * rather than worked out in the browser, so the rule for who is
+               * owed chips lives in exactly one place — offering a button that
+               * can only say "you have plenty already" is not an offer.
+               */
+              dailyDue: judgeDaily(profile, Date.now()).ok,
+            },
       );
     })();
   });

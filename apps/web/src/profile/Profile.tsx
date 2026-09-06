@@ -76,7 +76,12 @@ export function Profile() {
           Sign in to keep a balance, a history, and figures worth arguing about.
         </p>
       ) : (
-        <Signed profile={account.profile} history={history} onDaily={account.claimDaily} />
+        <Signed
+          profile={account.profile}
+          history={history}
+          dailyDue={account.dailyDue}
+          onDaily={account.claimDaily}
+        />
       )}
       {account.dailyMessage !== null ? (
         <p className="play__event">{account.dailyMessage}</p>
@@ -88,10 +93,12 @@ export function Profile() {
 function Signed({
   profile,
   history,
+  dailyDue,
   onDaily,
 }: {
   profile: NonNullable<ReturnType<typeof useAccount>["profile"]>;
   history: PlayedGame[];
+  dailyDue: boolean;
   onDaily: () => void;
 }) {
   const { games, wins, chipsWon } = profile.stats;
@@ -114,9 +121,17 @@ function Signed({
             <b className="purse__count">{fmt(profile.chips)}</b>
             <small>chips</small>
           </div>
-          <button type="button" className="btn btn--wide" onClick={onDaily}>
-            Claim daily top-up
-          </button>
+          {/* Only offered when it would grant something. A button whose only
+              possible answer is "you have plenty already" is not an offer. */}
+          {dailyDue ? (
+            <button type="button" className="btn btn--wide" onClick={onDaily}>
+              Claim daily top-up
+            </button>
+          ) : (
+            <p className="panel__note purse__note">
+              The daily top-up is for running dry. Come back under 2,000.
+            </p>
+          )}
         </div>
       </div>
 

@@ -1433,8 +1433,10 @@
   border-radius: 50%;
   overflow: hidden;
   background: var(--gr-color-smoke);
-  border: 3px solid var(--gr-color-neon);
-  box-shadow: 0 0 8px var(--gr-color-neon), 0 0 22px rgb(11 63 212 / 0.6);
+  border: 3px solid var(--avatar-accent, var(--gr-color-neon));
+  box-shadow:
+    0 0 8px var(--avatar-accent, var(--gr-color-neon)),
+    0 0 22px color-mix(in srgb, var(--avatar-accent, var(--gr-color-neon)) 55%, transparent);
   display: grid;
   place-items: center;
   font-family: var(--gr-font-display);
@@ -1568,4 +1570,9 @@
 .account__me:focus-visible {
   outline: 2px solid var(--gr-color-neon);
   outline-offset: 3px;
+}
+
+.purse__note {
+  text-align: center;
+  font-size: var(--gr-text-xs);
 }

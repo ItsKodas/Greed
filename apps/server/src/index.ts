@@ -17,6 +17,12 @@ const PORT = Number(
 
 const mongoUrl = process.env["MONGO_URL"];
 
+/** The first line of a message, for logs that want a reason and not a stack. */
+function firstLine(message: string): string {
+  const end = message.indexOf("\n");
+  return end === -1 ? message : message.slice(0, end).trimEnd();
+}
+
 async function main(): Promise<void> {
   let store: Store = new MemoryStore();
   let sessionStore: session.Store | undefined;
@@ -30,9 +36,17 @@ async function main(): Promise<void> {
       sessionStore = MongoSessionStore.create({ mongoUrl });
       console.log("greed: profiles and chips are persistent");
     } catch (error) {
-      // A database that will not answer should not take the game down with
-      // it — losing persistence is better than losing the ability to play.
-      console.error("greed: could not reach the database, running in memory", error);
+      /*
+       * A database that will not answer should not take the game down with it:
+       * losing persistence is better than losing the ability to play.
+       *
+       * One line rather than the whole stack. This path is expected — it is
+       * what happens with no database running — and forty lines of driver
+       * internals for an expected outcome buries every other line in the log.
+       */
+      const why = error instanceof Error ? firstLine(error.message) : String(error);
+      console.error(`greed: no database (${why}) — profiles and chips live in memory`);
+      console.error("greed: sessions die on restart too, so a sign-in will not survive one");
     }
   } else {
     console.log("greed: no MONGO_URL, profiles and chips live in memory only");

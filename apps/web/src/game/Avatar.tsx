@@ -1,4 +1,5 @@
 import type { SeatView } from "@greed/shared";
+import type React from "react";
 import { useState } from "react";
 
 /**
@@ -36,7 +37,19 @@ export function Avatar({
   const showImage = avatar !== null && !broken;
 
   return (
-    <div className={className} style={accent === undefined ? undefined : { borderColor: accent }}>
+    <div
+      className={className}
+      /*
+       * Their colour as a variable as well as a border, so a ring and the glow
+       * around it can be the same colour. Half their colour and half the
+       * room's reads as a mistake rather than as a choice.
+       */
+      style={
+        accent === undefined
+          ? undefined
+          : ({ borderColor: accent, "--avatar-accent": accent } as React.CSSProperties)
+      }
+    >
       {showImage ? (
         <img
           className="avatar__image"
