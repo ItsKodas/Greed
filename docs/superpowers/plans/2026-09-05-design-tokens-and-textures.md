@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the `@greed/ui` design foundation — the token system and the procedural texture generators — plus a minimal web app that renders them at `/style`, so the visual direction is running code rather than a mockup.
+**Goal:** Build the `@backroom/ui` design foundation — the token system and the procedural texture generators — plus a minimal web app that renders them at `/style`, so the visual direction is running code rather than a mockup.
 
 **Architecture:** Colour, type and spacing live in one CSS file of custom properties, mirrored by a typed TS object that a test keeps in sync. Textures are **pure string functions** returning CSS `background-image` values built from SVG `feTurbulence` data-URIs layered over gradients — no canvas, no DOM, no runtime dependency, deterministic for a given seed. A small Vite + React app hosts the `/style` gallery, which later plans extend into the game client.
 
@@ -87,7 +87,7 @@ apps/web/
 
 ---
 
-### Task 1: The `@greed/ui` package and its tokens
+### Task 1: The `@backroom/ui` package and its tokens
 
 **Files:**
 - Create: `packages/ui/package.json`
@@ -100,7 +100,7 @@ apps/web/
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces, from `@greed/ui`:
+- Produces, from `@backroom/ui`:
   - `color` — a frozen record of the twelve palette entries, camelCase keys (`walnut`, `walnutLit`, `walnutDeep`, `baize`, `baizeLit`, `brass`, `brassHi`, `brassDim`, `bone`, `boneDim`, `oxblood`, `leather`), values lowercase hex strings.
   - `font` — `{ display, ui, data }`, each a full CSS font stack string.
   - `type ColorName = keyof typeof color`
@@ -112,7 +112,7 @@ apps/web/
 
 ```json
 {
-  "name": "@greed/ui",
+  "name": "@backroom/ui",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -160,7 +160,7 @@ Run from the repo root:
 npm install
 ```
 
-This registers the new workspace in the lockfile. Skipping it leaves `npm ci` unable to link `@greed/ui` — the same defect that bit `@greed/rules` in the previous plan.
+This registers the new workspace in the lockfile. Skipping it leaves `npm ci` unable to link `@backroom/ui` — the same defect that bit `@backroom/rules` in the previous plan.
 
 - [ ] **Step 4: Write the failing test**
 
@@ -587,7 +587,7 @@ git commit -m "feat: add svg noise plumbing for procedural textures"
 
 **Interfaces:**
 - Consumes: `turbulence` from `./svg.js`; `color` from `../tokens.js`.
-- Produces, from `@greed/ui`:
+- Produces, from `@backroom/ui`:
   - `interface SurfaceOptions { seed?: number; tint?: string; highlight?: string }`
   - `wood(options?: SurfaceOptions): string`
   - `felt(options?: SurfaceOptions): string`
@@ -858,7 +858,7 @@ A minimal Vite + React app whose only job for now is to host the gallery. Later 
 - Test: `apps/web/src/App.test.tsx`
 
 **Interfaces:**
-- Consumes: `color`, `font` from `@greed/ui`.
+- Consumes: `color`, `font` from `@backroom/ui`.
 - Produces: `App` (default export from `./App.js`) and `Gallery` (named export from `./style/Gallery.js`). The route `/style` renders the gallery; `/` redirects to it.
 
 - [ ] **Step 1: Create the app manifest and install**
@@ -867,7 +867,7 @@ A minimal Vite + React app whose only job for now is to host the gallery. Later 
 
 ```json
 {
-  "name": "@greed/web",
+  "name": "@backroom/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -877,7 +877,7 @@ A minimal Vite + React app whose only job for now is to host the gallery. Later 
     "preview": "vite preview"
   },
   "dependencies": {
-    "@greed/ui": "*",
+    "@backroom/ui": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0"
@@ -923,7 +923,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   server: { port: 5173 },
-  optimizeDeps: { exclude: ["@greed/ui", "@greed/rules"] },
+  optimizeDeps: { exclude: ["@backroom/ui", "@backroom/rules"] },
 });
 ```
 
@@ -955,8 +955,8 @@ export default defineConfig({
 In the root `package.json`, add to `scripts`:
 
 ```json
-"dev": "npm run dev -w @greed/web",
-"build": "npm run build -w @greed/web"
+"dev": "npm run dev -w @backroom/web",
+"build": "npm run build -w @backroom/web"
 ```
 
 Replace `vitest.config.ts` at the repo root:
@@ -1037,7 +1037,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.js";
-import "@greed/ui/tokens.css";
+import "@backroom/ui/tokens.css";
 
 const container = document.getElementById("root");
 if (container === null) {
@@ -1117,7 +1117,7 @@ The page that makes the design system visible. Three sections: palette, type, te
 - Test: `apps/web/src/style/Gallery.test.tsx`
 
 **Interfaces:**
-- Consumes: `color`, `font`, `SURFACES`, `wood`, `felt`, `leather`, `brass`, `paper`, `vignette` from `@greed/ui`.
+- Consumes: `color`, `font`, `SURFACES`, `wood`, `felt`, `leather`, `brass`, `paper`, `vignette` from `@backroom/ui`.
 - Produces: `Swatches`, `TypeSpecimen`, `TextureTiles` (named exports), and the filled-in `Gallery`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1126,7 +1126,7 @@ The page that makes the design system visible. Three sections: palette, type, te
 
 ```tsx
 // @vitest-environment jsdom
-import { color } from "@greed/ui";
+import { color } from "@backroom/ui";
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Gallery } from "./Gallery.js";
@@ -1311,7 +1311,7 @@ body {
 `apps/web/src/style/Swatches.tsx`:
 
 ```tsx
-import { color } from "@greed/ui";
+import { color } from "@backroom/ui";
 
 export function Swatches() {
   return (
@@ -1336,7 +1336,7 @@ export function Swatches() {
 `apps/web/src/style/TypeSpecimen.tsx`. The sample sentences are drawn from the game itself rather than pangrams — the point is to see the type doing the job it will actually do.
 
 ```tsx
-import { font } from "@greed/ui";
+import { font } from "@backroom/ui";
 
 const specimens = [
   {
@@ -1384,7 +1384,7 @@ export function TypeSpecimen() {
 `apps/web/src/style/TextureTiles.tsx`. Two seeds per surface, side by side, so it is obvious at a glance that the generator varies rather than repeating one baked image.
 
 ```tsx
-import { brass, felt, leather, paper, vignette, wood } from "@greed/ui";
+import { brass, felt, leather, paper, vignette, wood } from "@backroom/ui";
 
 interface Tile {
   id: string;

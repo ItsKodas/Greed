@@ -1,6 +1,6 @@
 import { Discord, generateCodeVerifier, generateState, OAuth2RequestError } from "arctic";
 import type { Express, RequestHandler, Response as ExpressResponse } from "express";
-import type { Store } from "@greed/economy";
+import type { Store } from "@backroom/economy";
 
 /**
  * Sign in with Discord.
@@ -84,7 +84,7 @@ function giveUp(
   reason: string,
   detail?: Record<string, unknown>,
 ): void {
-  console.error(`greed: discord sign-in failed (${reason})`, detail ?? "");
+  console.error(`backroom: discord sign-in failed (${reason})`, detail ?? "");
   response.redirect(`${config.clientUrl}/?signin=failed&why=${reason}`);
 }
 

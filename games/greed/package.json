@@ -1,5 +1,5 @@
 {
-  "name": "@greed/game-greed",
+  "name": "@backroom/game-greed",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,8 +10,8 @@
     "./theme.css": "./src/theme.css"
   },
   "dependencies": {
-    "@greed/core": "*",
-    "@greed/rules": "*",
-    "@greed/shared": "*"
+    "@backroom/core": "*",
+    "@backroom/rules": "*",
+    "@backroom/shared": "*"
   }
 }

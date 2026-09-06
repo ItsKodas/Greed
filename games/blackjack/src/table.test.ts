@@ -1,4 +1,4 @@
-import { TableError } from "@greed/core";
+import { TableError } from "@backroom/core";
 import { describe, expect, it } from "vitest";
 import type { Card, Rank } from "./cards.js";
 import { Table } from "./table.js";

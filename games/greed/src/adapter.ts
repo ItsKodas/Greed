@@ -1,6 +1,6 @@
-import { DEFAULT_RULESET, RULESETS } from "@greed/rules";
-import { TableError } from "@greed/core";
-import type { BotMove, Clock, GameAdapter } from "@greed/core";
+import { DEFAULT_RULESET, RULESETS } from "@backroom/rules";
+import { TableError } from "@backroom/core";
+import type { BotMove, Clock, GameAdapter } from "@backroom/core";
 import { comboGateKeyFor } from "./gatekey.js";
 import { decide, thinkingTime } from "./bot.js";
 import { Room } from "./room.js";

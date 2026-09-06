@@ -23,7 +23,7 @@
 - Every function in `packages/rules` is **pure**: no I/O, no `Date`, no `Math.random`, no mutation of arguments. The one permitted piece of state is the module-level bust-probability cache, which is a pure memo.
 - TypeScript `strict: true`. No `any`. No non-null assertions (`!`) — narrow properly.
 - ESM throughout (`"type": "module"`). Relative imports carry a `.js` extension, which is what TypeScript requires for ESM resolution even though the source is `.ts`.
-- Package names are scoped `@greed/*`.
+- Package names are scoped `@backroom/*`.
 - Face values are always `Die = 1 | 2 | 3 | 4 | 5 | 6`. Count vectors are always index-0-is-face-1.
 - Commit after every task. Conventional-commit prefixes (`chore:`, `feat:`, `test:`, `fix:`).
 
@@ -150,7 +150,7 @@ Do not pin versions by hand — take whatever npm resolves and let it write the 
 
 ```json
 {
-  "name": "@greed/rules",
+  "name": "@backroom/rules",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -183,7 +183,7 @@ npm install
 
 This is not redundant. Step 2's install ran before this workspace existed, so
 the lockfile has no record of it and `npm ci` would not link
-`node_modules/@greed/rules` — every later package importing the `@greed/rules`
+`node_modules/@backroom/rules` — every later package importing the `@backroom/rules`
 specifier would fail to resolve. No dependency versions change; this only syncs
 the lockfile with the workspace graph.
 
@@ -1594,7 +1594,7 @@ Ties the package together behind one entry point and adds the property tests tha
 
 **Interfaces:**
 - Consumes: everything built so far.
-- Produces: the public surface of `@greed/rules` — `scoreSelection`, `enumerateOptions`, `hasAnyScore`, `bustProbabilities`, `bustProbability`, `DEFAULT_RULESET`, `MINIMAL_RULESET`, and the types. `bestPartition` and `applicableCombos` stay internal.
+- Produces: the public surface of `@backroom/rules` — `scoreSelection`, `enumerateOptions`, `hasAnyScore`, `bustProbabilities`, `bustProbability`, `DEFAULT_RULESET`, `MINIMAL_RULESET`, and the types. `bestPartition` and `applicableCombos` stay internal.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1745,7 +1745,7 @@ Expected: PASS, 7 tests. The full-enumeration tests take a few seconds; that is 
 `packages/rules/README.md`:
 
 ```markdown
-# @greed/rules
+# @backroom/rules
 
 The scoring engine for Greed. Pure, dependency-free, and shared by the
 server, the browser client and the bot — so there is exactly one definition
@@ -1754,7 +1754,7 @@ of what a roll is worth.
 ## Usage
 
 ```ts
-import { scoreSelection, enumerateOptions, DEFAULT_RULESET } from "@greed/rules";
+import { scoreSelection, enumerateOptions, DEFAULT_RULESET } from "@backroom/rules";
 
 scoreSelection([1, 1, 1, 5, 5, 5], DEFAULT_RULESET);
 // { valid: true, points: 2500, breakdown: [ { kind: "two-triplets", ... } ] }
@@ -1831,7 +1831,7 @@ git commit -m "feat: expose the rules package public API"
 - `npm test` passes, including the 1080 and 1440 farkle invariants.
 - `npm run typecheck` exits clean.
 - `packages/rules/package.json` has no `dependencies` key.
-- `@greed/rules` exports `scoreSelection`, `enumerateOptions`, `hasAnyScore`, `bustProbabilities`, `bustProbability`, both rulesets, and the shared types.
+- `@backroom/rules` exports `scoreSelection`, `enumerateOptions`, `hasAnyScore`, `bustProbabilities`, `bustProbability`, both rulesets, and the shared types.
 
 ## Next plan
 

@@ -1,4 +1,4 @@
-# @greed/rules
+# @backroom/rules
 
 The scoring engine for Greed. Pure, dependency-free, and shared by the
 server, the browser client and the bot — so there is exactly one definition
@@ -7,7 +7,7 @@ of what a roll is worth.
 ## Usage
 
 ```ts
-import { scoreSelection, enumerateOptions, DEFAULT_RULESET } from "@greed/rules";
+import { scoreSelection, enumerateOptions, DEFAULT_RULESET } from "@backroom/rules";
 
 scoreSelection([1, 1, 1, 5, 5, 5], DEFAULT_RULESET);
 // { valid: true, points: 2500, breakdown: [ { kind: "two-triplets", ... } ] }

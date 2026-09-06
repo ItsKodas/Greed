@@ -1,4 +1,4 @@
-import type { Ack, ClientToServer, ServerToClient, TableState } from "@greed/shared";
+import type { Ack, ClientToServer, ServerToClient, TableState } from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 
@@ -19,28 +19,36 @@ type TableSocket = Socket<ServerToClient, ClientToServer>;
  */
 export type CreateOptions = Omit<Parameters<ClientToServer["lobby:create"]>[0], "name">;
 
-const SEAT_KEY = "greed.seat";
+
 
 interface StoredSeat {
   code: string;
   seatId: string;
 }
 
-function readSeat(): StoredSeat | null {
+/*
+ * Keyed by game, not by the building. One key across every game would mean
+ * walking from one table to another game's page and being quietly put back in
+ * the first room, whose state that page then discards — a table that looks
+ * empty while you are sitting at one.
+ */
+const seatKey = (game: string) => `backroom.seat.${game}`;
+
+function readSeat(game: string): StoredSeat | null {
   try {
-    const raw = window.sessionStorage.getItem(SEAT_KEY);
+    const raw = window.sessionStorage.getItem(seatKey(game));
     return raw === null ? null : (JSON.parse(raw) as StoredSeat);
   } catch {
     return null;
   }
 }
 
-function writeSeat(seat: StoredSeat | null): void {
+function writeSeat(game: string, seat: StoredSeat | null): void {
   try {
     if (seat === null) {
-      window.sessionStorage.removeItem(SEAT_KEY);
+      window.sessionStorage.removeItem(seatKey(game));
     } else {
-      window.sessionStorage.setItem(SEAT_KEY, JSON.stringify(seat));
+      window.sessionStorage.setItem(seatKey(game), JSON.stringify(seat));
     }
   } catch {
     // A browser that will not remember is not a reason to refuse to play.
@@ -83,7 +91,7 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
 
     socket.on("connect", () => {
       setConnected(true);
-      const stored = readSeat();
+      const stored = readSeat(game);
       if (stored === null) {
         return;
       }
@@ -91,7 +99,7 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
         if (result.ok) {
           setSeatId(result.seatId);
         } else {
-          writeSeat(null);
+          writeSeat(game, null);
         }
       });
     });
@@ -129,12 +137,12 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
       setBusy(false);
       if (result.ok) {
         setSeatId(result.seatId);
-        writeSeat({ code: result.code, seatId: result.seatId });
+        writeSeat(game, { code: result.code, seatId: result.seatId });
       } else {
         setError(result.error);
       }
     });
-  }, []);
+  }, [game]);
 
   const join = useCallback((name: string, code: string) => {
     const socket = socketRef.current;
@@ -146,12 +154,12 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
       setBusy(false);
       if (result.ok) {
         setSeatId(result.seatId);
-        writeSeat({ code: result.code, seatId: result.seatId });
+        writeSeat(game, { code: result.code, seatId: result.seatId });
       } else {
         setError(result.error);
       }
     });
-  }, []);
+  }, [game]);
 
   const watch = useCallback((code: string) => {
     const socket = socketRef.current;
@@ -163,21 +171,21 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
       setBusy(false);
       if (result.ok) {
         // No seat, so nothing to reclaim on a refresh.
-        writeSeat(null);
+        writeSeat(game, null);
         setSeatId(null);
       } else {
         setError(result.error);
       }
     });
-  }, []);
+  }, [game]);
 
   const leave = useCallback(() => {
-    writeSeat(null);
+    writeSeat(game, null);
     socketRef.current?.emit("lobby:leave");
     setState(null);
     setSeatId(null);
     onLeave();
-  }, [onLeave]);
+  }, [game, onLeave]);
 
   const act = useCallback((action: Record<string, unknown>, done?: () => void) => {
     socketRef.current?.emit("game:action", action as { type: string }, done);

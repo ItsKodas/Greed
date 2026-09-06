@@ -1,5 +1,5 @@
-import { DEFAULT_RULESET, LETTER_RULESET } from "@greed/rules";
-import type { Die } from "@greed/rules";
+import { DEFAULT_RULESET, LETTER_RULESET } from "@backroom/rules";
+import type { Die } from "@backroom/rules";
 import { describe, expect, it } from "vitest";
 import { Room, RoomError } from "./room.js";
 

@@ -1,10 +1,10 @@
 import type { AddressInfo } from "node:net";
-import { MemoryStore, STARTING_CHIPS } from "@greed/economy";
+import { MemoryStore, STARTING_CHIPS } from "@backroom/economy";
 import { afterEach, describe, expect, it } from "vitest";
-import { createGreedServer } from "./server.js";
-import type { GreedServer } from "./server.js";
+import { createBackRoomServer } from "./server.js";
+import type { BackRoomServer } from "./server.js";
 
-let server: GreedServer | null = null;
+let server: BackRoomServer | null = null;
 
 afterEach(async () => {
   if (server !== null) {
@@ -16,7 +16,7 @@ afterEach(async () => {
 
 /** A server where the signed-in player is whoever we say. */
 async function start(store: MemoryStore, as: string | null) {
-  server = createGreedServer({
+  server = createBackRoomServer({
     store,
     auth: null,
     serveClient: false,

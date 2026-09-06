@@ -1,16 +1,16 @@
 import type { AddressInfo } from "node:net";
-import type { Die } from "@greed/rules";
-import type { Ack, ClientToServer, RoomView, ServerToClient } from "@greed/shared";
+import type { Die } from "@backroom/rules";
+import type { Ack, ClientToServer, RoomView, ServerToClient } from "@backroom/shared";
 import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
-import { createGreedServer } from "./server.js";
-import type { GreedServer } from "./server.js";
-import { MemoryStore, STARTING_CHIPS } from "@greed/economy";
+import { createBackRoomServer } from "./server.js";
+import type { BackRoomServer } from "./server.js";
+import { MemoryStore, STARTING_CHIPS } from "@backroom/economy";
 
 type Client = Socket<ServerToClient, ClientToServer> & { latest?: RoomView };
 
-let server: GreedServer | null = null;
+let server: BackRoomServer | null = null;
 const open: Client[] = [];
 
 
@@ -33,7 +33,7 @@ describe("playing for chips", () => {
     const store = new MemoryStore();
     let seen = 0;
     const order = Object.values(options.identities);
-    server = createGreedServer({
+    server = createBackRoomServer({
       store,
       auth: null,
       serveClient: false,
@@ -136,7 +136,7 @@ describe("playing for chips", () => {
       accentColor: null,
     });
     // Six 1s every roll: 8,000 in one turn, so Ada wins at once.
-    server = createGreedServer({
+    server = createBackRoomServer({
       store,
       auth: null,
       serveClient: false,
@@ -185,7 +185,7 @@ describe("playing for chips", () => {
       accentColor: null,
     });
     await store.adjustChips(ada.id, -(STARTING_CHIPS - 10));
-    server = createGreedServer({
+    server = createBackRoomServer({
       store,
       auth: null,
       serveClient: false,
@@ -227,7 +227,7 @@ describe("who a seat belongs to", () => {
       });
       userId = person.id;
     }
-    server = createGreedServer({
+    server = createBackRoomServer({
       store,
       auth: null,
       serveClient: false,
@@ -328,7 +328,7 @@ describe("who a seat belongs to", () => {
       avatar: null,
       accentColor: null,
     });
-    server = createGreedServer({
+    server = createBackRoomServer({
       store,
       auth: null,
       serveClient: false,

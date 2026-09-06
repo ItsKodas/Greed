@@ -1,8 +1,8 @@
-import { RULESETS } from "@greed/rules";
+import { RULESETS } from "@backroom/rules";
 import { SeatAvatar } from "./Avatar.js";
 import { Sign } from "./Sign.js";
 import { AccountBadge } from "../account/AccountBadge.js";
-import "@greed/game-greed/theme.css";
+import "@backroom/game-greed/theme.css";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
@@ -14,9 +14,9 @@ import { useAccount } from "./useAccount.js";
 import type { Account } from "./useAccount.js";
 import { useRoom } from "./useRoom.js";
 import type { RoomActions } from "./useRoom.js";
-import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
-import type { ChatMessage } from "@greed/shared";
-import type { RoomView } from "@greed/shared";
+import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
+import type { ChatMessage } from "@backroom/shared";
+import type { RoomView } from "@backroom/shared";
 
 export function Play() {
   const params = useParams();

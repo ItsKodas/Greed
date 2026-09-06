@@ -1,4 +1,4 @@
-import type { Die, Ruleset } from "@greed/rules";
+import type { Die, Ruleset } from "@backroom/rules";
 
 /** Where a turn is in its cycle. */
 export type Phase = "awaiting_roll" | "selecting" | "farkled" | "over";

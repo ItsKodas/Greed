@@ -21,7 +21,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.bundled-db.yml up --build
 
 services:
-  greed:
+  backroom:
     build: .
     restart: unless-stopped
     ports:

@@ -1,5 +1,5 @@
 {
-  "name": "@greed/game-blackjack",
+  "name": "@backroom/game-blackjack",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,6 @@
     "./theme.css": "./src/theme.css"
   },
   "dependencies": {
-    "@greed/core": "*"
+    "@backroom/core": "*"
   }
 }

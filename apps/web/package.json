@@ -1,5 +1,5 @@
 {
-  "name": "@greed/web",
+  "name": "@backroom/web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@greed/ui": "*",
+    "@backroom/ui": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",

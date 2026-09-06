@@ -22,5 +22,5 @@ export default defineConfig({
       "/socket.io": { target: "http://localhost:3001", ws: true },
     },
   },
-  optimizeDeps: { exclude: ["@greed/ui", "@greed/rules", "@greed/shared"] },
+  optimizeDeps: { exclude: ["@backroom/ui", "@backroom/rules", "@backroom/shared"] },
 });

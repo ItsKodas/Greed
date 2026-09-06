@@ -1,5 +1,5 @@
-import { MIN_SEATS, Seating, TableError } from "@greed/core";
-import type { BotSkill, Seat as TableSeat, SeatIdentity, TableStatus } from "@greed/core";
+import { MIN_SEATS, Seating, TableError } from "@backroom/core";
+import type { BotSkill, Seat as TableSeat, SeatIdentity, TableStatus } from "@backroom/core";
 import { Shoe } from "./cards.js";
 import type { Card } from "./cards.js";
 import { isBlackjack, value } from "./hand.js";

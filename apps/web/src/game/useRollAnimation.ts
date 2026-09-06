@@ -1,4 +1,4 @@
-import type { Die } from "@greed/rules";
+import type { Die } from "@backroom/rules";
 import { useEffect, useRef, useState } from "react";
 
 /**

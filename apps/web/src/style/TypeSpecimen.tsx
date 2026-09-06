@@ -1,4 +1,4 @@
-import { font } from "@greed/ui";
+import { font } from "@backroom/ui";
 
 const specimens = [
   {

@@ -1,6 +1,6 @@
-import { bustProbability, enumerateOptions } from "@greed/rules";
-import type { Die, Option, Ruleset } from "@greed/rules";
-import type { BotSkill } from "@greed/shared";
+import { bustProbability, enumerateOptions } from "@backroom/rules";
+import type { Die, Option, Ruleset } from "@backroom/rules";
+import type { BotSkill } from "@backroom/shared";
 
 export type { BotSkill };
 

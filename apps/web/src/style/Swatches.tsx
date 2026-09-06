@@ -1,4 +1,4 @@
-import { color } from "@greed/ui";
+import { color } from "@backroom/ui";
 
 export function Swatches() {
   return (

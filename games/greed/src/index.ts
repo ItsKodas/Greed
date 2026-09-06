@@ -2,7 +2,7 @@
  * Greed: six dice, bank it or lose it.
  *
  * The whole game in one package — its table, its scoring rules and its bot.
- * It borrows seating and the shape of a table from @greed/core and brings
+ * It borrows seating and the shape of a table from @backroom/core and brings
  * everything that makes it this game rather than another one.
  */
 export { Room, RoomError } from "./room.js";

@@ -1,4 +1,4 @@
-import type { DiceSkin, Die as DieFace } from "@greed/rules";
+import type { DiceSkin, Die as DieFace } from "@backroom/rules";
 
 /** Pip positions per face, as [row, column] on a 3x3 grid. */
 const PIPS: Record<DieFace, ReadonlyArray<readonly [number, number]>> = {

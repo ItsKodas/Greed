@@ -48,4 +48,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
 
 # `serve`, not `start`: compose hands the environment in, so the .env lookup
 # `start` does would find nothing and say so on every boot.
-CMD ["npm", "run", "serve", "-w", "@greed/server"]
+CMD ["npm", "run", "serve", "-w", "@backroom/server"]

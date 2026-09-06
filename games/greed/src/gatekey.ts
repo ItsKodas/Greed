@@ -1,4 +1,4 @@
-import type { Ruleset } from "@greed/rules";
+import type { Ruleset } from "@backroom/rules";
 
 /**
  * A stable key for "which combinations can fire under these rules".

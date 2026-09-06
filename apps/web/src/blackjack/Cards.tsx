@@ -1,4 +1,4 @@
-import type { Card as CardData, Suit } from "@greed/game-blackjack";
+import type { Card as CardData, Suit } from "@backroom/game-blackjack";
 
 const PIPS: Record<Suit, string> = {
   spades: "♠",

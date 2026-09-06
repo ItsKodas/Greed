@@ -1,12 +1,12 @@
 import type { AddressInfo } from "node:net";
-import { MemoryStore, STARTING_CHIPS } from "@greed/economy";
-import type { TableView } from "@greed/game-blackjack";
-import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
+import { MemoryStore, STARTING_CHIPS } from "@backroom/economy";
+import type { TableView } from "@backroom/game-blackjack";
+import type { Ack, ClientToServer, ServerToClient } from "@backroom/shared";
 import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
-import { createGreedServer } from "./server.js";
-import type { GreedServer } from "./server.js";
+import { createBackRoomServer } from "./server.js";
+import type { BackRoomServer } from "./server.js";
 
 /**
  * Blackjack, driven through the real socket layer.
@@ -25,7 +25,7 @@ import type { GreedServer } from "./server.js";
 
 type Client = Socket<ServerToClient, ClientToServer> & { latest?: TableView };
 
-let server: GreedServer | null = null;
+let server: BackRoomServer | null = null;
 const open: Client[] = [];
 
 afterEach(async () => {
@@ -67,7 +67,7 @@ async function startRoom(...people: Array<string | null>): Promise<{
   }
 
   let seen = 0;
-  server = createGreedServer({
+  server = createBackRoomServer({
     store,
     auth: null,
     serveClient: false,
@@ -126,6 +126,30 @@ function act(socket: Client, action: Record<string, unknown>): Promise<void> {
   );
 }
 
+/**
+ * Bets and deals until a hand arrives that still has a decision in it.
+ *
+ * A natural blackjack is over inside `deal` — the seat is done, the dealer
+ * plays, and the table settles before the first broadcast — so a hand that
+ * reaches the playing phase is only about nineteen times in twenty. The shoe
+ * is the server's own and cannot be seeded from out here, so this deals again
+ * rather than asserting on a hand that may not exist.
+ */
+async function dealLive(socket: Client, stake = 500): Promise<TableView> {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await act(socket, { type: "bet", amount: stake });
+    await act(socket, { type: "deal" });
+    const dealt = await stateWhere(socket, (view) => view.phase !== "betting");
+    if (dealt.phase === "playing" && dealt.turnSeatId !== null) {
+      return dealt;
+    }
+    await stateWhere(socket, (view) => view.phase === "settled");
+    await act(socket, { type: "nextHand" });
+    await stateWhere(socket, (view) => view.phase === "betting");
+  }
+  throw new Error("twelve hands running were over before they began");
+}
+
 describe("blackjack over the wire", () => {
   it("opens a table that says which game it is", async () => {
     const { port } = await startRoom("Ada");
@@ -181,10 +205,8 @@ describe("blackjack over the wire", () => {
     const { port } = await startRoom("Ada");
     const host = await client(port);
     await open_(host, "Ada");
-    await act(host, { type: "bet", amount: 500 });
-    await act(host, { type: "deal" });
 
-    const dealt = await stateWhere(host, (view) => view.phase === "playing");
+    const dealt = await dealLive(host);
     // Not "sent and hidden by the browser" — the second card is not in the
     // payload at all, which is the entire reason a view is built per seat.
     expect(dealt.dealer.cards).toHaveLength(1);
@@ -198,17 +220,14 @@ describe("blackjack over the wire", () => {
     const ada = ids[0] as string;
     const host = await client(port);
     await open_(host, "Ada");
-    await act(host, { type: "bet", amount: 500 });
-    await act(host, { type: "deal" });
 
-    const dealt = await stateWhere(host, (view) => view.phase === "playing");
+    await dealLive(host);
+    // Both read after the deal, so whatever hands dealLive played out first
+    // are already in them and this measures only the hand about to finish.
     const staked = (await store.get(ada))?.chips ?? 0;
-    expect(staked).toBe(STARTING_CHIPS - 500);
+    const played = (await store.get(ada))?.stats.games ?? 0;
 
-    // A blackjack is already done, so there may be no move left to make.
-    if (dealt.turnSeatId !== null) {
-      await act(host, { type: "stand" });
-    }
+    await act(host, { type: "stand" });
     const over = await stateWhere(host, (view) => view.phase === "settled");
 
     const seat = over.seats[0];
@@ -223,19 +242,15 @@ describe("blackjack over the wire", () => {
       .toBe(staked + (seat?.returned ?? 0));
 
     const record = await store.get(ada);
-    expect(record?.stats.games).toBe(1);
+    expect(record?.stats.games).toBe(played + 1);
   });
 
   it("deals another hand to everyone still sitting there", async () => {
     const { port } = await startRoom("Ada");
     const host = await client(port);
     await open_(host, "Ada");
-    await act(host, { type: "bet", amount: 500 });
-    await act(host, { type: "deal" });
-    const dealt = await stateWhere(host, (view) => view.phase === "playing");
-    if (dealt.turnSeatId !== null) {
-      await act(host, { type: "stand" });
-    }
+    await dealLive(host);
+    await act(host, { type: "stand" });
     await stateWhere(host, (view) => view.phase === "settled");
 
     await act(host, { type: "nextHand" });

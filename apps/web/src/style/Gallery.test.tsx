@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { SURFACES, color } from "@greed/ui";
+import { SURFACES, color } from "@backroom/ui";
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Gallery } from "./Gallery.js";

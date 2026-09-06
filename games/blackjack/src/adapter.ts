@@ -1,5 +1,5 @@
-import { TableError } from "@greed/core";
-import type { GameAdapter } from "@greed/core";
+import { TableError } from "@backroom/core";
+import type { GameAdapter } from "@backroom/core";
 import { BLACKJACK } from "./listing.js";
 import { value } from "./hand.js";
 import { Table } from "./table.js";

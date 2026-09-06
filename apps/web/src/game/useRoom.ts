@@ -1,4 +1,4 @@
-import type { ChatMessage, ClientToServer, HouseRules, RoomView, ServerToClient } from "@greed/shared";
+import type { ChatMessage, ClientToServer, HouseRules, RoomView, ServerToClient } from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
@@ -18,7 +18,13 @@ const SERVER_URL = "";
 
 type GameSocket = Socket<ServerToClient, ClientToServer>;
 
-const SEAT_KEY = "greed.seat";
+/*
+ * Keyed by game, not by the building. One key across every game would mean
+ * walking from a Greed table to the blackjack page and being quietly put back
+ * in the Greed room, whose state this page then discards — a table that looks
+ * empty while you are sitting at one.
+ */
+const SEAT_KEY = "backroom.seat.greed";
 
 interface StoredSeat {
   code: string;

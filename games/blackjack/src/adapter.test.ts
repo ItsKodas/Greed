@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { GameDeps } from "@greed/core";
+import type { GameDeps } from "@backroom/core";
 import { blackjackAdapter } from "./adapter.js";
 
 /** A ledger that records what the game asked to move, without a database. */

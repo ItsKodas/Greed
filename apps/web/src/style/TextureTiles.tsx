@@ -1,4 +1,4 @@
-import { card, felt, glass, plaster, vignette } from "@greed/ui";
+import { card, felt, glass, plaster, vignette } from "@backroom/ui";
 
 interface Tile {
   id: string;

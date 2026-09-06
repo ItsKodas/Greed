@@ -1,11 +1,11 @@
 import type { AddressInfo } from "node:net";
-import type { Die } from "@greed/rules";
-import type { Ack, ClientToServer, RoomView, ServerToClient } from "@greed/shared";
+import type { Die } from "@backroom/rules";
+import type { Ack, ClientToServer, RoomView, ServerToClient } from "@backroom/shared";
 import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createGreedServer, resolveSessionSecret, resolveTrustProxy } from "./server.js";
-import type { GreedServer } from "./server.js";
+import { createBackRoomServer, resolveSessionSecret, resolveTrustProxy } from "./server.js";
+import type { BackRoomServer } from "./server.js";
 
 /**
  * These drive the real socket layer with real clients.
@@ -19,7 +19,7 @@ import type { GreedServer } from "./server.js";
 
 type Client = Socket<ServerToClient, ClientToServer> & { latest?: RoomView };
 
-let server: GreedServer;
+let server: BackRoomServer;
 let port: number;
 const open: Client[] = [];
 
@@ -34,7 +34,7 @@ function scripted(...rolls: Die[][]) {
 }
 
 async function start(roll?: () => Die[]): Promise<void> {
-  server = createGreedServer({
+  server = createBackRoomServer({
     roll,
     serveClient: false,
     farklePauseMs: 30,
@@ -509,7 +509,7 @@ describe("the session secret", () => {
 
   it("falls back to the development default off production", () => {
     process.env["NODE_ENV"] = "development";
-    expect(resolveSessionSecret(undefined)).toBe("greed-development-secret");
+    expect(resolveSessionSecret(undefined)).toBe("back-room-development-secret");
   });
 
   it("refuses to start in production without one", () => {
@@ -712,7 +712,7 @@ describe("watching a table", () => {
 describe("what the room offers", () => {
   it("lists every game, and says which can be opened", async () => {
     await start();
-    const port = (server as GreedServer).http.address() as AddressInfo;
+    const port = (server as BackRoomServer).http.address() as AddressInfo;
     const body = (await (await fetch(`http://localhost:${port.port}/api/room`)).json()) as {
       games: Array<{ id: string; open: boolean; shape: string; tables: number }>;
     };
@@ -729,7 +729,7 @@ describe("what the room offers", () => {
 
   it("counts the tables people are actually at", async () => {
     await start();
-    const port = (server as GreedServer).http.address() as AddressInfo;
+    const port = (server as BackRoomServer).http.address() as AddressInfo;
     const host = await client();
     await create(host, "Ada");
     await stateWhere(host, (state) => state.seats.length === 1);

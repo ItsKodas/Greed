@@ -1,4 +1,4 @@
-import type { SeatView } from "@greed/shared";
+import type { SeatView } from "@backroom/shared";
 import type React from "react";
 import { useState } from "react";
 

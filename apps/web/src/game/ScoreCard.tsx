@@ -1,4 +1,4 @@
-import type { Die, FaceScores, Ruleset } from "@greed/rules";
+import type { Die, FaceScores, Ruleset } from "@backroom/rules";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 

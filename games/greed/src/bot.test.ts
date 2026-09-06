@@ -1,5 +1,5 @@
-import { DEFAULT_RULESET, LETTER_RULESET } from "@greed/rules";
-import type { Die, Ruleset } from "@greed/rules";
+import { DEFAULT_RULESET, LETTER_RULESET } from "@backroom/rules";
+import type { Die, Ruleset } from "@backroom/rules";
 import { describe, expect, it } from "vitest";
 import { decide, expectedGain } from "./bot.js";
 import type { BotContext } from "./bot.js";

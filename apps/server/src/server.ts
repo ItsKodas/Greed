@@ -3,16 +3,16 @@ import type { Server as HttpServer } from "node:http";
 import { createServer as createHttpServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@greed/core";
-import { Catalogue } from "@greed/core";
-import type { Store } from "@greed/economy";
-import { judgeDaily, MemoryStore } from "@greed/economy";
-import { BLACKJACK, blackjackAdapter } from "@greed/game-blackjack";
-import { GREED, RoomError, greedAdapter } from "@greed/game-greed";
-import type { Die } from "@greed/rules";
+import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
+import { Catalogue } from "@backroom/core";
+import type { Store } from "@backroom/economy";
+import { judgeDaily, MemoryStore } from "@backroom/economy";
+import { BLACKJACK, blackjackAdapter } from "@backroom/game-blackjack";
+import { GREED, RoomError, greedAdapter } from "@backroom/game-greed";
+import type { Die } from "@backroom/rules";
 
-import type { Ack, ClientToServer, ServerToClient } from "@greed/shared";
-import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
+import type { Ack, ClientToServer, ServerToClient } from "@backroom/shared";
+import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 // From the subpath, not the barrel: the client imports the barrel, and pulling
 // zod in through it would ship a validation library to every browser.
 import {
@@ -27,12 +27,13 @@ import {
   setBuyInSchema,
   setRulesSchema,
   watchSchema,
-} from "@greed/shared/schemas";
+} from "@backroom/shared/schemas";
 import express from "express";
 import session from "express-session";
 import type { DefaultEventsMap } from "socket.io";
 import { Server } from "socket.io";
 import { readAdmins } from "./admin.js";
+import { friendlyRedirect } from "./domains.js";
 import type { AuthConfig } from "./auth.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
 
@@ -57,7 +58,7 @@ const CATALOGUE = new Catalogue()
   });
 
 
-export interface GreedServerOptions {
+export interface BackRoomServerOptions {
   /** Injected so tests can roll deterministically. */
   roll?: (count: number) => Die[];
   /** How long the busting dice stay on screen before play moves on. */
@@ -111,7 +112,7 @@ interface Seated {
   table: PlayTable;
 }
 
-export interface GreedServer {
+export interface BackRoomServer {
   http: HttpServer;
   store: Store;
   io: Server<ClientToServer, ServerToClient>;
@@ -143,7 +144,7 @@ interface Budget {
   resetAt: number;
 }
 
-export function createGreedServer(options: GreedServerOptions = {}): GreedServer {
+export function createBackRoomServer(options: BackRoomServerOptions = {}): BackRoomServer {
   const {
     roll = defaultRoll,
     farklePauseMs = 2200,
@@ -205,6 +206,21 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   if (trustProxy !== null) {
     app.set("trust proxy", trustProxy);
   }
+
+  /*
+   * A game's own subdomain, sent on to the one real origin. Mounted here, above
+   * everything: the point is that nobody spends a whole session on
+   * greed.horizons.gg holding a cookie the canonical host cannot see.
+   */
+  const gameIds = CATALOGUE.all().map((game) => game.id);
+  app.use((request, response, next) => {
+    const target = friendlyRedirect(request.hostname, request.path, gameIds, clientOrigin);
+    if (target === null) {
+      next();
+      return;
+    }
+    response.redirect(301, target);
+  });
   const http = createHttpServer(app);
   const io = new Server<ClientToServer, ServerToClient, DefaultEventsMap, SocketIdentity>(http, {
     cors: { origin: clientOrigin, methods: ["GET", "POST"] },
@@ -1123,7 +1139,7 @@ export function resolveSessionSecret(provided: string | undefined): string {
         "key published in this repository.",
     );
   }
-  return "greed-development-secret";
+  return "back-room-development-secret";
 }
 
 function requireHost(table: PlayTable, seatId: string, what: string): void {

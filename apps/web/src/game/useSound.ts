@@ -1,4 +1,4 @@
-import type { RoomView } from "@greed/shared";
+import type { RoomView } from "@backroom/shared";
 import { useEffect, useRef } from "react";
 import { play, preload, unlock } from "./audio.js";
 import { ROLL_SETTLE_MS } from "./useRollAnimation.js";

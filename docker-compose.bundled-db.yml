@@ -19,7 +19,7 @@ services:
       timeout: 5s
       retries: 5
 
-  greed:
+  backroom:
     environment:
       MONGO_URL: mongodb://mongo:27017/greed
     depends_on:

@@ -1,9 +1,9 @@
 import type session from "express-session";
 import { readAuthConfig } from "./auth.js";
-import { MongoStore } from "@greed/economy";
-import { createGreedServer } from "./server.js";
-import { MemoryStore } from "@greed/economy";
-import type { Store } from "@greed/economy";
+import { MongoStore } from "@backroom/economy";
+import { createBackRoomServer } from "./server.js";
+import { MemoryStore } from "@backroom/economy";
+import type { Store } from "@backroom/economy";
 
 /**
  * Port precedence: an explicit --port flag, then PORT, then 3001. The flag
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
       // server should not need a database driver present at all.
       const { default: MongoSessionStore } = await import("connect-mongo");
       sessionStore = MongoSessionStore.create({ mongoUrl });
-      console.log("greed: profiles and chips are persistent");
+      console.log("backroom: profiles and chips are persistent");
     } catch (error) {
       /*
        * A database that will not answer should not take the game down with it:
@@ -45,19 +45,19 @@ async function main(): Promise<void> {
        * internals for an expected outcome buries every other line in the log.
        */
       const why = error instanceof Error ? firstLine(error.message) : String(error);
-      console.error(`greed: no database (${why}) — profiles and chips live in memory`);
-      console.error("greed: sessions die on restart too, so a sign-in will not survive one");
+      console.error(`backroom: no database (${why}) — profiles and chips live in memory`);
+      console.error("backroom: sessions die on restart too, so a sign-in will not survive one");
     }
   } else {
-    console.log("greed: no MONGO_URL, profiles and chips live in memory only");
+    console.log("backroom: no MONGO_URL, profiles and chips live in memory only");
   }
 
   const auth = readAuthConfig(process.env);
   if (auth === null) {
-    console.log("greed: no Discord credentials, sign-in is disabled");
+    console.log("backroom: no Discord credentials, sign-in is disabled");
   }
 
-  const server = createGreedServer({
+  const server = createBackRoomServer({
     store,
     auth,
     sessionStore,
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   });
 
   server.http.listen(PORT, () => {
-    console.log(`greed server listening on http://localhost:${PORT}`);
+    console.log(`backroom server listening on http://localhost:${PORT}`);
   });
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -78,6 +78,6 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   // A misconfigured server should say what is wrong in one line, not bury it
   // in an unhandled-rejection stack.
-  console.error(`greed: ${error instanceof Error ? error.message : String(error)}`);
+  console.error(`backroom: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

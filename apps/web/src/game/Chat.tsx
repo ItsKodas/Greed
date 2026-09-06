@@ -1,4 +1,4 @@
-import type { ChatMessage } from "@greed/shared";
+import type { ChatMessage } from "@backroom/shared";
 import { useEffect, useRef, useState } from "react";
 
 interface ChatProps {

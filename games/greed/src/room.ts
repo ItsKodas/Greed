@@ -4,11 +4,11 @@ import {
   enumerateOptions,
   hasAnyScore,
   scoreSelection,
-} from "@greed/rules";
-import type { Die, Ruleset } from "@greed/rules";
-import { MIN_SEATS, Seating, TableError } from "@greed/core";
-import type { Seat as TableSeat, SeatIdentity } from "@greed/core";
-import type { Phase, RoomStatus, RoomView, SeatView, TurnView } from "@greed/shared";
+} from "@backroom/rules";
+import type { Die, Ruleset } from "@backroom/rules";
+import { MIN_SEATS, Seating, TableError } from "@backroom/core";
+import type { Seat as TableSeat, SeatIdentity } from "@backroom/core";
+import type { Phase, RoomStatus, RoomView, SeatView, TurnView } from "@backroom/shared";
 import type { BotSkill } from "./bot.js";
 
 /**

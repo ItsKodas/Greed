@@ -1,4 +1,4 @@
-import type { HouseRules, RoomView } from "@greed/shared";
+import type { HouseRules, RoomView } from "@backroom/shared";
 
 interface EditorProps {
   room: RoomView;

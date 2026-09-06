@@ -1,5 +1,5 @@
 {
-  "name": "@greed/server",
+  "name": "@backroom/server",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,11 @@
     "serve": "tsx src/index.ts"
   },
   "dependencies": {
-    "@greed/core": "*",
-    "@greed/economy": "*",
-    "@greed/game-greed": "*",
-    "@greed/rules": "*",
-    "@greed/shared": "*",
+    "@backroom/core": "*",
+    "@backroom/economy": "*",
+    "@backroom/game-greed": "*",
+    "@backroom/rules": "*",
+    "@backroom/shared": "*",
     "arctic": "^3.7.0",
     "connect-mongo": "^6.0.0",
     "express": "^4.21.2",

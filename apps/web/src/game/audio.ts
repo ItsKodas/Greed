@@ -27,7 +27,7 @@ interface Manifest {
   ambience?: string[];
 }
 
-const VOLUME_KEY = "greed.volume";
+const VOLUME_KEY = "backroom.volume";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;

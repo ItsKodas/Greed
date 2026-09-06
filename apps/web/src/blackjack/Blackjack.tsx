@@ -1,5 +1,5 @@
-import { CODE_ALPHABET, CODE_LENGTH } from "@greed/shared";
-import type { TableView } from "@greed/game-blackjack";
+import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
+import type { TableView } from "@backroom/game-blackjack";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AccountBadge } from "../account/AccountBadge.js";
@@ -10,7 +10,7 @@ import type { Account } from "../game/useAccount.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
-import "@greed/game-blackjack/theme.css";
+import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
 
 type Table = TableSocketHook<TableView>;

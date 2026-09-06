@@ -1,6 +1,6 @@
-import { bustProbability, scoreSelection } from "@greed/rules";
+import { bustProbability, scoreSelection } from "@backroom/rules";
 import { play } from "./audio.js";
-import type { RoomView } from "@greed/shared";
+import type { RoomView } from "@backroom/shared";
 import { SeatAvatar } from "./Avatar.js";
 import { useEffect, useState } from "react";
 import { Die } from "./Die.js";

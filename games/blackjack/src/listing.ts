@@ -1,4 +1,4 @@
-import type { GameListing } from "@greed/core";
+import type { GameListing } from "@backroom/core";
 
 /** How blackjack lists itself in the room. */
 export const BLACKJACK: GameListing = {
