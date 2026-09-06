@@ -511,3 +511,52 @@ describe("the view", () => {
     expect(room.view().turn?.bustChance).toBeCloseTo(1080 / 46656, 6);
   });
 });
+
+describe("dealing another game at the same table", () => {
+  /** A table where Ada has already won. */
+  function finished(): Room {
+    // Six ones is 8,000, past a 2,000 target — but passing the target does not
+    // end it. Everyone else gets one last turn, so Bo takes theirs and farkles.
+    const room = new Room("TEST1", scripted([1, 1, 1, 1, 1, 1], [2, 3, 4, 2, 3, 4]), {
+      ...DEFAULT_RULESET,
+      targetScore: 2000,
+    });
+    room.join("a", "Ada");
+    room.join("b", "Bo");
+    room.start("a");
+    room.doRoll("a");
+    pick(room, 0, 1, 2, 3, 4, 5);
+    room.bank("a");
+    room.doRoll("b");
+    room.advanceTurn();
+    return room;
+  }
+
+  it("puts the table back in its lobby with everyone still at it", () => {
+    const room = finished();
+    expect(room.status).toBe("over");
+
+    room.playAgain("a");
+
+    expect(room.status).toBe("lobby");
+    expect(room.seats.map((seat) => seat.name)).toEqual(["Ada", "Bo"]);
+    expect(room.seats.every((seat) => seat.score === 0)).toBe(true);
+    expect(room.seats.every((seat) => !seat.onBoard)).toBe(true);
+    expect(room.winnerIds).toEqual([]);
+    expect(room.turn).toBeNull();
+  });
+
+  it("keeps the rules the table chose", () => {
+    const room = finished();
+    room.playAgain("a");
+    expect(room.ruleset.targetScore).toBe(2000);
+  });
+
+  it("is the host's to call, and only once the game is over", () => {
+    const room = finished();
+    expect(() => room.playAgain("b")).toThrow(RoomError);
+
+    const running = twoPlayerGame([1, 1, 1, 1, 1, 1]);
+    expect(() => running.playAgain("a")).toThrow(RoomError);
+  });
+});

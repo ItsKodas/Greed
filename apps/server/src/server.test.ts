@@ -603,3 +603,55 @@ describe("who gets told what", () => {
     expect(created.ok && joined.ok && created.seatId !== joined.seatId).toBe(true);
   });
 });
+
+describe("playing again at the same table", () => {
+  it("returns the table to its lobby with the seat still in it", async () => {
+    // Six ones is 8,000, so one banked turn wins against a 2,000 target.
+    await start(() => [1, 1, 1, 1, 1, 1] as Die[]);
+    const host = await client();
+    const created = await create(host, "Ada");
+    const code = created.ok ? created.code : "";
+
+    host.emit("lobby:setRules", { targetScore: 2000 });
+    await stateWhere(host, (state) => state.ruleset.targetScore === 2000);
+
+    host.emit("game:start");
+    await stateWhere(host, (state) => state.status === "playing");
+    host.emit("game:roll");
+    await stateWhere(host, (state) => (state.turn?.dice.length ?? 0) === 6);
+    for (let index = 0; index < 6; index += 1) {
+      host.emit("game:toggle", { index });
+    }
+    await stateWhere(host, (state) => (state.turn?.selection ?? 0) > 0);
+    host.emit("game:bank");
+    const over = await stateWhere(host, (state) => state.status === "over");
+    expect(over.seats[0]?.score).toBeGreaterThanOrEqual(2000);
+
+    host.emit("game:playAgain");
+    const again = await stateWhere(host, (state) => state.status === "lobby");
+
+    // Same table, same seat, scores wiped, ready to be dealt again.
+    expect(again.code).toBe(code);
+    expect(again.seats).toHaveLength(1);
+    expect(again.seats[0]?.name).toBe("Ada");
+    expect(again.seats[0]?.score).toBe(0);
+    expect(again.turn).toBeNull();
+    expect(again.ruleset.targetScore).toBe(2000);
+
+    // And it can actually be dealt again.
+    host.emit("game:start");
+    await stateWhere(host, (state) => state.status === "playing");
+  });
+
+  it("will not deal another game while one is running", async () => {
+    await start(() => [1, 1, 1, 1, 1, 1] as Die[]);
+    const host = await client();
+    await create(host, "Ada");
+    host.emit("game:start");
+    await stateWhere(host, (state) => state.status === "playing");
+
+    const complaint = nextError(host);
+    host.emit("game:playAgain");
+    expect(await complaint).toMatch(/still going/i);
+  });
+});

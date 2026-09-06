@@ -236,9 +236,20 @@ export function Table({
         </div>
 
         {over ? (
-          <button type="button" className="btn btn--wide" onClick={actions.leave}>
-            Back to the lobby
-          </button>
+          <>
+            {/*
+              * "Back to the lobby" used to sit here and call leave, which took
+              * you out of the table altogether — the label promised the table's
+              * own lobby and delivered the front door. Both things exist now,
+              * and each says what it does.
+              */}
+            <button type="button" className="btn btn--wide" onClick={actions.playAgain}>
+              Play again
+            </button>
+            <button type="button" className="btn btn--ghost btn--wide" onClick={actions.leave}>
+              Leave the table
+            </button>
+          </>
         ) : (
           <>
             <button

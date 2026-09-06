@@ -84,8 +84,19 @@ function toProfile(doc: UserDoc): Profile {
     accentColor: doc.accentColor,
     chips: doc.chips,
     lastDailyClaim: doc.lastDailyClaim === null ? null : doc.lastDailyClaim.getTime(),
-    stats: doc.stats,
-    byGame: doc.byGame ?? {},
+    /*
+     * Copied field by field rather than handed straight out. What Mongoose
+     * stores on the document is a live subdocument, not the plain object the
+     * Profile type promises — it carries a prototype and its own machinery, so
+     * it compares unequal to an identical-looking object and lets callers write
+     * back through it by accident.
+     */
+    stats: {
+      games: doc.stats?.games ?? 0,
+      wins: doc.stats?.wins ?? 0,
+      chipsWon: doc.stats?.chipsWon ?? 0,
+    },
+    byGame: structuredClone(doc.byGame ?? {}),
   };
 }
 

@@ -275,6 +275,33 @@ export class Room {
     return seat;
   }
 
+  /**
+   * Puts a finished table back in its lobby, with everyone still at it.
+   *
+   * A table outlives a game. Once someone has won, the seats, the host, the
+   * rules and the stake are all still perfectly good — what is spent is the
+   * scores. Leaving the table and building another one loses the people, which
+   * is the expensive part to reassemble.
+   */
+  playAgain(seatId: string): void {
+    if (seatId !== this.hostId) {
+      throw new RoomError("Only the host can deal another game.");
+    }
+    if (this.status !== "over") {
+      throw new RoomError("That game is still going.");
+    }
+    this.status = "lobby";
+    this.turn = null;
+    this.winnerIds = [];
+    // The pot is derived from the stake and the seats, so there is nothing to
+    // reset — it is already whatever the next game will be worth.
+    for (const seat of this.seats) {
+      seat.score = 0;
+      seat.onBoard = false;
+    }
+    this.lastEvent = "Another game — sit down or change the rules";
+  }
+
   start(seatId: string): void {
     if (seatId !== this.hostId) {
       throw new RoomError("Only the host can start the game.");

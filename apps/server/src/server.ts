@@ -791,6 +791,15 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       ack?.();
     });
 
+    socket.on("game:playAgain", () => {
+      guard(socket.id, (room, seatId) => {
+        room.playAgain(seatId);
+        // The finished game already paid out; the next one must be allowed to
+        // settle in its own right.
+        settled.delete(room.code);
+      });
+    });
+
     socket.on("game:bank", () => {
       guard(socket.id, (room, seatId) => room.bank(seatId));
     });

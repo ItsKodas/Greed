@@ -65,6 +65,8 @@ export interface RoomActions {
   addBot: (skill: "easy" | "normal" | "hard") => void;
   removeSeat: (seatId: string) => void;
   start: () => void;
+  /** Deals another game at the same table, with the same people. */
+  playAgain: () => void;
   /** Takes how many dice go up, so the tumble can start before the reply. */
   roll: (count: number) => void;
   toggle: (index: number) => void;
@@ -253,6 +255,12 @@ export function useRoom(): RoomHook {
   );
   const start = useCallback(() => socketRef.current?.emit("game:start"), []);
 
+  const playAgain = useCallback(() => {
+    setHeldLocally(null);
+    setPendingRoll(null);
+    socketRef.current?.emit("game:playAgain");
+  }, []);
+
   /**
    * @param count How many dice are going up. The caller works this out from
    * the rules, because the dice themselves are a round trip away and the
@@ -323,6 +331,7 @@ export function useRoom(): RoomHook {
       setBuyIn,
       say,
       start,
+      playAgain,
       roll,
       toggle,
       bank,

@@ -91,6 +91,8 @@ export interface ClientToServer {
   "lobby:setBuyIn": (payload: { amount: number }) => void;
   "lobby:removeSeat": (payload: { seatId: string }) => void;
   "game:start": () => void;
+  /** Puts a finished table back in its lobby, keeping everyone at it. */
+  "game:playAgain": () => void;
   "game:roll": () => void;
   /**
    * The ack carries nothing; it only says the server has dealt with this
