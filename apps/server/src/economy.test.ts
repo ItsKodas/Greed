@@ -315,15 +315,21 @@ describe("playing for chips", () => {
 
 describe("who a seat belongs to", () => {
   /** A table where the only connection is signed in as `profileName`. */
-  async function tableAs(profileName: string | null) {
+  async function tableAs(
+    profileName: string | null,
+    look: { avatar: string | null; accentColor: number | null } = {
+      avatar: null,
+      accentColor: null,
+    },
+  ) {
     const store = new MemoryStore();
     let userId: string | null = null;
     if (profileName !== null) {
       const person = await store.upsertDiscordUser({
         discordId: "d1",
         name: profileName,
-        avatar: null,
-        accentColor: null,
+        avatar: look.avatar,
+        accentColor: look.accentColor,
       });
       userId = person.id;
     }
@@ -397,5 +403,26 @@ describe("who a seat belongs to", () => {
     await new Promise((resolve) => host.emit("lobby:create", { name: "Whoever" }, resolve));
     const view = await stateWhere(host, (state) => state.seats.length === 1);
     expect(view.seats[0]?.name).toBe("Whoever");
+  });
+
+  it("carries a signed-in player's picture and colour to the table", async () => {
+    const port = await tableAs("Ada", {
+      avatar: "https://cdn.discordapp.com/avatars/1/abc.png?size=128",
+      accentColor: 0x5865f2,
+    });
+    const host = await client(port);
+    await new Promise((resolve) => host.emit("lobby:create", { name: "Ada" }, resolve));
+    const view = await stateWhere(host, (state) => state.seats.length === 1);
+    expect(view.seats[0]?.avatar).toContain("cdn.discordapp.com");
+    expect(view.seats[0]?.accentColor).toBe(0x5865f2);
+  });
+
+  it("gives a guest neither", async () => {
+    const port = await tableAs(null);
+    const host = await client(port);
+    await new Promise((resolve) => host.emit("lobby:create", { name: "Whoever" }, resolve));
+    const view = await stateWhere(host, (state) => state.seats.length === 1);
+    expect(view.seats[0]?.avatar).toBeNull();
+    expect(view.seats[0]?.accentColor).toBeNull();
   });
 });

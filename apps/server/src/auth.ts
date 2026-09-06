@@ -26,6 +26,23 @@ declare module "express-session" {
   }
 }
 
+/**
+ * Discord hands back an avatar hash, not a picture. Turning it into a URL here
+ * rather than in the browser keeps the Discord account id off the wire, and
+ * means everything downstream — the header, the seats — just has a `src`.
+ *
+ * Null for someone who never set a picture; they get their monogram instead,
+ * which suits the table better than Discord's default blue circle.
+ */
+export function avatarUrl(user: { id: string; avatar?: string | null }): string | null {
+  if (user.avatar === undefined || user.avatar === null || user.avatar.length === 0) {
+    return null;
+  }
+  // An `a_` prefix marks an animated avatar, which is only animated as a gif.
+  const extension = user.avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${extension}?size=128`;
+}
+
 export function readAuthConfig(env: NodeJS.ProcessEnv): AuthConfig | null {
   const clientId = env["DISCORD_CLIENT_ID"];
   const clientSecret = env["DISCORD_CLIENT_SECRET"];
@@ -111,7 +128,7 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
         const profile = await store.upsertDiscordUser({
           discordId: discordUser.id,
           name: discordUser.global_name ?? discordUser.username,
-          avatar: discordUser.avatar ?? null,
+          avatar: avatarUrl(discordUser),
           accentColor: discordUser.accent_color ?? null,
         });
         request.session.userId = profile.id;

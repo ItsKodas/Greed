@@ -32,6 +32,7 @@ import type { AuthConfig } from "./auth.js";
 import { MemoryStore } from "./store.js";
 import type { Store } from "./store.js";
 import { Room, RoomError } from "./room.js";
+import type { SeatIdentity } from "./room.js";
 
 export interface GreedServerOptions {
   /** Injected so tests can roll deterministically. */
@@ -67,7 +68,8 @@ export interface GreedServerOptions {
  * at connection. Null for a guest, who has no account to be checked against.
  */
 interface SocketIdentity {
-  userId: string | null;
+  /** Null for a guest, who has no account to be checked against. */
+  identity: SeatIdentity | null;
   name: string | null;
 }
 
@@ -529,8 +531,8 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
   // would leave a window where an early lobby:create still used a typed one.
   io.use((socket, next) => {
     const userId = userIdOf(socket);
-    socket.data.userId = userId;
     if (userId === null) {
+      socket.data.identity = null;
       socket.data.name = null;
       next();
       return;
@@ -539,12 +541,19 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       .get(userId)
       .then((profile) => {
         socket.data.name = profile?.name ?? null;
+        socket.data.identity = {
+          userId,
+          avatar: profile?.avatar ?? null,
+          accentColor: profile?.accentColor ?? null,
+        };
         next();
       })
       .catch(() => {
-        // A store that will not answer should not keep someone out; they sit
-        // down under the name they sent, as a guest would.
+        // A store that will not answer should not keep someone out. They sit
+        // down under the name they sent, as a guest would — but still as
+        // themselves, so a game they finish still pays the right account.
         socket.data.name = null;
+        socket.data.identity = { userId, avatar: null, accentColor: null };
         next();
       });
   });
@@ -562,7 +571,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         const code = makeCode();
         const room = new Room(code, roll, chosen);
         rooms.set(code, room);
-        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.userId);
+        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code, seatId: socket.id });
         void socket.join(code);
         ack({ ok: true, code, seatId: socket.id });
@@ -584,7 +593,7 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
         return;
       }
       try {
-        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.userId);
+        room.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code: parsed.data.code, seatId: socket.id });
         void socket.join(parsed.data.code);
         ack({ ok: true, code: parsed.data.code, seatId: socket.id });

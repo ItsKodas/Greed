@@ -1,4 +1,5 @@
 import type { RoomView } from "@greed/shared";
+import { SeatAvatar } from "./Avatar.js";
 import { useEffect, useState } from "react";
 import { Die } from "./Die.js";
 import { ScoreCard } from "./ScoreCard.js";
@@ -78,7 +79,7 @@ export function Table({ room, seatId, actions }: TableProps) {
               key={seat.id}
               className={`seat${isTurn ? " seat--active" : ""}${won ? " seat--won" : ""}`}
             >
-              <div className="seat__avatar">{seat.name.slice(0, 1).toUpperCase()}</div>
+              <SeatAvatar seat={seat} />
               <div className="seat__who">
                 <div className="seat__name">
                   {seat.name}

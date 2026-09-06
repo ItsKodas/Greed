@@ -16,6 +16,18 @@ export class RoomError extends Error {}
 /** Injected so tests can roll deterministically. */
 export type Roller = (count: number) => Die[];
 
+/**
+ * What a signed-in player brings to a seat besides a name. Resolved once when
+ * they connect, so the table does not have to ask the store on every render.
+ */
+export interface SeatIdentity {
+  userId: string;
+  /** A ready-to-use image URL, or null for someone with no picture. */
+  avatar: string | null;
+  /** Discord's accent colour, as the 24-bit number they give us. */
+  accentColor: number | null;
+}
+
 export interface Seat {
   id: string;
   name: string;
@@ -27,6 +39,8 @@ export interface Seat {
   skill: BotSkill | null;
   /** Their profile, when they signed in. Guests play without one. */
   userId: string | null;
+  avatar: string | null;
+  accentColor: number | null;
 }
 
 interface Turn {
@@ -88,7 +102,7 @@ export class Room {
     return this.seats.every((seat) => !seat.connected);
   }
 
-  join(id: string, name: string, userId: string | null = null): Seat {
+  join(id: string, name: string, identity: SeatIdentity | null = null): Seat {
     if (this.status !== "lobby") {
       throw new RoomError("That game has already started.");
     }
@@ -99,7 +113,7 @@ export class Room {
     if (trimmed.length === 0) {
       throw new RoomError("Pick a name first.");
     }
-    if (this.buyIn > 0 && userId === null) {
+    if (this.buyIn > 0 && identity === null) {
       throw new RoomError("That table is playing for chips — sign in first.");
     }
     const seat: Seat = {
@@ -110,7 +124,9 @@ export class Room {
       connected: true,
       isBot: false,
       skill: null,
-      userId,
+      userId: identity?.userId ?? null,
+      avatar: identity?.avatar ?? null,
+      accentColor: identity?.accentColor ?? null,
     };
     this.seats.push(seat);
     this.lastEvent = `${trimmed} sat down`;
@@ -177,6 +193,8 @@ export class Room {
       isBot: true,
       skill,
       userId: null,
+      avatar: null,
+      accentColor: null,
     };
     this.seats.push(seat);
     this.lastEvent = `${name} sat down`;
@@ -526,6 +544,8 @@ export class Room {
       isHost: seat.id === host,
       isBot: seat.isBot,
       signedIn: seat.userId !== null,
+      avatar: seat.avatar,
+      accentColor: seat.accentColor,
     }));
     return {
       code: this.code,

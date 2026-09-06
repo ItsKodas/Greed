@@ -1,4 +1,5 @@
 import { RULESETS } from "@greed/rules";
+import { Avatar, SeatAvatar } from "./Avatar.js";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getVolume, setVolume, unlock } from "./audio.js";
@@ -137,6 +138,12 @@ function AccountBadge({ account }: { account: Account }) {
   const low = account.profile.chips < 2000;
   return (
     <span className="account">
+      <Avatar
+        name={account.profile.name}
+        avatar={account.profile.avatar}
+        accentColor={account.profile.accentColor}
+        className="account__face"
+      />
       <span className="account__name">{account.profile.name}</span>
       <span className="account__chips">{account.profile.chips.toLocaleString("en-US")}</span>
       {low ? (
@@ -389,6 +396,69 @@ function Join({
   );
 }
 
+/**
+ * The table's code, and a one-press way to hand it to someone.
+ *
+ * The clipboard API only exists in a secure context, so over plain http on a
+ * home network — which is exactly how someone invites the person next to them
+ * — it is simply not there. Hence the older selection-based copy behind it,
+ * and the readable link as a last resort: the code is the whole point of this
+ * panel and must never be a dead end.
+ */
+function ShareCode({ code }: { code: string }) {
+  const [said, setSaid] = useState<string | null>(null);
+  const link = `${window.location.origin}/${code}`;
+
+  const copy = () => {
+    void (async () => {
+      try {
+        if (navigator.clipboard !== undefined) {
+          await navigator.clipboard.writeText(link);
+          setSaid("Link copied");
+        } else if (legacyCopy(link)) {
+          setSaid("Link copied");
+        } else {
+          setSaid("Copy it from the box above");
+        }
+      } catch {
+        setSaid(legacyCopy(link) ? "Link copied" : "Copy it from the box above");
+      }
+      setTimeout(() => setSaid(null), 2500);
+    })();
+  };
+
+  return (
+    <div className="panel lobby__share">
+      <p className="panel__label">Share this code</p>
+      <div className="lobby__share-body">
+        <div className="lobby__code">{code}</div>
+        <input className="lobby__link" value={link} readOnly aria-label="Link to this table" />
+      </div>
+      <button type="button" className="btn btn--wide lobby__copy" onClick={copy}>
+        {said ?? "Copy link"}
+      </button>
+    </div>
+  );
+}
+
+/** Pre-clipboard-API copy, for the plain-http case. True when it took. */
+function legacyCopy(text: string): boolean {
+  try {
+    const field = document.createElement("textarea");
+    field.value = text;
+    // Off-screen rather than hidden: a display:none field cannot be selected.
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.append(field);
+    field.select();
+    const ok = document.execCommand("copy");
+    field.remove();
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function Lobby({
   room,
   seatId,
@@ -407,28 +477,14 @@ function Lobby({
 
   return (
     <div className="lobby">
-      <div>
-        <p className="panel__label">Share this code</p>
-        <div className="lobby__code">{room.code}</div>
-        <button
-          type="button"
-          className="btn btn--ghost btn--small"
-          onClick={() =>
-            void navigator.clipboard?.writeText(`${window.location.origin}/${room.code}`)
-          }
-        >
-          Copy link
-        </button>
-      </div>
+      <ShareCode code={room.code} />
 
-      <div>
-        <p className="panel__label">
-          Seated · {room.seats.length} of 8
-        </p>
+      <div className="panel lobby__seating">
+        <p className="panel__label">Seated · {room.seats.length} of 8</p>
         <div className="lobby__seats">
           {room.seats.map((seat) => (
             <div className="seat" key={seat.id}>
-              <div className="seat__avatar">{seat.name.slice(0, 1).toUpperCase()}</div>
+              <SeatAvatar seat={seat} />
               <div className="seat__who">
                 <div className="seat__name">
                   {seat.name}
