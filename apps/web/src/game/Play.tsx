@@ -498,7 +498,13 @@ function Lobby({
                   {seat.id === seatId ? " (you)" : ""}
                 </div>
                 <div className="seat__state">
-                  {seat.isBot ? "Bot" : seat.isHost ? "Host" : "Ready"}
+                  {seat.waiting
+                    ? "In the next game"
+                    : seat.isBot
+                      ? "Bot"
+                      : seat.isHost
+                        ? "Host"
+                        : "Ready"}
                 </div>
               </div>
               {you?.isHost === true && seat.id !== seatId ? (

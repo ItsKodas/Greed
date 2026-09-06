@@ -319,4 +319,61 @@ describe("who a seat belongs to", () => {
     expect(view.seats[0]?.avatar).toBeNull();
     expect(view.seats[0]?.accentColor).toBeNull();
   });
+
+  it("does not charge or credit someone who arrived mid-game", async () => {
+    const store = new MemoryStore();
+    const ada = await store.upsertDiscordUser({
+      discordId: "d1",
+      name: "Ada",
+      avatar: null,
+      accentColor: null,
+    });
+    server = createGreedServer({
+      store,
+      auth: null,
+      serveClient: false,
+      farklePauseMs: 20,
+      roll: () => [1, 1, 1, 1, 1, 1] as Die[],
+      identify: () => ada.id,
+    });
+    await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
+    const port = (server.http.address() as AddressInfo).port;
+
+    const host = await client(port);
+    const created = await new Promise<Ack>((resolve) =>
+      host.emit("lobby:create", { name: "Ada" }, resolve),
+    );
+    const code = created.ok ? created.code : "";
+    host.emit("lobby:setBuyIn", { amount: 500 });
+    await stateWhere(host, (view) => view.buyIn === 500);
+    host.emit("lobby:setRules", { targetScore: 2000 });
+    await stateWhere(host, (view) => view.ruleset.targetScore === 2000);
+
+    host.emit("game:start");
+    await stateWhere(host, (view) => view.status === "playing");
+    expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 500);
+
+    // Somebody wanders in after the deal.
+    const late = await client(port);
+    await new Promise((resolve) => late.emit("lobby:join", { name: "Cy", code }, resolve));
+    const seated = await stateWhere(host, (view) => view.seats.length === 2);
+    expect(seated.seats[1]?.waiting).toBe(true);
+    // Their stake was never taken, because they are not in this game.
+    expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 500);
+
+    host.emit("game:roll");
+    await stateWhere(host, (view) => (view.turn?.dice.length ?? 0) === 6);
+    for (let index = 0; index < 6; index += 1) {
+      host.emit("game:toggle", { index });
+    }
+    await stateWhere(host, (view) => (view.turn?.selection ?? 0) > 0);
+    host.emit("game:bank");
+    const over = await stateWhere(host, (view) => view.status === "over");
+
+    // The latecomer is not among the winners of a game they never played.
+    expect(over.winnerIds).not.toContain(seated.seats[1]?.id);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const games = await store.recentGames(ada.id, 5);
+    expect(games[0]?.players.map((player) => player.name)).toEqual(["Ada"]);
+  });
 });

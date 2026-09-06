@@ -275,6 +275,13 @@
   border-left-color: var(--gr-color-brass);
 }
 
+/* Present, but not in this game — dimmed so the eye skips it while play
+   is going on, without hiding the fact that somebody is sitting there. */
+.seat--waiting {
+  opacity: 0.55;
+  border-left-color: var(--gr-color-bone-dim);
+}
+
 .seat--won {
   border-left-color: var(--gr-color-brass-hi);
   background: rgb(192 138 46 / 0.2);

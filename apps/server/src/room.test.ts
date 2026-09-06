@@ -70,9 +70,27 @@ describe("lobby", () => {
     expect(() => room.start("b")).toThrow(/host/i);
   });
 
-  it("refuses joins once play has begun", () => {
+  it("seats someone arriving mid-game for the next one instead", () => {
     const room = twoPlayerGame();
-    expect(() => room.join("c", "Cy")).toThrow(/already started/i);
+    const late = room.join("c", "Cy");
+
+    // At the table and visible, but not in the game being played — dealing
+    // them in would have them pay a full stake for a fraction of a game.
+    expect(late.waiting).toBe(true);
+    expect(room.seats).toHaveLength(3);
+    expect(room.view().seats[2]?.waiting).toBe(true);
+  });
+
+  it("leaves the turn order alone while they wait", () => {
+    const room = twoPlayerGame([1, 1, 1, 2, 3, 4]);
+    room.join("c", "Cy");
+
+    // Ada, then Bo, then back to Ada — Cy is not in the rotation.
+    expect(room.view().turn?.seatId).toBe("a");
+    room.advanceTurn();
+    expect(room.view().turn?.seatId).toBe("b");
+    room.advanceTurn();
+    expect(room.view().turn?.seatId).toBe("a");
   });
 
   it("holds a seat that drops during the lobby, so a refresh can reclaim it", () => {
@@ -544,6 +562,28 @@ describe("dealing another game at the same table", () => {
     expect(room.seats.every((seat) => !seat.onBoard)).toBe(true);
     expect(room.winnerIds).toEqual([]);
     expect(room.turn).toBeNull();
+  });
+
+  it("deals in whoever arrived while the last game was running", () => {
+    const room = finished();
+    const late = room.join("c", "Cy");
+    expect(late.waiting).toBe(true);
+
+    room.playAgain("a");
+
+    // The next game is theirs as much as anyone's.
+    expect(room.seats.every((seat) => !seat.waiting)).toBe(true);
+    room.start("a");
+    expect(room.status).toBe("playing");
+  });
+
+  it("cannot be won by someone who was not in it", () => {
+    // Cy arrives mid-game with nothing on the board. Everyone else has
+    // scored, so a zero must not tie or win by being counted at all.
+    const room = twoPlayerGame([1, 1, 1, 2, 3, 4], [2, 3, 4, 2, 3, 4]);
+    room.join("c", "Cy");
+    expect(room.view().seats[2]?.waiting).toBe(true);
+    expect(room.winnerIds).not.toContain("c");
   });
 
   it("keeps the rules the table chose", () => {

@@ -20,6 +20,8 @@ export interface SeatView {
   isBot: boolean;
   /** Playing from a profile rather than as a guest. */
   signedIn: boolean;
+  /** At the table, but sitting out the game currently being played. */
+  waiting: boolean;
   /** Their picture, when they have one. Guests and bots never do. */
   avatar: string | null;
   /** Their colour, as a 24-bit number, when they have set one. */

@@ -533,7 +533,9 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
     }
 
     for (const seat of room.seats) {
-      if (seat.userId === null) {
+      // Someone who arrived mid-game paid no stake and took no turn, so there
+      // is nothing to settle and nothing to record against them.
+      if (seat.userId === null || seat.waiting) {
         continue;
       }
       const won = room.winnerIds.includes(seat.id);
@@ -555,12 +557,14 @@ export function createGreedServer(options: GreedServerOptions = {}): GreedServer
       rulesetName: room.ruleset.name,
       buyIn: room.buyIn,
       pot: room.pot,
-      players: room.seats.map((seat) => ({
-        userId: seat.userId,
-        name: seat.name,
-        score: seat.score,
-        isBot: seat.isBot,
-      })),
+      players: room.seats
+        .filter((seat) => !seat.waiting)
+        .map((seat) => ({
+          userId: seat.userId,
+          name: seat.name,
+          score: seat.score,
+          isBot: seat.isBot,
+        })),
       winnerIds: winners.map((seat) => seat.userId ?? seat.id),
       endedAt: Date.now(),
     });

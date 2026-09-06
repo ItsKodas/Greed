@@ -129,7 +129,7 @@ export function Table({
           return (
             <div
               key={seat.id}
-              className={`seat${isTurn ? " seat--active" : ""}${won ? " seat--won" : ""}`}
+              className={`seat${isTurn ? " seat--active" : ""}${won ? " seat--won" : ""}${seat.waiting ? " seat--waiting" : ""}`}
             >
               <SeatAvatar seat={seat} />
               <div className="seat__who">
@@ -138,10 +138,22 @@ export function Table({
                   {seat.id === seatId ? " (you)" : ""}
                 </div>
                 <div className="seat__state">
-                  {won ? "Winner" : isTurn ? "Rolling" : !seat.connected ? "Gone" : seat.onBoard ? "On the board" : "Not on yet"}
+                  {/* Said plainly, because otherwise a seat that never gets a
+                      turn looks like the game has forgotten about them. */}
+                  {seat.waiting
+                    ? "In the next game"
+                    : won
+                      ? "Winner"
+                      : isTurn
+                        ? "Rolling"
+                        : !seat.connected
+                          ? "Gone"
+                          : seat.onBoard
+                            ? "On the board"
+                            : "Not on yet"}
                 </div>
               </div>
-              <div className="seat__score">{fmt(seat.score)}</div>
+              <div className="seat__score">{seat.waiting ? "—" : fmt(seat.score)}</div>
             </div>
           );
         })}

@@ -34,6 +34,15 @@ export interface Seat {
   score: number;
   onBoard: boolean;
   connected: boolean;
+  /**
+   * At the table, but not in the game currently being played.
+   *
+   * Someone who arrives mid-game sits down for the next one rather than being
+   * dealt in. Dealing them in would be worse than it sounds at a table playing
+   * for chips: they would pay the same stake as people who have had four turns
+   * already, for a fraction of the game.
+   */
+  waiting: boolean;
   /** Bots never disconnect and are driven by the server, not a socket. */
   isBot: boolean;
   skill: BotSkill | null;
@@ -103,9 +112,6 @@ export class Room {
   }
 
   join(id: string, name: string, identity: SeatIdentity | null = null): Seat {
-    if (this.status !== "lobby") {
-      throw new RoomError("That game has already started.");
-    }
     if (this.seats.length >= MAX_SEATS) {
       throw new RoomError("That table is full.");
     }
@@ -122,6 +128,8 @@ export class Room {
       score: 0,
       onBoard: false,
       connected: true,
+      // A table in its lobby deals everyone in; one already playing does not.
+      waiting: this.status !== "lobby",
       isBot: false,
       skill: null,
       userId: identity?.userId ?? null,
@@ -190,6 +198,7 @@ export class Room {
       score: 0,
       onBoard: false,
       connected: true,
+      waiting: false,
       isBot: true,
       skill,
       userId: null,
@@ -298,6 +307,8 @@ export class Room {
     for (const seat of this.seats) {
       seat.score = 0;
       seat.onBoard = false;
+      // Whoever turned up while the last game was running is in this one.
+      seat.waiting = false;
     }
     this.lastEvent = "Another game — sit down or change the rules";
   }
@@ -488,7 +499,9 @@ export class Room {
     for (let step = 1; step <= total; step += 1) {
       const next = (this.turn.seatIndex + step) % total;
       const seat = this.seats[next];
-      if (seat === undefined || !seat.connected) {
+      // Skipped for the same reason they were never dealt: they arrived after
+      // this game began and are waiting for the next one.
+      if (seat === undefined || !seat.connected || seat.waiting) {
         continue;
       }
       if (seat.id === this.finalRoundTrigger) {
@@ -505,9 +518,11 @@ export class Room {
 
   private finish(): void {
     this.status = "over";
-    const best = Math.max(...this.seats.map((seat) => seat.score));
-    this.winnerIds = this.seats.filter((seat) => seat.score === best).map((seat) => seat.id);
-    const names = this.seats.filter((seat) => this.winnerIds.includes(seat.id)).map((seat) => seat.name);
+    // Only the people who actually played it can have won it.
+    const played = this.seats.filter((seat) => !seat.waiting);
+    const best = Math.max(...played.map((seat) => seat.score));
+    this.winnerIds = played.filter((seat) => seat.score === best).map((seat) => seat.id);
+    const names = played.filter((seat) => this.winnerIds.includes(seat.id)).map((seat) => seat.name);
     this.lastEvent = names.length === 1 ? `${names[0]} wins` : `${names.join(" and ")} tie`;
     if (this.turn !== null) {
       this.turn.phase = "over";
@@ -583,6 +598,7 @@ export class Room {
       isHost: seat.id === host,
       isBot: seat.isBot,
       signedIn: seat.userId !== null,
+      waiting: seat.waiting,
       avatar: seat.avatar,
       accentColor: seat.accentColor,
     }));
