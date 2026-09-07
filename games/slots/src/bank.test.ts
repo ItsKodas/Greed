@@ -23,7 +23,7 @@ describe("the stake cap", () => {
 
   it("rises as the bank fills", () => {
     expect(maxStake(50_000)).toBe(38);
-    expect(maxStake(1_000_000)).toBe(772);
+    expect(maxStake(1_000_000)).toBe(771);
   });
 
   it("never offers a stake on a negative bank", () => {
@@ -41,7 +41,7 @@ describe("the stake cap", () => {
      * in by the time the reels resolve. If this ever fails the machine can owe
      * chips that do not exist, which is the one thing it must never do.
      */
-    for (const bank of [1295, 1296, 2000, 5000, 12_345, 50_000, 1_000_000, 50_000_000]) {
+    for (const bank of [1296, 1297, 2000, 5000, 12_345, 50_000, 1_000_000, 50_000_000]) {
       const stake = maxStake(bank);
       if (stake < 1) {
         continue;
@@ -65,17 +65,30 @@ describe("the stake cap", () => {
     }
   });
 
+  it("holds at the large stakes where a rounding error would first show", () => {
+    /*
+     * Where 1295 was wrong. The jackpot's share is of the bank *after* the
+     * stake goes in, and at a stake of one that extra 0.4 of a chip vanishes
+     * into the floor. It stops vanishing once the stake is in the thousands:
+     * a divisor of 1295 leaves this machine owing 176 chips it has not got.
+     */
+    for (const stake of [500, 1000, 5000, 40_000]) {
+      const bank = stake * STAKE_DIVISOR;
+      expect(worstCase(bank, stake)).toBeLessThanOrEqual(bank + stake);
+    }
+  });
+
   it("is bound by the jackpot case rather than the all-fixed one", () => {
     /*
      * Worth pinning down, because this design got it wrong once. Nine top
      * lines needs a bank of 874x the stake. One jackpot line plus eight top
-     * lines needs 1295x, because the jackpot is a share of the same bank the
+     * lines needs 1296x, because the jackpot is a share of the same bank the
      * fixed wins are drawing on — and it is the larger of the two that has to
      * set the cap.
      */
-    expect(STAKE_DIVISOR).toBe(1295);
+    expect(STAKE_DIVISOR).toBe(1296);
     const allFixed = 9 * Math.floor((875 * 1) / 9);
-    expect(worstCase(1295, 1)).toBeGreaterThan(allFixed);
+    expect(worstCase(1296, 1)).toBeGreaterThan(allFixed);
   });
 });
 

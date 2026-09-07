@@ -54,3 +54,17 @@ describe("the strip", () => {
     }
   });
 });
+
+describe("the faces, and the wire", () => {
+  it("is the same list the protocol carries", async () => {
+    /*
+     * shared sits beneath the games and cannot import from one, so the faces
+     * are written out in both places. This is what stops them drifting: a face
+     * the wire does not know arrives at the client as undefined and renders a
+     * blank reel, which looks like a broken machine rather than a broken
+     * build, and would go unnoticed for a long time.
+     */
+    const { SPIN_FACES } = await import("@backroom/shared");
+    expect([...SPIN_FACES]).toEqual([...FACES]);
+  });
+});

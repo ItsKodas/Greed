@@ -16,21 +16,27 @@ export const MAX_LINE_PAY = PAYS.bell[5] as number;
  *   nine top lines          9 * 875 * stake/9  =  875 * stake
  *                           needs bank >= 874 * stake
  *
- *   one jackpot, eight top  0.4*bank + 8*875*stake/9
- *                           0.4*bank + 777.8*stake  <=  bank + stake
- *                                      776.8*stake  <=  0.6 * bank
- *                                             bank  >=  1294.6 * stake
+ *   one jackpot, eight top  0.4*(bank + stake) + 8*875*stake/9
+ *                           0.4*bank + 0.4*stake + 777.8*stake <= bank + stake
+ *                                                777.2*stake  <=  0.6 * bank
+ *                                                       bank  >=  1295.3 * stake
  *
- * Rounded up to 1295, because a cap a fraction of a chip too generous is a cap
- * that does not hold. The stake sits on the right of both inequalities because
- * it has already entered the bank by the time the reels resolve.
+ * Rounded up to 1296, because a cap a fraction of a chip too generous is a cap
+ * that does not hold.
+ *
+ * The stake appears on both sides of that second line, and getting it onto
+ * only one is how this was wrong the first time. The stake enters the bank
+ * before the reels resolve, so it is part of the room a payout has — and it is
+ * also part of the bank the jackpot takes its share of. Taking the share of
+ * the bank as it stood before the pull makes 1295 look sufficient, and it is
+ * not: at a stake of 1000 that machine owes 176 chips it does not have.
  *
  * This is deliberately the true worst case rather than a percentile. All
  * fifteen cells landing on bells has a probability of about one in 10^15, and
  * capping against it is absurdly conservative in exactly the way a chip
  * economy should be.
  */
-export const STAKE_DIVISOR = 1295;
+export const STAKE_DIVISOR = 1296;
 
 /**
  * The largest stake this bank can certainly pay out on.
@@ -60,6 +66,11 @@ export function jackpotPay(bank: number): number {
 export function worstCase(bank: number, stake: number): number {
   const topLine = Math.floor((MAX_LINE_PAY * stake) / LINE_COUNT);
   const allFixed = LINE_COUNT * topLine;
-  const withJackpot = jackpotPay(bank) + (LINE_COUNT - 1) * topLine;
+  /*
+   * The jackpot's share is of the bank the payout is actually made from, which
+   * is the bank plus the stake that has just gone into it. Modelling it as a
+   * share of the bank beforehand is what made 1295 look like enough.
+   */
+  const withJackpot = jackpotPay(bank + stake) + (LINE_COUNT - 1) * topLine;
   return Math.max(allFixed, withJackpot);
 }
