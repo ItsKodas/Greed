@@ -31,6 +31,20 @@
 }
 
 /*
+ * The link around the sign is a flex container, not a line of text.
+ *
+ * Left as a block it inherited the h1's line-height — nearly 50px — and the
+ * sign, being inline-flex, sat on that line's baseline with 25px of empty
+ * leading stacked above it. The row then centred the link while the sign hung
+ * near its bottom, which is why the sign never lined up with the words beside
+ * it however the row itself was aligned.
+ */
+.play__mark a,
+.room__mark a {
+  display: flex;
+}
+
+/*
  * The sign. A lit tube built from the inside out: the first two shadows are
  * white and tight, which is the gas burning out the middle of the glass, and
  * they are what make a stroke read as round rather than as a letter with a
