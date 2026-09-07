@@ -27,9 +27,18 @@ export class Seating {
     return this.seats[0]?.id ?? null;
   }
 
-  /** Nobody is here any more. Watchers do not count; eyes are not seats. */
+  /**
+   * Nobody is here any more.
+   *
+   * Watchers do not count; eyes are not seats. Neither do bots, and that is
+   * the less obvious half: a bot is connected the moment it is seated and has
+   * no connection to lose, so a table whose last player walked out would stay
+   * occupied for as long as the process lived — its bots dealing to an empty
+   * room, on the clock, forever. A table is empty when the last person leaves
+   * it, whoever is still sitting there.
+   */
   get isEmpty(): boolean {
-    return this.seats.every((seat) => !seat.connected);
+    return this.seats.every((seat) => seat.isBot || !seat.connected);
   }
 
   get watching(): number {

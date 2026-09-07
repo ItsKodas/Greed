@@ -75,6 +75,29 @@ describe("who is at a table", () => {
     expect(seating.isEmpty).toBe(true);
   });
 
+  it("is empty when only bots are left, however connected they look", () => {
+    /*
+     * A bot is connected from the moment it is seated and has no connection to
+     * lose, so counting it would keep a table occupied for as long as the
+     * process lived — dealing hands to nobody, on the clock. A table is empty
+     * when the last person leaves it, whoever is still sitting there.
+     */
+    const seating = new Seating();
+    seating.join("a", "Ada", "lobby");
+    seating.addBot("bot:1", "Vera", "normal");
+    expect(seating.isEmpty).toBe(false);
+
+    seating.disconnect("a");
+    expect(seating.isEmpty).toBe(true);
+  });
+
+  it("is empty when the table was only ever bots", () => {
+    const seating = new Seating();
+    seating.addBot("bot:1", "Vera", "hard");
+    seating.addBot("bot:2", "Otto", "easy");
+    expect(seating.isEmpty).toBe(true);
+  });
+
   it("counts watchers separately, and they never make it un-empty", () => {
     const seating = new Seating();
     seating.join("a", "Ada", "lobby");

@@ -833,8 +833,48 @@ describe("tables anybody can walk up to", () => {
 
     host.close();
 
+    // Two separate things, and they happen at two separate times: it stops
+    // being advertised the moment the last person goes, and the table itself
+    // is swept up later, once the grace for coming back has run out.
     await expect.poll(async () => (await listed()).length, { timeout: 4000 }).toBe(0);
-    expect((server as BackRoomServer).rooms.size).toBe(0);
+    await expect
+      .poll(() => (server as BackRoomServer).rooms.size, { timeout: 4000 })
+      .toBe(0);
+  });
+
+  it("never advertises a table with nobody at it", async () => {
+    /*
+     * An abandoned table lingers for a few minutes so a refresh can get back
+     * into it. That grace is worth having and is not worth advertising: a row
+     * offering a seat at an empty room, hosted by nobody, is worse than no row.
+     */
+    const host = await client();
+    await open_(host, "Ada");
+    await stateWhere(host, (room) => room.seats.length === 1);
+    expect(await listed()).toHaveLength(1);
+
+    const code = host.latest?.code ?? "";
+    host.emit("lobby:leave");
+    await expect.poll(async () => (await listed()).length).toBe(0);
+    // Off the board at once, but still there to come back to for a while.
+    expect((server as BackRoomServer).rooms.has(code)).toBe(true);
+  });
+
+  it("does not advertise a table left to its bots", async () => {
+    /*
+     * A bot is connected from the moment it is seated and never drops, so a
+     * table whose last player walked out looks occupied forever. It is not: a
+     * table is empty when the last person leaves it.
+     */
+    const host = await client();
+    await open_(host, "Ada");
+    await stateWhere(host, (room) => room.seats.length === 1);
+    host.emit("lobby:addBot", { skill: "normal" });
+    await stateWhere(host, (room) => room.seats.length === 2);
+    expect(await listed()).toHaveLength(1);
+
+    host.emit("lobby:leave");
+    await expect.poll(async () => (await listed()).length).toBe(0);
   });
 
   it("puts the emptiest tables first", async () => {

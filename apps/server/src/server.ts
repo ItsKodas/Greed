@@ -336,6 +336,17 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       if (!seated.listed || (wanted !== null && id !== wanted)) {
         continue;
       }
+      /*
+       * Never a table nobody is at.
+       *
+       * An abandoned table lives on for a few minutes so a refresh can get
+       * back into it, which is right — but it should not be advertised while
+       * it waits. Somebody scanning this list is looking for a game, and a row
+       * offering a seat at an empty room with no host is worse than no row.
+       */
+      if (seated.table.isEmpty) {
+        continue;
+      }
       const seats = seated.table.seats;
       const host = seats.find((seat) => seat.id === seated.table.hostId);
       tables.push({
@@ -699,6 +710,17 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     if (pending !== undefined) {
       clearTimeout(pending);
       botMoves.delete(code);
+    }
+
+    /*
+     * Nobody left to play for.
+     *
+     * The table is on its way out — the sweep books its removal the moment the
+     * last person goes — but that takes minutes, and there is no reason to
+     * spend them dealing hands nobody will ever see.
+     */
+    if (seated.table.isEmpty) {
+      return;
     }
 
     const move = seated.game.botMove?.(seated.table) ?? null;
