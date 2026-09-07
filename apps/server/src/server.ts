@@ -397,6 +397,20 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     [BLACKJACK.id, blackjackAdapter() as GameAdapter<PlayTable>],
   ]);
 
+  /**
+   * The seat this person already holds at this table, if they hold one.
+   *
+   * Asked of the table's seats rather than of any game, because every game has
+   * seats and none of them has an opinion about who is sitting in one.
+   */
+  function reclaimable(table: PlayTable, identity: SeatIdentity | null): string | null {
+    if (identity === null) {
+      return null;
+    }
+    const held = table.seats.find((seat) => seat.userId === identity.userId);
+    return held?.id ?? null;
+  }
+
   /** How many people are stood around a table, whatever the game calls it. */
   function seatsWatching(table: PlayTable): number {
     return (table.view(null) as { watching?: number }).watching ?? 0;
@@ -884,6 +898,31 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         return;
       }
       try {
+        /*
+         * A seat belongs to a person, not to a socket.
+         *
+         * Leaving a game in progress does not give the seat up — it cannot,
+         * because seats are held by index and removing one mid-game would
+         * shift the turn order out from under everybody else, so the seat is
+         * only marked as gone. Coming back then asked for a new seat and got
+         * one, and the player was at the table twice: a ghost holding their
+         * old place and a stranger wearing their name.
+         *
+         * So a join by somebody who already holds a seat here is a return to
+         * it. Guests cannot be recognised this way and never could be — there
+         * is nothing about a second visit from a nameless browser that says it
+         * is the same browser — which is one more thing signing in buys.
+         */
+        const mine = reclaimable(room.table, socket.data.identity);
+        if (mine !== null) {
+          room.table.reconnect(mine);
+          sockets.set(socket.id, { code: parsed.data.code, seatId: mine });
+          void socket.join(parsed.data.code);
+          ack({ ok: true, code: parsed.data.code, seatId: mine });
+          broadcast(parsed.data.code);
+          return;
+        }
+
         room.table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code: parsed.data.code, seatId: socket.id });
         void socket.join(parsed.data.code);

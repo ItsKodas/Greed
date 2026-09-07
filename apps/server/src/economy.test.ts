@@ -237,6 +237,38 @@ describe("who a seat belongs to", () => {
     return (server.http.address() as AddressInfo).port;
   }
 
+  /**
+   * A table with several real accounts, handed out in connection order.
+   *
+   * Needed because one account can no longer hold two seats at one table —
+   * joining a table you already sit at returns you to your seat — so a test
+   * that wants two players needs two people.
+   */
+  async function tableWithPeople(names: string[], options: { roll?: () => Die[] } = {}) {
+    const store = new MemoryStore();
+    const ids: string[] = [];
+    for (const name of names) {
+      const person = await store.upsertDiscordUser({
+        discordId: `discord-${name}`,
+        name,
+        avatar: null,
+        accentColor: null,
+      });
+      ids.push(person.id);
+    }
+    let seen = 0;
+    server = createBackRoomServer({
+      store,
+      auth: null,
+      serveClient: false,
+      farklePauseMs: 20,
+      ...(options.roll === undefined ? {} : { roll: options.roll }),
+      identify: () => ids[seen++] ?? null,
+    });
+    await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
+    return { store, ids, port: (server.http.address() as AddressInfo).port };
+  }
+
   function client(port: number): Promise<Client> {
     return new Promise((resolve) => {
       const socket: Client = connect(`http://localhost:${port}`, {
@@ -278,7 +310,7 @@ describe("who a seat belongs to", () => {
   });
 
   it("does the same when joining an existing table", async () => {
-    const port = await tableAs("Ada");
+    const { port } = await tableWithPeople(["Ada", "Bram"]);
     const host = await client(port);
     const created = await new Promise<Ack>((resolve) =>
       host.emit("lobby:create", { name: "Ada" }, resolve),
@@ -286,9 +318,10 @@ describe("who a seat belongs to", () => {
     const code = created.ok ? created.code : "";
 
     const other = await client(port);
+    // Whatever the client types, the seat is named by the account behind it.
     await new Promise((resolve) => other.emit("lobby:join", { name: "Impostor", code }, resolve));
     const view = await stateWhere(other, (state) => state.seats.length === 2);
-    expect(view.seats.map((seat) => seat.name)).toEqual(["Ada", "Ada"]);
+    expect(view.seats.map((seat) => seat.name)).toEqual(["Ada", "Bram"]);
   });
 
   it("lets a guest keep the name they typed", async () => {
@@ -321,23 +354,11 @@ describe("who a seat belongs to", () => {
   });
 
   it("does not charge or credit someone who arrived mid-game", async () => {
-    const store = new MemoryStore();
-    const ada = await store.upsertDiscordUser({
-      discordId: "d1",
-      name: "Ada",
-      avatar: null,
-      accentColor: null,
-    });
-    server = createBackRoomServer({
-      store,
-      auth: null,
-      serveClient: false,
-      farklePauseMs: 20,
+    const { store, ids, port } = await tableWithPeople(["Ada", "Cy"], {
       roll: () => [1, 1, 1, 1, 1, 1] as Die[],
-      identify: () => ada.id,
     });
-    await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
-    const port = (server.http.address() as AddressInfo).port;
+    const ada = { id: ids[0] as string };
+    const cy = ids[1] as string;
 
     const host = await client(port);
     const created = await new Promise<Ack>((resolve) =>
@@ -359,6 +380,7 @@ describe("who a seat belongs to", () => {
     const seated = await stateWhere(host, (view) => view.seats.length === 2);
     expect(seated.seats[1]?.waiting).toBe(true);
     // Their stake was never taken, because they are not in this game.
+    expect((await store.get(cy))?.chips).toBe(STARTING_CHIPS);
     expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 500);
 
     host.emit("game:action", { type: "roll" });
