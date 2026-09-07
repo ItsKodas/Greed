@@ -109,11 +109,18 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
     const share = winners.length > 0 ? Math.floor(room.pot / winners.length) : 0;
     const remainder = room.pot - share * winners.length;
 
+    /*
+     * What each winner was actually handed, kept rather than recomputed. The
+     * remainder of an uneven split goes to one of them, so "the share" is not
+     * what every winner got and the history would be a rounding error out.
+     */
+    const paid = new Map<string, number>();
     for (const [index, seat] of winners.entries()) {
+      const amount = share + (index === 0 ? remainder : 0);
+      paid.set(seat.id, amount);
       if (seat.userId === null) {
         continue;
       }
-      const amount = share + (index === 0 ? remainder : 0);
       if (amount > 0) {
         await deps.give(seat.userId, amount);
       }
@@ -153,6 +160,7 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
           name: seat.name,
           score: seat.score,
           isBot: seat.isBot,
+          net: (paid.get(seat.id) ?? 0) - room.buyIn,
         })),
       winnerIds: winners.map((seat) => seat.userId ?? seat.id),
       endedAt: Date.now(),

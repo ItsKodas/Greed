@@ -36,6 +36,7 @@ interface Manifest {
 }
 
 const VOLUME_KEY = "backroom.volume";
+const MUTED_KEY = "backroom.muted";
 
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
@@ -70,17 +71,53 @@ function readVolume(): number {
   return 0.7;
 }
 
+function readMuted(): boolean {
+  try {
+    return window.localStorage.getItem(MUTED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 let volume = readVolume();
+/**
+ * Everything off, without moving anything.
+ *
+ * Kept apart from the volume rather than expressed as a volume of zero: mute
+ * is a switch and a level is a level, and collapsing the two means unmuting
+ * has to guess where the slider used to be — a guess that does not survive a
+ * reload. It is also the master switch for the music, which has no volume of
+ * ours to set to zero.
+ */
+let muted = readMuted();
+
+function applyGain(): void {
+  if (master !== null) {
+    master.gain.value = muted ? 0 : volume;
+  }
+}
 
 export function getVolume(): number {
   return volume;
 }
 
+export function isMuted(): boolean {
+  return muted;
+}
+
+export function setMuted(next: boolean): void {
+  muted = next;
+  applyGain();
+  try {
+    window.localStorage.setItem(MUTED_KEY, String(next));
+  } catch {
+    // ignore
+  }
+}
+
 export function setVolume(next: number): void {
   volume = Math.min(1, Math.max(0, next));
-  if (master !== null) {
-    master.gain.value = volume;
-  }
+  applyGain();
   try {
     window.localStorage.setItem(VOLUME_KEY, String(volume));
   } catch {
@@ -100,7 +137,7 @@ export function unlock(): void {
   try {
     context = new AudioContext();
     master = context.createGain();
-    master.gain.value = volume;
+    master.gain.value = muted ? 0 : volume;
     master.connect(context.destination);
     // Anything already downloaded can become playable right now; anything not
     // yet asked for gets asked for here.
@@ -325,7 +362,7 @@ function noise(duration: number, frequency: number, gain: number): void {
 }
 
 export function play(cue: Cue): void {
-  if (context === null || master === null || volume === 0) {
+  if (context === null || master === null || muted || volume === 0) {
     return;
   }
   switch (cue) {

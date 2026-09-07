@@ -300,6 +300,28 @@
   z-index: 30;
 }
 
+/*
+ * A bridge across the gap between the button and the panel.
+ *
+ * The panel is held open by hovering anywhere inside .vol, and the panel is
+ * inside it — but the eight pixels between the two are not, so a pointer
+ * travelling from the button to a slider left the element on the way and the
+ * panel shut in front of it. The only way through was to click, which pins it
+ * open with :focus-within and mutes the game on the way past.
+ *
+ * Invisible, and only there while the panel is open: it inherits the panel's
+ * own pointer-events, so a closed panel does not leave a dead strip lying
+ * across the bar.
+ */
+.vol__pop::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 10px;
+}
+
 .vol:hover .vol__pop,
 .vol:focus-within .vol__pop {
   opacity: 1;
@@ -372,20 +394,16 @@
   line-height: 0;
 }
 
-.vol__stage:empty {
-  display: none;
-}
-
 .vol__stage--off {
   opacity: 0.45;
 }
 
 /*
- * The width and height the player is built with are a starting point, not a
- * promise: the embed sizes itself and came back wider than the panel holding
- * it. These win.
+ * The player itself is not in here — it is a fixed element laid over this gap,
+ * because an iframe that moves in the DOM reloads, and the bar it would have
+ * lived in is rebuilt on every page change. These rules follow it there.
  */
-.vol__stage iframe {
+#backroom-music iframe {
   border: 0;
   display: block;
   width: 100%;
@@ -1766,6 +1784,21 @@
 
 .history .up {
   color: var(--gr-color-good);
+}
+
+/* How many hands, or how many games, went into one line. */
+.history__rounds {
+  margin-left: var(--gr-space-2);
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+}
+
+/* Says the figure beside it was reconstructed rather than recorded. */
+.history__guess {
+  margin-left: 2px;
+  color: var(--gr-color-ink-faint);
+  cursor: help;
 }
 
 .history .down {

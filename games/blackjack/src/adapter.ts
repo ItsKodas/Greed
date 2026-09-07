@@ -208,6 +208,9 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           // No score in blackjack, so what the hand was worth stands in.
           score: value(seat.cards).total,
           isBot: seat.isBot,
+          // The stake was taken as it was placed, so this is the whole story
+          // of the hand: what came back, less what went out.
+          net: seat.returned - seat.bet,
         })),
         winnerIds: played
           .filter((seat) => seat.outcome === "won" || seat.outcome === "blackjack")

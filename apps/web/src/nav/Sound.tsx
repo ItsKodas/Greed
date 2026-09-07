@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
-import { getVolume, setVolume, unlock } from "../game/audio.js";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { getVolume, isMuted, setMuted, setVolume, unlock } from "../game/audio.js";
 import {
+  applyPlayback,
   attachMusic,
   musicState,
   setMusicOn,
@@ -26,39 +27,74 @@ import {
  */
 export function Sound() {
   const [level, setLevel] = useState(() => getVolume());
+  const [muted, setMutedHere] = useState(() => isMuted());
   const music = useSyncExternalStore(watchMusic, musicState);
-  /*
-   * What to come back to. Muting is not the same as turning it down to
-   * nothing: unmuting should return the volume somebody chose, not a default.
-   */
-  const before = useRef(level > 0 ? level : 0.7);
-  const muted = level === 0;
 
   const move = (next: number) => {
     unlock();
     setVolume(next);
     setLevel(next);
+    // Reaching for a slider is asking to hear something. Leaving it silent
+    // while the number climbs would look broken, which it very nearly is.
+    if (muted && next > 0) {
+      flip(false);
+    }
   };
 
-  // A callback ref, so the player is handed its home the moment there is one.
-  const stage = useCallback((node: HTMLDivElement | null) => {
-    attachMusic(node);
-  }, []);
+  /**
+   * The master mute: everything that makes a noise, including the stream.
+   *
+   * It is a switch rather than a volume of zero, so both sliders stay exactly
+   * where they were and unmuting does not have to guess where that was.
+   */
+  const flip = (next: boolean) => {
+    setMuted(next);
+    setMutedHere(next);
+    applyPlayback();
+  };
+
+  /*
+   * Whether the panel is open, tracked in JavaScript as well as in CSS.
+   *
+   * The player is not inside the panel — it cannot be, or navigating between
+   * pages would reload the iframe and restart the track — so it is laid over
+   * the gap left for it, and something has to say when that gap is on screen.
+   */
+  const [open, setOpen] = useState(false);
+  const stage = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    attachMusic(stage.current, open);
+    // Unmounting is a page change, not a reason to stop: the player is parked
+    // off-screen and goes on playing until the next bar picks it up.
+    return () => attachMusic(null, false);
+  }, [open]);
 
   return (
-    <span className={`vol${muted ? " vol--muted" : ""}`}>
+    <span
+      className={`vol${muted ? " vol--muted" : ""}`}
+      /* A named group rather than a bare span: it carries the pointer and
+         focus handlers that decide whether the panel is open, and the things
+         inside it are one set of controls rather than several. */
+      role="group"
+      aria-label="Sound"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(event) => {
+        // Only when focus has actually left the whole control, not when it
+        // moves from one slider to the other.
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
       <button
         type="button"
         className="iconbtn vol__btn"
-        aria-label={muted ? "Unmute" : "Sound"}
-        onClick={() => {
-          if (muted) {
-            move(before.current);
-          } else {
-            before.current = level;
-            move(0);
-          }
-        }}
+        aria-label={muted ? "Unmute everything" : "Mute everything"}
+        title={muted ? "Unmute" : "Mute"}
+        onClick={() => flip(!muted)}
       >
         {muted ? <MutedIcon /> : <SpeakerIcon />}
       </button>
@@ -73,13 +109,7 @@ export function Sound() {
             step={0.05}
             value={level}
             aria-label="Game volume"
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              if (next > 0) {
-                before.current = next;
-              }
-              move(next);
-            }}
+            onChange={(event) => move(Number(event.target.value))}
           />
           <span className="vol__read">{Math.round(level * 100)}</span>
         </div>
@@ -93,7 +123,12 @@ export function Sound() {
             step={0.05}
             value={music.volume}
             aria-label="Music volume"
-            onChange={(event) => setMusicVolume(Number(event.target.value))}
+            onChange={(event) => {
+              setMusicVolume(Number(event.target.value));
+              if (muted) {
+                flip(false);
+              }
+            }}
           />
           <span className="vol__read">{Math.round(music.volume * 100)}</span>
         </div>
@@ -121,13 +156,17 @@ export function Sound() {
               ? "the stream would not load"
               : !music.on
                 ? "off"
-                : (music.title ?? "finding something…")}
+                : muted
+                  ? "muted"
+                  : (music.title ?? "finding something…")}
           </span>
         </div>
 
         {/* Kept in the layout rather than hidden: a stream is somebody else's
             player and is meant to be seen, not run as a hidden source. */}
-        <div className={`vol__stage${music.on ? "" : " vol__stage--off"}`} ref={stage} />
+        {/* A hole the player is laid over, rather than a box it sits in. It
+            keeps its size while empty, because it is always empty. */}
+        <div className={`vol__stage${music.on && !muted ? "" : " vol__stage--off"}`} ref={stage} />
       </div>
     </span>
   );

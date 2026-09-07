@@ -15,9 +15,12 @@
  * the gesture, so there is no autoplay problem to work around.
  */
 
+import { isMuted } from "../game/audio.js";
+
 const PLAYLIST = "PLDsQbZPR0jf4noTT0HceGJzcathrVAz9c";
 const VOLUME_KEY = "backroom.music.volume";
 const ON_KEY = "backroom.music.on";
+const DEFAULT_VOLUME = 0.05;
 
 /** Only the handful of player methods this file actually calls. */
 interface Player {
@@ -70,11 +73,25 @@ export interface MusicState {
 
 let player: Player | null = null;
 let loading: Promise<void> | null = null;
+/** Where in the page the player should appear to be. */
 let host: HTMLElement | null = null;
+let showing = false;
+/**
+ * The player's real home: one element under the body, made once.
+ *
+ * It cannot live inside the navbar. React unmounts the bar on every route
+ * change, and even if it did not, moving an iframe anywhere in the DOM makes
+ * the browser reload it — which for a stream means the track restarts every
+ * time you walk between rooms. So the iframe is created once, never moved, and
+ * simply parked over the panel that pretends to contain it.
+ */
+let shell: HTMLDivElement | null = null;
 
 const state: MusicState = {
   on: read(ON_KEY, "false") === "true",
-  volume: clamp(Number(read(VOLUME_KEY, "0.35"))),
+  // Quiet by default. Background music is background: loud enough to notice
+  // once, not loud enough to talk over the table.
+  volume: clamp(Number(read(VOLUME_KEY, String(DEFAULT_VOLUME)))),
   playing: false,
   title: null,
   failed: false,
@@ -107,8 +124,20 @@ function write(key: string, value: string): void {
   }
 }
 
+/**
+ * Whether the stream should be sounding right now.
+ *
+ * Two switches, and both have to be on. The music has its own — off by default
+ * — and the speaker in the bar is a master mute over everything that makes
+ * noise, which has to include this: a mute that silenced the dice and left a
+ * jazz playlist running would not be a mute.
+ */
+function shouldPlay(): boolean {
+  return state.on && !isMuted();
+}
+
 function clamp(value: number): number {
-  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.35;
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : DEFAULT_VOLUME;
 }
 
 function announce(): void {
@@ -156,29 +185,77 @@ function loadApi(): Promise<void> {
   return loading;
 }
 
-/**
- * Where the player should be drawn.
- *
- * Called by whatever is rendering the controls. The element is remembered so
- * that a player built later still knows where to go, and a player already
- * built is moved rather than rebuilt — remounting the iframe would restart the
- * track every time the menu opened.
- */
-export function attachMusic(element: HTMLElement | null): void {
-  host = element;
-  if (element !== null && player !== null) {
-    const frame = document.getElementById("music-frame");
-    if (frame !== null && frame.parentElement !== element) {
-      element.append(frame);
-    }
+function makeShell(): HTMLDivElement {
+  if (shell !== null) {
+    return shell;
   }
-  if (element !== null && state.on && player === null) {
+  const element = document.createElement("div");
+  element.id = "backroom-music";
+  element.style.position = "fixed";
+  element.style.zIndex = "40";
+  element.style.overflow = "hidden";
+  element.style.borderRadius = "2px";
+  element.style.lineHeight = "0";
+  park(element);
+  document.body.append(element);
+  // Capture, because the panel can sit inside a scrolling area of its own.
+  window.addEventListener("scroll", place, { passive: true, capture: true });
+  window.addEventListener("resize", place, { passive: true });
+  shell = element;
+  return element;
+}
+
+/** Out of the way, still sounding. */
+function park(element: HTMLElement): void {
+  element.style.left = "-10000px";
+  element.style.top = "0";
+  element.style.width = "1px";
+  element.style.height = "1px";
+  element.style.visibility = "hidden";
+}
+
+/**
+ * Lays the player over the hole left for it in the panel.
+ *
+ * Cheap enough to call on every scroll — one rect read and a few style writes
+ * — and only while the panel is open. The rest of the time the player is
+ * parked off-screen, where it goes on playing with nothing to follow.
+ */
+export function place(): void {
+  if (shell === null) {
+    return;
+  }
+  const box = host !== null && showing ? host.getBoundingClientRect() : null;
+  if (box === null || box.width === 0 || box.height === 0) {
+    park(shell);
+    return;
+  }
+  shell.style.left = `${box.left}px`;
+  shell.style.top = `${box.top}px`;
+  shell.style.width = `${box.width}px`;
+  shell.style.height = `${box.height}px`;
+  shell.style.visibility = "visible";
+}
+
+/**
+ * Where the player should appear, and whether it should appear at all.
+ *
+ * The element handed in is only ever measured, never used as a parent — see
+ * the note on `shell` for why the iframe cannot be put inside it. That is the
+ * whole reason walking from the room to a table no longer restarts the track:
+ * nothing about the player changes when the page around it is replaced.
+ */
+export function attachMusic(element: HTMLElement | null, open: boolean): void {
+  host = element;
+  showing = open && element !== null;
+  if (shouldPlay() && player === null) {
     void build();
   }
+  place();
 }
 
 async function build(): Promise<void> {
-  if (player !== null || host === null) {
+  if (player !== null) {
     return;
   }
   try {
@@ -189,15 +266,14 @@ async function build(): Promise<void> {
     return;
   }
   const api = window.YT;
-  if (api?.Player === undefined || host === null) {
+  if (api?.Player === undefined) {
     state.failed = true;
     announce();
     return;
   }
 
   const mount = document.createElement("div");
-  mount.id = "music-frame";
-  host.append(mount);
+  makeShell().append(mount);
 
   player = new api.Player(mount, {
     width: "220",
@@ -219,7 +295,12 @@ async function build(): Promise<void> {
         player?.setVolume(Math.round(state.volume * 100));
         player?.setLoop(true);
         player?.setShuffle(true);
-        start();
+        // Muted between asking for the player and getting one is unlikely but
+        // entirely possible, and starting anyway would be the one case where
+        // the mute button does not mute.
+        if (shouldPlay()) {
+          start();
+        }
       },
       onStateChange: (event) => {
         const playing = event.data === (window.YT?.PlayerState.PLAYING ?? 1);
@@ -227,6 +308,8 @@ async function build(): Promise<void> {
         const title = player?.getVideoData()?.title;
         state.title = typeof title === "string" && title.length > 0 ? title : null;
         announce();
+        // The panel may have opened while the embed was still building.
+        place();
       },
       onError: () => {
         // One dead video should not end the night; the playlist moves on.
@@ -261,7 +344,17 @@ export function setMusicOn(on: boolean): void {
   state.failed = false;
   write(ON_KEY, String(on));
   announce();
-  if (!on) {
+  applyPlayback();
+}
+
+/**
+ * Brings the stream into line with the two switches.
+ *
+ * Called by the music's own toggle and by the master mute, which lives in the
+ * game's audio module and knows nothing about YouTube.
+ */
+export function applyPlayback(): void {
+  if (!shouldPlay()) {
     player?.pauseVideo();
     return;
   }

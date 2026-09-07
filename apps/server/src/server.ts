@@ -452,7 +452,9 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         response.status(401).json({ error: "Sign in first." });
         return;
       }
-      response.json({ games: await store.recentGames(id, 20) });
+      // Deliberately more than the page shows. Hands at one table collapse into
+      // a single line, so twenty records can be two lines of history.
+      response.json({ games: await store.recentGames(id, 80) });
     })();
   });
 

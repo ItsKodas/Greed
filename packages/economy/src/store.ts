@@ -61,7 +61,18 @@ export interface GameRecord {
   rulesetName: string;
   buyIn: number;
   pot: number;
-  players: Array<{ userId: string | null; name: string; score: number; isBot: boolean }>;
+  players: Array<{
+    userId: string | null;
+    name: string;
+    score: number;
+    isBot: boolean;
+    /**
+     * What this player's chips did. Optional because records written before
+     * it existed do not have one, and a history that hid those would be worse
+     * than one that shows them with the figure it can still work out.
+     */
+    net?: number;
+  }>;
   winnerIds: string[];
   endedAt: number;
 }

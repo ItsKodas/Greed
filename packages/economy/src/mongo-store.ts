@@ -69,6 +69,9 @@ const gameSchema = new mongoose.Schema<GameRecord>(
         name: String,
         score: Number,
         isBot: Boolean,
+        // Absent on anything written before this field existed, which the
+        // profile handles rather than the schema papering over with a zero.
+        net: { type: Number, required: false },
       },
     ],
     winnerIds: [String],

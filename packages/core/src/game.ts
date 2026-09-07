@@ -115,7 +115,22 @@ export interface FinishedGame {
   rulesetName: string;
   buyIn: number;
   pot: number;
-  players: Array<{ userId: string | null; name: string; score: number; isBot: boolean }>;
+  players: Array<{
+    userId: string | null;
+    name: string;
+    score: number;
+    isBot: boolean;
+    /**
+     * What this player's chips did across this record: positive for a win,
+     * negative for a loss, zero for a push or a friendly.
+     *
+     * Recorded rather than worked out later, because it cannot be worked out
+     * later. A pot split among winners and a hand settled seat by seat are not
+     * the same arithmetic, and a page reading the history has no way to tell
+     * which game it is looking at.
+     */
+    net: number;
+  }>;
   winnerIds: string[];
   endedAt: number;
 }

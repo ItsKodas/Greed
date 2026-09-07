@@ -2,16 +2,8 @@ import { useEffect, useState } from "react";
 import { Avatar } from "../game/Avatar.js";
 import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
-
-interface PlayedGame {
-  code: string;
-  rulesetName: string;
-  buyIn: number;
-  pot: number;
-  players: Array<{ userId: string | null; name: string; score: number; isBot: boolean }>;
-  winnerIds: string[];
-  endedAt: number;
-}
+import { bundle, signed } from "./history.js";
+import type { PlayedGame } from "./history.js";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
@@ -160,27 +152,37 @@ function Signed({
                 <thead>
                   <tr>
                     <th>Table</th>
-                    <th>Rules</th>
+                    <th>Game</th>
                     <th>Players</th>
                     <th className="history__num">Chips</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {history.map((game) => {
-                    const won = game.winnerIds.includes(profile.id);
-                    const change = won ? game.pot - game.buyIn : -game.buyIn;
-                    return (
-                      <tr key={`${game.code}-${game.endedAt}`}>
-                        <td className="history__code">{game.code}</td>
-                        <td>{game.rulesetName}</td>
-                        <td>{game.players.length}</td>
-                        <td className={`history__num ${change >= 0 ? "up" : "down"}`}>
-                          {change >= 0 ? "+" : ""}
-                          {fmt(change)}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {bundle(history, profile.id).map((session) => (
+                    <tr key={`${session.code}-${session.endedAt}`}>
+                      <td className="history__code">{session.code}</td>
+                      <td>
+                        {session.rulesetName}
+                        {/* Only when there was more than one. A "×1" on every
+                            other line would be noise standing in for a fact. */}
+                        {session.rounds > 1 ? (
+                          <span className="history__rounds">×{session.rounds}</span>
+                        ) : null}
+                      </td>
+                      <td>{session.players}</td>
+                      <td
+                        className={`history__num ${session.net > 0 ? "up" : session.net < 0 ? "down" : ""}`}
+                        title={
+                          session.estimated
+                            ? "Worked out from the pot: this was played before chips were recorded per player."
+                            : undefined
+                        }
+                      >
+                        {signed(session.net)}
+                        {session.estimated ? <span className="history__guess">?</span> : null}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
