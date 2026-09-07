@@ -118,6 +118,24 @@ const redemptionSchema = new mongoose.Schema<RedemptionDoc>({
  */
 redemptionSchema.index({ code: 1, userId: 1 }, { unique: true });
 
+interface HouseDoc {
+  _id: string;
+  amount: number;
+}
+
+/*
+ * One document, always with the id "bank".
+ *
+ * A collection holding a single row looks odd until you want the update to be
+ * atomic: $inc on one document is, and a read followed by a write is not. Two
+ * spins finishing a millisecond apart is the ordinary case here, not an
+ * exotic one.
+ */
+const houseSchema = new mongoose.Schema<HouseDoc>({
+  _id: { type: String, required: true },
+  amount: { type: Number, required: true, default: 0 },
+});
+
 function toProfile(doc: UserDoc): Profile {
   return {
     id: doc._id.toString(),
@@ -149,12 +167,14 @@ export class MongoStore implements Store {
   private readonly games: Model<GameRecord>;
   private readonly codes: Model<CodeRecord>;
   private readonly redemptions: Model<RedemptionDoc>;
+  private readonly house: Model<HouseDoc>;
 
   private constructor(private readonly connection: mongoose.Connection) {
     this.users = connection.model<UserDoc>("User", userSchema);
     this.games = connection.model<GameRecord>("Game", gameSchema);
     this.codes = connection.model<CodeRecord>("Code", codeSchema);
     this.redemptions = connection.model<RedemptionDoc>("Redemption", redemptionSchema);
+    this.house = connection.model<HouseDoc>("House", houseSchema);
   }
 
   /**
@@ -329,6 +349,28 @@ export class MongoStore implements Store {
       .limit(limit)
       .lean();
     return docs as unknown as GameRecord[];
+  }
+
+  async bank(): Promise<number> {
+    const doc = await this.house.findById("bank");
+    return doc?.amount ?? 0;
+  }
+
+  async bankAdd(delta: number): Promise<void> {
+    await this.house.updateOne({ _id: "bank" }, { $inc: { amount: delta } }, { upsert: true });
+  }
+
+  async bankTake(amount: number): Promise<boolean> {
+    /*
+     * The whole rule expressed as the filter, in the manner of adjustChips. A
+     * payout that would overdraw matches nothing and changes nothing, so two
+     * concurrent wins cannot both take the last of it.
+     */
+    const result = await this.house.updateOne(
+      { _id: "bank", amount: { $gte: amount } },
+      { $inc: { amount: -amount } },
+    );
+    return result.modifiedCount === 1;
   }
 
   async mintCode(input: {

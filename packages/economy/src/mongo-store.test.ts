@@ -167,4 +167,24 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     expect(person?.stats).toEqual({ games: 9, wins: 4, chipsWon: 1200 });
     expect(person?.chips).toBe(7000);
   });
+
+  it("will not let two concurrent payouts both take the last of the bank", async () => {
+    /*
+     * The reason bankTake is a conditional update rather than a read and a
+     * write. Both callers see 100 in the bank; exactly one of them may have
+     * it. MemoryStore keeps this promise by accident, being single-threaded —
+     * only a real database can show that the Mongo implementation keeps it on
+     * purpose.
+     */
+    store ??= await MongoStore.connect(url as string);
+    // Whatever previous tests left behind; the bank is one shared row.
+    await store.bankTake(await store.bank());
+    await store.bankAdd(100);
+
+    const [first, second] = await Promise.all([store.bankTake(100), store.bankTake(100)]);
+
+    expect([first, second].filter(Boolean)).toHaveLength(1);
+    expect(await store.bank()).toBe(0);
+  });
+
 });
