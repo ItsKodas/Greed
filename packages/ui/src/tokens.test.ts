@@ -59,6 +59,16 @@ describe("color", () => {
   });
 });
 
+/**
+ * Colour properties that name a role rather than hold a colour.
+ *
+ * They resolve to another token instead of to a hex, so they have no entry in
+ * the palette and could not have one: the whole point of an alias is that a
+ * room repainting what it points at moves the alias with it, which a copied
+ * value would not do.
+ */
+const ALIASES = ["air", "air-hi"];
+
 describe("tokens.css", () => {
   it("defines a custom property for every colour, with the same value", () => {
     for (const [key, value] of Object.entries(color)) {
@@ -75,7 +85,29 @@ describe("tokens.css", () => {
       key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`),
     );
     for (const name of declared) {
+      if (ALIASES.includes(name ?? "")) {
+        continue;
+      }
       expect(known, `--gr-color-${name} has no entry in tokens.ts`).toContain(name);
+    }
+  });
+
+  it("keeps every alias an alias, rather than a second copy of a colour", () => {
+    /*
+     * The one thing that makes an alias worth having. Written as a hex it
+     * would be a duplicate, and a room that repainted the token it points at
+     * would leave it behind — which is exactly how a green card room came to
+     * be seen through blue air.
+     */
+    for (const alias of ALIASES) {
+      // String.raw, because a template literal eats the backslash: \s
+      // becomes a literal "s" and the pattern quietly stops meaning
+      // whitespace while still matching by luck.
+      const match = css.match(new RegExp(String.raw`--gr-color-${alias}\s*:\s*([^;]+);`));
+      expect(match, `--gr-color-${alias} missing from tokens.css`).not.toBeNull();
+      expect(match?.[1]?.trim(), `--gr-color-${alias} should point at a token`).toMatch(
+        /^var\(--gr-[a-z0-9-]+\)$/,
+      );
     }
   });
 
@@ -104,6 +136,8 @@ describe("tokens.css", () => {
     const declared = [...css.matchAll(/(--gr-[a-z0-9-]+)\s*:/g)].map((m) => m[1]);
     expect(declared.sort()).toEqual(
       [
+        "--gr-color-air",
+        "--gr-color-air-hi",
         "--gr-color-bad",
         "--gr-color-chip",
         "--gr-color-chip-dim",
