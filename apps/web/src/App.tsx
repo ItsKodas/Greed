@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 import { Admin } from "./admin/Admin.js";
+import { Haze } from "./atmosphere/Haze.js";
 import { Blackjack } from "./blackjack/Blackjack.js";
 import { Play } from "./game/Play.js";
 import { Profile } from "./profile/Profile.js";
@@ -9,7 +10,12 @@ import { Gallery } from "./style/Gallery.js";
 
 export default function App() {
   return (
-    <Routes>
+    <>
+      {/* Behind every page, and mounted out here rather than in one: it is the
+          air in the building, so it should not be rebuilt each time you walk
+          between rooms. */}
+      <Haze />
+      <Routes>
       <Route path="/" element={<Room />} />
       {/*
         * Static segments are declared before the dynamic one. React-router
@@ -29,6 +35,7 @@ export default function App() {
         */}
       <Route path="/:code" element={<TableLink />} />
       <Route path="*" element={<p className="not-found">No such page.</p>} />
-    </Routes>
+      </Routes>
+    </>
   );
 }

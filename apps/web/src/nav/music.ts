@@ -44,7 +44,7 @@ interface YouTubeApi {
       width: string;
       playerVars: Record<string, string | number>;
       events: {
-        onReady: () => void;
+        onReady: (event: { target: Player }) => void;
         onStateChange: (event: { data: number }) => void;
         onError?: () => void;
       };
@@ -71,7 +71,18 @@ export interface MusicState {
   failed: boolean;
 }
 
+/**
+ * The player, once it is genuinely usable.
+ *
+ * Assigned from the ready event rather than from the constructor. What the
+ * constructor hands back is not yet a player — its methods arrive with the
+ * handshake — so calling setVolume on it throws, which is exactly what
+ * happened every time the volume was set before the embed had finished
+ * connecting. Null until ready means every call below simply waits.
+ */
 let player: Player | null = null;
+/** A player asked for but not yet handed over, so it is not asked for twice. */
+let building = false;
 let loading: Promise<void> | null = null;
 /** Where in the page the player should appear to be. */
 let host: HTMLElement | null = null;
@@ -275,18 +286,21 @@ export function attachMusic(element: HTMLElement | null, open: boolean): void {
 }
 
 async function build(): Promise<void> {
-  if (player !== null) {
+  if (player !== null || building) {
     return;
   }
+  building = true;
   try {
     await loadApi();
   } catch {
+    building = false;
     state.failed = true;
     announce();
     return;
   }
   const api = window.YT;
   if (api?.Player === undefined) {
+    building = false;
     state.failed = true;
     announce();
     return;
@@ -295,7 +309,7 @@ async function build(): Promise<void> {
   const mount = document.createElement("div");
   makeShell().append(mount);
 
-  player = new api.Player(mount, {
+  new api.Player(mount, {
     width: "220",
     height: "124",
     playerVars: {
@@ -311,10 +325,12 @@ async function build(): Promise<void> {
       playsinline: 1,
     },
     events: {
-      onReady: () => {
-        player?.setVolume(Math.round(state.volume * 100));
-        player?.setLoop(true);
-        player?.setShuffle(true);
+      onReady: (event) => {
+        player = event.target;
+        building = false;
+        player.setVolume(Math.round(state.volume * 100));
+        player.setLoop(true);
+        player.setShuffle(true);
         // Muted between asking for the player and getting one is unlikely but
         // entirely possible, and starting anyway would be the one case where
         // the mute button does not mute.
