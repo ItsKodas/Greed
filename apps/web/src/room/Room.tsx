@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { AccountBadge } from "../account/AccountBadge.js";
-import { Sign } from "../game/Sign.js";
 import { useAccount } from "../game/useAccount.js";
+import { Navbar } from "../nav/Navbar.js";
 
 interface GameOnOffer {
   id: string;
@@ -56,13 +55,7 @@ export function Room() {
 
   return (
     <main className="room">
-      <header className="room__head">
-        <h1 className="room__mark">
-          <Sign />
-        </h1>
-        <span className="room__spacer" />
-        <AccountBadge account={account} />
-      </header>
+      <Navbar account={account} />
 
       <p className="room__label">At the tables</p>
       <div className="room__tables">

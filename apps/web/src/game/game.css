@@ -10,26 +10,6 @@
   padding: var(--gr-space-6) var(--gr-space-5) var(--gr-space-8);
 }
 
-.play__head {
-  display: flex;
-  /*
-   * Centred, not baseline-aligned. The sign is a two-line block set at an
-   * angle, so its last baseline sits far below its middle — aligning on it
-   * hung the sign low and left everything else riding high above it. Nothing
-   * else in this row shares a baseline worth keeping.
-   */
-  align-items: center;
-  gap: var(--gr-space-4);
-  padding-bottom: var(--gr-space-4);
-  border-bottom: var(--gr-edge-hair);
-}
-
-.play__mark {
-  margin: 0;
-  display: flex;
-  align-items: center;
-}
-
 /*
  * The link around the sign is a flex container, not a line of text.
  *
@@ -39,23 +19,6 @@
  * near its bottom, which is why the sign never lined up with the words beside
  * it however the row itself was aligned.
  */
-/*
- * Only the game header wraps the sign in a link. The room picker puts the sign
- * straight into its heading, which is already a centred flex row, so the sign
- * is a flex item there and none of this applies.
- */
-.play__mark a {
-  display: flex;
-  /*
-   * No underline. A flex item is block-level, and text-decoration propagates
-   * into block-level descendants where it would have skipped an atomic inline
-   * box — so the moment this link stopped being a line of text, the browser's
-   * default underline appeared under the sign and lit up with the rest of it.
-   */
-  text-decoration: none;
-  color: inherit;
-}
-
 /*
  * The sign. A lit tube built from the inside out: the first two shadows are
  * white and tight, which is the gas burning out the middle of the glass, and
@@ -95,41 +58,6 @@
   transform: rotate(-2deg);
 }
 
-/* Which game you are in, said plainly beside the sign for the building. */
-.play__game {
-  font-family: var(--gr-font-display);
-  font-size: var(--gr-text-xl);
-  color: var(--gr-color-ink);
-  letter-spacing: 0.02em;
-  flex: 1;
-}
-
-/*
- * One letter picked out in the room's own colour. Greed has been written
- * GRE-E-D since the first screen and it is the game's whole mark; a game that
- * wants nothing of the sort simply writes its name without an em.
- */
-.play__game em {
-  font-style: normal;
-  color: var(--gr-color-neon);
-}
-
-.play__code {
-  font-family: var(--gr-font-data);
-  font-size: var(--gr-text-lg);
-  letter-spacing: 0.28em;
-  color: var(--gr-color-ink-lit);
-}
-
-.play__link {
-  font-size: var(--gr-text-xs);
-  color: var(--gr-color-bad);
-}
-
-.play__link--up {
-  color: var(--gr-color-ink-dim);
-}
-
 .play__error,
 .play__event {
   margin: var(--gr-space-4) 0 0;
@@ -147,6 +75,304 @@
 .play__event {
   color: var(--gr-color-ink-dim);
   border-left: 2px solid var(--gr-color-neon-dim);
+}
+
+/* =========================================================== the navigation
+ *
+ * One bar for the whole building. Dense on purpose: the sign and the game's
+ * name are read, everything else is operated, so the operated half collapses
+ * to icons and a pill and leaves the width to the table below.
+ */
+
+.nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gr-space-3);
+  padding-bottom: var(--gr-space-4);
+  border-bottom: var(--gr-edge-hair);
+}
+
+.nav__mark {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * The link around the sign is a flex container, not a line of text. Left as a
+ * block it inherited the h1's line-height and the sign, being inline-flex, sat
+ * on that line's baseline with empty leading stacked above it — so the sign
+ * never lined up with the words beside it. Flex removes the line box, and with
+ * it the browser's default underline, which would otherwise light up with the
+ * tube.
+ */
+.nav__mark a {
+  display: flex;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Which game you are in, at the same size as the sign beside it. */
+.nav__game {
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-xl);
+  color: var(--gr-color-ink);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/*
+ * One letter picked out in the room's own colour. Greed has been written
+ * GRE-E-D since the first screen and it is the game's whole mark; a game that
+ * wants nothing of the sort simply writes its name without an em.
+ */
+.nav__game em {
+  font-style: normal;
+  color: var(--gr-color-neon);
+}
+
+.nav__spacer {
+  flex: 1;
+  min-width: var(--gr-space-2);
+}
+
+.nav__code {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-base);
+  letter-spacing: 0.24em;
+  color: var(--gr-color-ink-lit);
+  white-space: nowrap;
+}
+
+.nav__guest {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+}
+
+/* Present, never prominent. */
+.nav__out {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.nav__out:hover {
+  color: var(--gr-color-ink-dim);
+}
+
+.nav__out:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------- who you are */
+
+.me {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  padding: 3px var(--gr-space-3) 3px 3px;
+  border: var(--gr-edge-soft);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.26);
+  white-space: nowrap;
+  text-decoration: none;
+  color: inherit;
+}
+
+.me:hover {
+  border-color: color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+}
+
+.me:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 2px;
+}
+
+.me__face {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: var(--gr-text-xs);
+  font-weight: 600;
+  color: var(--gr-color-ink-lit);
+  background: var(--gr-color-smoke);
+  border: 2px solid var(--gr-color-neon-dim);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--avatar-accent, var(--gr-color-neon)) 45%, transparent);
+}
+
+.me__name {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink);
+}
+
+/* Gold, because it is money. */
+.me__chips {
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-chip);
+}
+
+/* ------------------------------------------------------------- icon buttons */
+
+.iconbtn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--gr-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gr-color-ink-dim);
+  cursor: pointer;
+  flex: none;
+}
+
+.iconbtn:hover {
+  color: var(--gr-color-neon-hi);
+  border-color: color-mix(in srgb, var(--gr-color-neon) 40%, transparent);
+}
+
+.iconbtn:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 1px;
+}
+
+/* Armed: the next press does the thing, and it says so before it happens. */
+.iconbtn--warn,
+.iconbtn--warn:hover {
+  color: var(--gr-color-bad);
+  border-color: var(--gr-color-bad);
+}
+
+.iconbtn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* ----------------------------------------------------------------- volume */
+
+.vol {
+  position: relative;
+  display: inline-flex;
+}
+
+/*
+ * Always rendered, never mounted on hover: a control that only exists once the
+ * pointer arrives cannot be reached by a keyboard, so this is hidden by
+ * opacity and opened by :focus-within as well as :hover.
+ */
+.vol__pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: -6px;
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  padding: var(--gr-space-2) var(--gr-space-3);
+  background: var(--gr-color-slate);
+  border: var(--gr-edge-hair);
+  border-radius: var(--gr-radius-sm);
+  box-shadow: var(--gr-lift-high);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+  z-index: 30;
+}
+
+.vol:hover .vol__pop,
+.vol:focus-within .vol__pop {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.vol__pop input[type="range"] {
+  width: 96px;
+  accent-color: var(--gr-color-neon);
+  background: transparent;
+}
+
+.vol__read {
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  width: 3ch;
+  text-align: right;
+}
+
+.vol--muted .iconbtn {
+  color: var(--gr-color-bad);
+}
+
+/* --------------------------------------------------------- the connection */
+
+.nav__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  white-space: nowrap;
+}
+
+.nav__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--gr-color-ink-faint);
+}
+
+/*
+ * Only trouble is lit. Everything else in this building that glows is
+ * happening now; a connection that is fine is not happening, it simply is.
+ */
+.nav__link--down {
+  color: var(--gr-color-bad);
+}
+
+.nav__link--down .nav__dot {
+  background: var(--gr-color-bad);
+  box-shadow: 0 0 8px var(--gr-color-bad);
+  animation: nav-breathe 1s ease-in-out infinite;
+}
+
+@keyframes nav-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav__dot {
+    animation: none;
+  }
+  .vol__pop {
+    transition: none;
+  }
 }
 
 /* ---------------------------------------------------------------- join */
@@ -384,21 +610,6 @@
   border-radius: 50%;
   object-fit: cover;
   display: block;
-}
-
-.account__face {
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background: var(--gr-color-smoke);
-  border: 2px solid var(--gr-color-neon-dim);
-  font-size: var(--gr-text-xs);
-  font-weight: 600;
-  color: var(--gr-color-ink);
 }
 
 .seat__avatar {
@@ -783,32 +994,6 @@
   outline-offset: 2px;
 }
 
-/* ----------------------------------------------------------- volume */
-
-.volume {
-  display: flex;
-  align-items: center;
-  gap: var(--gr-space-2);
-}
-
-.volume__icon {
-  font-size: var(--gr-text-sm);
-  color: var(--gr-color-ink-dim);
-  width: 1em;
-  text-align: center;
-}
-
-.volume input {
-  width: 74px;
-  accent-color: var(--gr-color-neon);
-  cursor: pointer;
-}
-
-.volume input:focus-visible {
-  outline: 2px solid var(--gr-color-neon-hi);
-  outline-offset: 3px;
-}
-
 /* ---------------------------------------------------------- tumbling */
 
 /*
@@ -863,20 +1048,6 @@
   .tray__dice--rolling {
     animation: none;
   }
-}
-
-/* ------------------------------------------------------------ leave */
-
-.btn--warn {
-  border-color: var(--gr-color-bad);
-  color: var(--gr-color-ink);
-  background: rgb(194 84 63 / 0.3);
-}
-
-.btn--warn:hover:not(:disabled) {
-  border-color: var(--gr-color-bad);
-  background: rgb(194 84 63 / 0.45);
-  color: var(--gr-color-ink);
 }
 
 .join__invited {
@@ -1199,50 +1370,6 @@
   margin-top: 0;
 }
 
-/* ---------------------------------------------------------- account */
-
-.account {
-  display: flex;
-  /* Centre, not baseline: there is a picture in this row now, and a round
-     image has no baseline to sit on. */
-  align-items: center;
-  gap: var(--gr-space-2);
-  font-size: var(--gr-text-sm);
-}
-
-.account__name {
-  color: var(--gr-color-ink);
-}
-
-/*
- * Gold, and the only gold on the page. A number in this colour is chips —
- * nothing else may borrow it, or it stops being findable at a glance.
- */
-.account__chips {
-  font-family: var(--gr-font-data);
-  font-variant-numeric: tabular-nums;
-  color: var(--gr-color-neon-hi);
-}
-
-.account__guest,
-.account__out {
-  font-size: var(--gr-text-xs);
-  color: var(--gr-color-ink-dim);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.account__out:hover {
-  color: var(--gr-color-bad);
-}
-
-.account__out:focus-visible,
-.account a:focus-visible {
-  outline: 2px solid var(--gr-color-neon-hi);
-  outline-offset: 2px;
-}
 
 .lobby__stack {
   display: grid;
@@ -1285,26 +1412,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-2);
-}
-
-.room__head {
-  display: flex;
-  align-items: center;
-  gap: var(--gr-space-4);
-  padding-bottom: var(--gr-space-4);
-  border-bottom: var(--gr-edge-hair);
-  margin-bottom: var(--gr-space-5);
-}
-
-.room__mark {
-  margin: 0;
-  display: flex;
-  align-items: center;
-}
-
-
-.room__spacer {
-  flex: 1;
 }
 
 .room__label {
@@ -1592,23 +1699,6 @@
   color: var(--gr-color-bad);
 }
 
-.account__me {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--gr-space-2);
-  text-decoration: none;
-  color: inherit;
-  border-radius: var(--gr-radius-sm);
-}
-
-.account__me:hover .account__name {
-  color: var(--gr-color-ink-lit);
-}
-
-.account__me:focus-visible {
-  outline: 2px solid var(--gr-color-neon);
-  outline-offset: 3px;
-}
 
 .purse__note {
   text-align: center;

@@ -1,15 +1,14 @@
-import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import type { TableView } from "@backroom/game-blackjack";
+import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { AccountBadge } from "../account/AccountBadge.js";
-import { Chat } from "../game/Chat.js";
+import { useNavigate, useParams } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
-import { Sign } from "../game/Sign.js";
-import { useAccount } from "../game/useAccount.js";
+import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
-import { useTableSocket } from "../table/useTableSocket.js";
+import { useAccount } from "../game/useAccount.js";
+import { Navbar } from "../nav/Navbar.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
+import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
@@ -59,24 +58,20 @@ export function Blackjack() {
 
   return (
     <main className="play">
-      <header className="play__head">
-        <h1 className="play__mark">
-          <Link to="/" aria-label="Back to The Back Room">
-            <Sign />
-          </Link>
-        </h1>
-        <span className="play__game">Blackjack</span>
-        {state !== null ? <span className="play__code">{state.code}</span> : null}
-        {state !== null ? (
-          <button type="button" className="btn btn--ghost btn--small" onClick={table.leave}>
-            Leave
-          </button>
-        ) : null}
-        <AccountBadge account={account} />
-        <span className={`play__link${table.connected ? " play__link--up" : ""}`}>
-          {table.connected ? "connected" : "offline"}
-        </span>
-      </header>
+      <Navbar
+        game="Blackjack"
+        {...(state !== null
+          ? {
+              table: {
+                code: state.code,
+                onLeave: table.leave,
+                confirm: state.phase === "playing",
+              },
+            }
+          : {})}
+        account={account}
+        connected={table.connected}
+      />
 
       {table.error !== null ? <p className="play__error">{table.error}</p> : null}
       {state?.lastEvent != null ? <p className="play__event">{state.lastEvent}</p> : null}

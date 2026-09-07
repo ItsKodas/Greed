@@ -1,7 +1,7 @@
 import { Route, Routes } from "react-router-dom";
+import { Admin } from "./admin/Admin.js";
 import { Blackjack } from "./blackjack/Blackjack.js";
 import { Play } from "./game/Play.js";
-import { Admin } from "./admin/Admin.js";
 import { Profile } from "./profile/Profile.js";
 import { Room } from "./room/Room.js";
 import { TableLink } from "./room/TableLink.js";

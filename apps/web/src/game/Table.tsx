@@ -1,14 +1,14 @@
 import { bustProbability, scoreSelection } from "@backroom/rules";
-import { play } from "./audio.js";
 import type { RoomView } from "@backroom/shared";
-import { SeatAvatar } from "./Avatar.js";
 import { useEffect, useState } from "react";
+import { SeatAvatar } from "./Avatar.js";
+import { play } from "./audio.js";
 import { Die } from "./Die.js";
 import { ScoreCard } from "./ScoreCard.js";
-import { ROLL_SETTLE_MS, useRollAnimation } from "./useRollAnimation.js";
 import type { PendingRoll } from "./useRollAnimation.js";
-import { isScoringStraight } from "./useSound.js";
+import { ROLL_SETTLE_MS, useRollAnimation } from "./useRollAnimation.js";
 import type { RoomActions } from "./useRoom.js";
+import { isScoringStraight } from "./useSound.js";
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 

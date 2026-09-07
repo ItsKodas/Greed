@@ -1,6 +1,6 @@
+import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 
 /**
  * A table code on its own, with no game in front of it.

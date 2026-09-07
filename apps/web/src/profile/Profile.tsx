@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { AccountBadge } from "../account/AccountBadge.js";
 import { Avatar } from "../game/Avatar.js";
-import { Sign } from "../game/Sign.js";
 import { useAccount } from "../game/useAccount.js";
+import { Navbar } from "../nav/Navbar.js";
 
 interface PlayedGame {
   code: string;
@@ -61,15 +59,7 @@ export function Profile() {
 
   return (
     <main className="room">
-      <header className="room__head">
-        <h1 className="room__mark">
-          <Link to="/" aria-label="Back to The Back Room">
-            <Sign />
-          </Link>
-        </h1>
-        <span className="room__spacer" />
-        <AccountBadge account={account} />
-      </header>
+      <Navbar account={account} />
 
       {account.loading ? null : account.profile === null ? (
         <p className="panel__note">

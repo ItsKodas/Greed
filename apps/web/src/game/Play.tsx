@@ -1,22 +1,19 @@
 import { RULESETS } from "@backroom/rules";
+import { Navbar } from "../nav/Navbar.js";
 import { SeatAvatar } from "./Avatar.js";
-import { Sign } from "./Sign.js";
-import { AccountBadge } from "../account/AccountBadge.js";
 import "@backroom/game-greed/theme.css";
+import type { ChatMessage, RoomView } from "@backroom/shared";
+import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getVolume, setVolume, unlock } from "./audio.js";
-import { useSound } from "./useSound.js";
+import { useNavigate, useParams } from "react-router-dom";
 import { Chat } from "./Chat.js";
 import { HouseRulesEditor } from "./HouseRulesEditor.js";
 import { Table } from "./Table.js";
-import { useAccount } from "./useAccount.js";
 import type { Account } from "./useAccount.js";
-import { useRoom } from "./useRoom.js";
+import { useAccount } from "./useAccount.js";
 import type { RoomActions } from "./useRoom.js";
-import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
-import type { ChatMessage } from "@backroom/shared";
-import type { RoomView } from "@backroom/shared";
+import { useRoom } from "./useRoom.js";
+import { useSound } from "./useSound.js";
 
 export function Play() {
   const params = useParams();
@@ -62,26 +59,25 @@ export function Play() {
 
   return (
     <main className="play">
-      <header className="play__head">
-        {/* The sign goes back to the room; the game name says which one you
-            are standing in. */}
-        <h1 className="play__mark">
-          <Link to="/" aria-label="Back to The Back Room">
-            <Sign />
-          </Link>
-        </h1>
-        {/* GRE-E-D, with the second E lit — the mark the game opened with. */}
-        <span className="play__game">
-          GRE<em>E</em>D
-        </span>
-        {room !== null ? <span className="play__code">{room.code}</span> : null}
-        {room !== null ? <LeaveButton room={room} onLeave={actions.leave} /> : null}
-        <AccountBadge account={account} />
-        <Volume />
-        <span className={`play__link${connected ? " play__link--up" : ""}`}>
-          {connected ? "connected" : "offline"}
-        </span>
-      </header>
+      <Navbar
+        /* GRE-E-D, with the second E lit — the mark the game opened with. */
+        game={
+          <>
+            GRE<em>E</em>D
+          </>
+        }
+        {...(room !== null
+          ? {
+              table: {
+                code: room.code,
+                onLeave: actions.leave,
+                confirm: room.status === "playing",
+              },
+            }
+          : {})}
+        account={account}
+        connected={connected}
+      />
 
       {error !== null ? <p className="play__error">{error}</p> : null}
       {account.dailyMessage !== null ? (
@@ -116,45 +112,6 @@ export function Play() {
     </main>
   );
 }
-
-/**
- * Leaving mid-game forfeits the turn, so a running game asks twice. In the
- * lobby there is nothing to lose, so one click is enough.
- */
-function LeaveButton({ room, onLeave }: { room: RoomView; onLeave: () => void }) {
-  const [arming, setArming] = useState(false);
-  const risky = room.status === "playing";
-
-  useEffect(() => {
-    if (!arming) {
-      return;
-    }
-    const timer = setTimeout(() => setArming(false), 3000);
-    return () => clearTimeout(timer);
-  }, [arming]);
-
-  return (
-    <button
-      type="button"
-      className={`btn btn--ghost btn--small${arming ? " btn--warn" : ""}`}
-      onClick={() => {
-        if (!risky || arming) {
-          onLeave();
-          return;
-        }
-        setArming(true);
-      }}
-    >
-      {arming ? "Leave — sure?" : "Leave table"}
-    </button>
-  );
-}
-
-/**
- * Who you are, if anyone. Guests see an invitation to sign in only when the
- * server actually has Discord configured — offering a button that answers 503
- * would be worse than offering nothing.
- */
 
 /**
  * The stake. Only offered when everyone at the table is signed in and there
@@ -210,31 +167,6 @@ function BuyIn({
         </p>
       ) : null}
     </section>
-  );
-}
-
-function Volume() {
-  const [level, setLevel] = useState(() => getVolume());
-  return (
-    <label className="volume">
-      <span className="volume__icon" aria-hidden="true">
-        {level === 0 ? "✕" : "♪"}
-      </span>
-      <input
-        type="range"
-        min={0}
-        max={1}
-        step={0.05}
-        value={level}
-        aria-label="Volume"
-        onChange={(event) => {
-          const next = Number(event.target.value);
-          unlock();
-          setVolume(next);
-          setLevel(next);
-        }}
-      />
-    </label>
   );
 }
 
