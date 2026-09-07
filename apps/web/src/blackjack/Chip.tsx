@@ -14,7 +14,9 @@ import { useId } from "react";
  * still reads at the forty-six pixels these are actually drawn at.
  */
 
-interface Face {
+/** How one denomination is painted. Shared with the stack, so a hundred is
+ *  the same hundred whether it is in your hand or on the felt. */
+export interface Face {
   /** The clay. */
   body: string;
   /** The spots in the rim and the inlay, which are the same colour on a chip. */
@@ -28,7 +30,7 @@ interface Face {
  * not — two-fifty is not a chip anybody mints, so it takes the rose a real
  * table would give it.
  */
-const FACES: Record<number, Face> = {
+export const FACES: Record<number, Face> = {
   100: { body: "#2b3038", trim: "#eceff3", spots: 8 },
   250: { body: "#8e3358", trim: "#f6d7e4", spots: 6 },
   500: { body: "#4b3277", trim: "#e2d6f7", spots: 4 },
@@ -36,7 +38,7 @@ const FACES: Record<number, Face> = {
 };
 
 /** Anything the house has not minted a colour for still gets a chip. */
-const PLAIN: Face = { body: "#3b4250", trim: "#e6ebf2", spots: 6 };
+export const PLAIN: Face = { body: "#3b4250", trim: "#e6ebf2", spots: 6 };
 
 /** A point on a circle, with zero at the top rather than at three o'clock. */
 function around(radius: number, degrees: number): [number, number] {

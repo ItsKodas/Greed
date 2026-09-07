@@ -14,6 +14,7 @@ import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
 import { Chip } from "./Chip.js";
+import { ChipStack } from "./ChipStack.js";
 import { useCardSound } from "./useCardSound.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
@@ -167,7 +168,13 @@ function Felt({
                       : ""
                   }`}
                 >
-                  <Hand cards={hand.cards} />
+                  <div className="bj__felt">
+                    {/* What they have riding on it, as chips. A number says the
+                        amount; a pile says the weight of it, which is what
+                        anybody actually reads across a table. */}
+                    {hand.bet > 0 ? <ChipStack amount={hand.bet} width={40} /> : null}
+                    <Hand cards={hand.cards} />
+                  </div>
                   <footer className={`bj__result${outcomeTone(hand.outcome)}`}>
                     {handLine(seat, hand, state.phase)}
                     {seat.hands.length > 1 && hand.bet > 0 ? (
@@ -386,9 +393,18 @@ function Betting({
           </button>
         ))}
       </div>
-      <p className={`bj__stake${mine > 0 ? " bj__stake--on" : ""}`}>
-        {mine > 0 ? fmt(mine) : `nothing yet — ${fmt(min)} minimum`}
-      </p>
+      {/* The pile you have built, beside the figure. The number is the exact
+          answer; the stack is the one you can read without counting. */}
+      <div className={`bj__stake${mine > 0 ? " bj__stake--on" : ""}`}>
+        {mine > 0 ? (
+          <>
+            <ChipStack amount={mine} width={64} />
+            <span className="bj__stake-total">{fmt(mine)}</span>
+          </>
+        ) : (
+          <span>nothing yet — {fmt(min)} minimum</span>
+        )}
+      </div>
       <button
         type="button"
         className="btn btn--ghost btn--wide"

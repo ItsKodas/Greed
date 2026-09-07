@@ -235,6 +235,10 @@
 
 .bj__stake {
   margin: var(--gr-space-1) 0 var(--gr-space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-1);
   text-align: center;
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
@@ -242,9 +246,27 @@
   color: var(--gr-color-ink-faint);
 }
 
-.bj__stake--on {
+/* Gold, because whatever the chips are painted, this figure is money. */
+.bj__stake-total {
   font-size: var(--gr-text-xl);
   color: var(--gr-color-chip);
+}
+
+.stack {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.5));
+}
+
+/*
+ * What a hand has riding on it, laid beside the cards rather than above them.
+ *
+ * Bottom-aligned on purpose: a stack grows upward from the felt, so lining the
+ * two up by their tops would have a tall wager floating and a short one sunk.
+ */
+.bj__felt {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gr-space-3);
 }
 
 /* ---------------------------------------------------------------- the cards */
