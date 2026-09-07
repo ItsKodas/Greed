@@ -32,6 +32,8 @@ const INK = {
   horseshoe: "#c8722f",
   bell: "#f4d97a",
   dark: "#160e1c",
+  /* The inlay on a chip's rim, which is lighter than the chip and never darker. */
+  inlay: "#f7ecd6",
 } as const;
 
 const DRAWN: Record<Face, { title: string; art: React.ReactNode }> = {
@@ -40,18 +42,22 @@ const DRAWN: Record<Face, { title: string; art: React.ReactNode }> = {
     art: (
       <>
         <circle cx="0" cy="0" r="19" fill={INK.chip} />
-        {/* Six notches round the edge, the way a real chip is moulded. */}
+        {/*
+         * Six edge inlays, lighter than the chip and set *inside* the rim.
+         * Dark spots centred on the edge — where a stroke puts half its width
+         * outside the disc — read as teeth, and the chip reads as a cog.
+         */}
         <circle
           cx="0"
           cy="0"
-          r="19"
+          r="15"
           fill="none"
-          stroke={INK.dark}
-          strokeWidth="5"
-          strokeDasharray="8 11.9"
+          stroke={INK.inlay}
+          strokeWidth="7"
+          strokeDasharray="8 7.7"
         />
-        <circle cx="0" cy="0" r="11" fill="none" stroke={INK.dark} strokeWidth="2" opacity="0.45" />
-        <circle cx="0" cy="0" r="5.5" fill={INK.dark} opacity="0.3" />
+        <circle cx="0" cy="0" r="8" fill="none" stroke={INK.dark} strokeWidth="1.8" opacity="0.5" />
+        <circle cx="0" cy="0" r="4" fill={INK.dark} opacity="0.28" />
       </>
     ),
   },

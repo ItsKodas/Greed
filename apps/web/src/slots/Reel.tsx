@@ -36,6 +36,7 @@ export function Reel({
   column,
   spinning,
   index,
+  resting,
 }: {
   /** What the server said is on this reel, or nothing while it is still out. */
   column: Face[] | undefined;
@@ -43,6 +44,14 @@ export function Reel({
   spinning: boolean;
   /** Which reel this is, left to right. */
   index: number;
+  /**
+   * What to show before anybody has pulled anything.
+   *
+   * Not a result and never presented as one — dimmed, with nothing lit and
+   * nothing said. A cabinet standing idle shows faces; one showing a blur
+   * before you have touched it looks like it is already running.
+   */
+  resting?: Face[];
 }) {
   /*
    * What is on the glass, which is not the same as what the server has said.
@@ -53,10 +62,13 @@ export function Reel({
   const [shown, setShown] = useState<Face[] | undefined>(column);
   const startedAt = useRef(Date.now());
   const wasSpinning = useRef(spinning);
+  /** Whether this reel has ever been asked to turn, which ends the rest state. */
+  const everSpun = useRef(false);
 
   useEffect(() => {
     if (spinning && !wasSpinning.current) {
       // A new pull. Clear the glass and start the clock.
+      everSpun.current = true;
       startedAt.current = Date.now();
       setShown(undefined);
     }
@@ -78,15 +90,24 @@ export function Reel({
     return () => window.clearTimeout(timer);
   }, [column, shown, index]);
 
-  const turning = shown === undefined;
+  /*
+   * At rest only before the first pull. After that an empty reel means one
+   * that is still out, and showing anything but a blur there would be
+   * guessing at the answer.
+   */
+  const resting_ = shown === undefined && !spinning && !everSpun.current ? resting : undefined;
+  const turning = shown === undefined && resting_ === undefined;
+  const faces = shown ?? resting_;
 
   return (
-    <div className={`reel${turning ? " reel--spinning" : ""}`}>
+    <div
+      className={`reel${turning ? " reel--spinning" : ""}${resting_ === undefined ? "" : " reel--resting"}`}
+    >
       <svg
         className="reel__glass"
         viewBox={`0 0 ${FACE_SIZE} ${FACE_SIZE * ROWS.length}`}
         role="img"
-        aria-label={turning ? "Spinning" : (shown ?? []).join(", ")}
+        aria-label={turning ? "Spinning" : (faces ?? []).join(", ")}
       >
         {turning ? (
           /*
@@ -109,7 +130,7 @@ export function Reel({
             ))}
           </g>
         ) : (
-          shown.map((face, row) => (
+          (faces ?? []).map((face, row) => (
             <g key={ROWS[row] ?? row} transform={`translate(0 ${row * FACE_SIZE})`}>
               <ReelFace face={face} />
             </g>

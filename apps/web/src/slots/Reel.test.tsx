@@ -105,4 +105,37 @@ describe("a reel", () => {
     unmount();
     expect(() => act(() => vi.advanceTimersByTime(SPIN_UP_MS + 500))).not.toThrow();
   });
+
+  it("stands still showing faces before anybody has pulled anything", () => {
+    /*
+     * A cabinet at rest shows faces. Showing the spin blur before the player
+     * has touched it makes the machine look like it is already running, and
+     * makes the first real pull indistinguishable from doing nothing.
+     */
+    const { container } = render(
+      <Reel column={undefined} spinning={false} index={0} resting={column} />,
+    );
+    expect(container.querySelector(".reel--resting")).not.toBeNull();
+    expect(container.querySelector(".reel--spinning")).toBeNull();
+    expect(faces(container)).toBe(3);
+  });
+
+  it("never goes back to resting once a pull has been made", () => {
+    // After the first spin an empty reel means one still out, and showing
+    // anything but a blur there would be guessing at the answer.
+    const { container, rerender } = render(
+      <Reel column={undefined} spinning={false} index={0} resting={column} />,
+    );
+    rerender(<Reel column={undefined} spinning index={0} resting={column} />);
+    rerender(<Reel column={undefined} spinning={false} index={0} resting={column} />);
+
+    expect(container.querySelector(".reel--resting")).toBeNull();
+    expect(container.querySelector(".reel--spinning")).not.toBeNull();
+  });
+
+  it("still blurs from the very first pull when it has nothing to rest on", () => {
+    const { container } = render(<Reel column={undefined} spinning index={0} resting={column} />);
+    expect(container.querySelector(".reel--spinning")).not.toBeNull();
+    expect(faces(container)).toBe(0);
+  });
 });

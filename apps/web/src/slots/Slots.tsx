@@ -38,6 +38,22 @@ export const LINE_LIGHT_MS = 420;
 /** The reels, named so each keeps its identity across a spin. */
 const REEL_NAMES = ["one", "two", "three", "four", "five"] as const;
 
+/**
+ * What the cabinet shows before anybody has pulled anything.
+ *
+ * Not a result, and it cannot be mistaken for one: neighbouring reels are
+ * drawn from two disjoint sets of faces, so no run of two can start anywhere
+ * on any payline, let alone a run of three. Dimmed by the stylesheet, with
+ * nothing lit and nothing said.
+ */
+const ATTRACT: Face[][] = [
+  ["chip", "dice", "spade"],
+  ["horseshoe", "bell", "seven"],
+  ["spade", "chip", "dice"],
+  ["seven", "horseshoe", "bell"],
+  ["dice", "spade", "chip"],
+];
+
 /** The stakes on offer, before the bank's own ceiling is applied. */
 const STAKES = [1, 2, 5, 10, 25, 50, 100] as const;
 
@@ -51,6 +67,18 @@ type SpinSocket = Socket<Record<string, never>, { "slots:spin": (payload: { stak
 
 export default function Slots() {
   const account = useAccount();
+  /*
+   * Which room you are standing in, on the document rather than this element:
+   * the page's background and its haze live on body, so a game repainting only
+   * its own subtree sits in the building's blue with a violet rectangle in it.
+   */
+  useEffect(() => {
+    document.documentElement.dataset["game"] = "slots";
+    return () => {
+      delete document.documentElement.dataset["game"];
+    };
+  }, []);
+
   const [sign, setSign] = useState<MachineSign | null>(null);
   const [grid, setGrid] = useState<Face[][] | undefined>(undefined);
   const [lines, setLines] = useState<SpinLine[]>([]);
@@ -197,6 +225,7 @@ export default function Slots() {
               column={column}
               spinning={spinning}
               index={reel}
+              resting={ATTRACT[reel]}
             />
           ))}
           <PaylineOverlay lines={lit ? lines : []} />
@@ -232,7 +261,9 @@ function BankSign({ bank, jackpot }: { bank: number; jackpot: number }) {
       <span className="slots__bank-label">Jackpot</span>
       <strong className="slots__bank-figure">{credits(jackpot)}</strong>
       <span className="slots__bank-note">
-        of {credits(bank)} in the bank — every credit of it staked by somebody
+        {bank === 0
+          ? "The bank is empty. It fills as people play, and pays back out of what they staked."
+          : `of ${credits(bank)} in the bank — every credit of it staked by somebody`}
       </span>
     </div>
   );

@@ -192,13 +192,23 @@ export function ReelsArt() {
         <g key={x}>
           <rect x={x} y="18" width="48" height="124" rx="6" fill="#0f0a14" />
           <g clipPath={`url(#reel-window-${index})`}>
-            {/* Numbered so the stylesheet can roll each one a beat apart. */}
-            <g className={`art__piece art__piece--${index + 1}`} transform={`translate(${x + 24} 0)`}>
-              <ChipFace y={40} />
-              <SevenFace y={80} />
-              <BellFace y={120} />
-              <ChipFace y={160} />
-              <SevenFace y={200} />
+            {/*
+             * Two groups, not one. The stylesheet rolls the inner one with a
+             * CSS transform, and a CSS transform *replaces* an element's
+             * transform attribute rather than composing with it — so putting
+             * this reel across on the same group would have the roll wipe out
+             * the placement and stack all three reels at x=0, outside their
+             * own windows.
+             */}
+            <g transform={`translate(${x + 24} 0)`}>
+              {/* Numbered so the stylesheet can roll each one a beat apart. */}
+              <g className={`art__piece art__piece--${index + 1}`}>
+                <ChipFace y={40} />
+                <SevenFace y={80} />
+                <BellFace y={120} />
+                <ChipFace y={160} />
+                <SevenFace y={200} />
+              </g>
             </g>
           </g>
           <rect
