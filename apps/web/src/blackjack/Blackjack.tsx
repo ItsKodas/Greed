@@ -2,7 +2,7 @@ import type { TableView } from "@backroom/game-blackjack";
 import { LAST_CALL_MS, value, WINDOWS } from "@backroom/game-blackjack";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { Chip } from "../chips/Chip.js";
 import { ChipStack } from "../chips/ChipStack.js";
 import { Avatar } from "../game/Avatar.js";
@@ -14,11 +14,13 @@ import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
+import { useTablePeek } from "../table/useTablePeek.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
 import {
   ClockIcon,
   DealIcon,
+  DiscordIcon,
   DoubleIcon,
   HitIcon,
   SplitIcon,
@@ -26,6 +28,8 @@ import {
   UndoIcon,
 } from "./Icons.js";
 import { useCardSound } from "./useCardSound.js";
+import type { Move } from "./useIntent.js";
+import { useBumped, useIntent } from "./useIntent.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
 
@@ -118,17 +122,43 @@ function Felt({
   seatId: string | null;
 }) {
   const me = state.seats.find((seat) => seat.id === seatId) ?? null;
+  /*
+   * What this player has asked for, before the table has answered.
+   *
+   * A move is a round trip, and a round trip is long enough for a button to
+   * feel broken. So a press changes the felt at once and the table's answer
+   * replaces it — never inventing anything, only showing what was asked for.
+   */
+  const intent = useIntent(state, seatId, table.error);
   // The hand you are actually being asked about, which after a split is one of
   // two — every control below acts on this one and not on the seat.
   const myHand = me?.hands[me.active];
   const myTurn = state.turnSeatId === seatId && seatId !== null;
+  const sent = intent.move !== null;
+  /**
+   * Sends a move, and shows it as sent.
+   *
+   * Both in one place so the two can never disagree — a move that reached the
+   * table without the felt knowing would leave the buttons live for a second
+   * hand on the same cards.
+   */
+  const move = (kind: Move) => {
+    intent.send(kind);
+    table.act({ type: kind });
+  };
   const isHost = state.hostId === seatId && seatId !== null;
 
   return (
     <div className="bj">
       <section className="bj__dealer">
         <p className="bj__whose">Dealer</p>
-        <Hand cards={state.dealer.cards} hidden={state.dealer.hidden} />
+        {/* Everything past the up card arrives when the dealer turns over,
+            so it is turned rather than dealt. */}
+        <Hand
+          cards={state.dealer.cards}
+          hidden={state.dealer.hidden}
+          turnedFrom={state.dealer.hidden ? undefined : 1}
+        />
         <span className="bj__total">
           {state.dealer.cards.length === 0
             ? "—"
@@ -144,7 +174,11 @@ function Felt({
             key={seat.id}
             className={`bj__seat${state.turnSeatId === seat.id ? " bj__seat--turn" : ""}${
               seat.waiting ? " bj__seat--waiting" : ""
-            }${seat.connected ? "" : " bj__seat--gone"}`}
+            }${seat.connected ? "" : " bj__seat--gone"}${
+              /* Only on the way in. A loss gets nothing, which is quieter to
+                 sit through and truer to how a table treats one. */
+              state.phase === "settled" && paidOut(seat) > seat.bet ? " bj__seat--paid" : ""
+            }`}
           >
             <header className="bj__who">
               <Avatar
@@ -186,21 +220,28 @@ function Felt({
                         amount; a pile says the weight of it, which is what
                         anybody actually reads across a table. */}
                     {hand.bet > 0 ? <ChipStack amount={hand.bet} width={40} /> : null}
-                    <Hand cards={hand.cards} />
+                    {/* A card asked for shows as one on its way, face down,
+                        until the table says what it is. */}
+                    <Hand
+                      cards={hand.cards}
+                      arriving={
+                        seat.id === seatId &&
+                        seat.active === index &&
+                        (intent.move === "hit" || intent.move === "double")
+                      }
+                    />
                     {/* Beside the cards it counts, the way the dealer's sits
                         beside theirs — and large, because at a card table the
                         number is what you look at and everything else on the
                         row is what you look at afterwards. */}
-                    {hand.cards.length > 0 ? (
-                      <p className={`bj__count${countTone(hand)}`}>
-                        <span className="bj__count-total">{hand.total}</span>
-                        {hand.soft && !hand.bust ? (
-                          <span className="bj__count-soft">soft</span>
-                        ) : null}
-                      </p>
-                    ) : null}
+                    <Count hand={hand} />
                   </div>
-                  <footer className={`bj__result${outcomeTone(hand.outcome)}`}>
+                  {/* Keyed on the outcome so the line arrives when the hand
+                      does, rather than being there all along. */}
+                  <footer
+                    key={hand.outcome ?? "live"}
+                    className={`bj__result${outcomeTone(hand.outcome)}`}
+                  >
                     {handLine(seat, hand, state.phase)}
                     {seat.hands.length > 1 && hand.bet > 0 ? (
                       <span className="bj__stake-small">{fmt(hand.bet)}</span>
@@ -229,7 +270,7 @@ function Felt({
         ) : state.phase === "betting" ? (
           <Betting
             table={table}
-            mine={me?.bet ?? 0}
+            mine={intent.bet ?? me?.bet ?? 0}
             min={state.minBet}
             max={state.maxBet}
             isHost={isHost}
@@ -237,6 +278,7 @@ function Felt({
             listed={table.listed}
             deadline={state.deadline}
             windowMs={state.bettingMs}
+            onStake={intent.place}
           />
         ) : state.phase === "settled" ? (
           <>
@@ -252,12 +294,15 @@ function Felt({
             {/* Hit and stand are the whole game and are always both there;
                 double and split are answers to a particular hand, so they sit
                 below as a pair and go quiet when the hand is not one. */}
-            <div className="bj__moves">
+            {/* Once a move has gone, the whole set goes quiet rather than
+                each button separately: a second move on the same hand is not
+                a thing to allow while the first is still in the air. */}
+            <div className={`bj__moves${sent ? " bj__moves--sent" : ""}`}>
               <button
                 type="button"
                 className="btn btn--move"
-                disabled={!myTurn}
-                onClick={() => table.act({ type: "hit" })}
+                disabled={!myTurn || sent}
+                onClick={() => move("hit")}
               >
                 <HitIcon />
                 <span>Hit</span>
@@ -265,21 +310,21 @@ function Felt({
               <button
                 type="button"
                 className="btn btn--ghost btn--move"
-                disabled={!myTurn}
-                onClick={() => table.act({ type: "stand" })}
+                disabled={!myTurn || sent}
+                onClick={() => move("stand")}
               >
                 <StandIcon />
                 <span>Stand</span>
               </button>
             </div>
-            <div className="bj__moves">
+            <div className={`bj__moves${sent ? " bj__moves--sent" : ""}`}>
               <button
                 type="button"
                 className="btn btn--ghost btn--move"
                 // First two cards only: that is the rule, and also the only
                 // point at which doubling is a decision.
-                disabled={!myTurn || (myHand?.cards.length ?? 0) !== 2}
-                onClick={() => table.act({ type: "double" })}
+                disabled={!myTurn || sent || (myHand?.cards.length ?? 0) !== 2}
+                onClick={() => move("double")}
               >
                 <DoubleIcon />
                 <span>Double</span>
@@ -288,8 +333,8 @@ function Felt({
               <button
                 type="button"
                 className="btn btn--ghost btn--move"
-                disabled={!myTurn || myHand === undefined || !splittable(myHand)}
-                onClick={() => table.act({ type: "split" })}
+                disabled={!myTurn || sent || myHand === undefined || !splittable(myHand)}
+                onClick={() => move("split")}
               >
                 <SplitIcon />
                 <span>Split</span>
@@ -350,6 +395,11 @@ function handLine(
  * Every other total is a number you are still deciding about, and colouring
  * those would be the table telling you what it thinks of your hand.
  */
+/** Everything a seat got back, across however many hands it played. */
+function paidOut(seat: TableView["seats"][number]): number {
+  return seat.hands.reduce((total, hand) => total + hand.returned, 0);
+}
+
 function countTone(hand: TableView["seats"][number]["hands"][number]): string {
   if (hand.bust) {
     return " bj__count--bad";
@@ -398,6 +448,30 @@ function settledLine(me: TableView["seats"][number] | null): string {
 }
 
 /**
+ * What a hand is worth, beside the cards it is worth it on.
+ *
+ * Its own component only because it has to notice when it changes: a total
+ * that ticks when a card lands is the difference between a number that is
+ * true and a number you watched become true.
+ */
+function Count({
+  hand,
+}: {
+  hand: TableView["seats"][number]["hands"][number];
+}) {
+  const ticked = useBumped(hand.total);
+  if (hand.cards.length === 0) {
+    return null;
+  }
+  return (
+    <p className={`bj__count${countTone(hand)}${ticked ? " bj__count--ticked" : ""}`}>
+      <span className="bj__count-total">{hand.total}</span>
+      {hand.soft && !hand.bust ? <span className="bj__count-soft">soft</span> : null}
+    </p>
+  );
+}
+
+/**
  * What the table is waiting on, in seconds.
  *
  * A table that runs itself has to say so, or it reads as a table that has
@@ -437,6 +511,7 @@ function Betting({
   listed,
   deadline,
   windowMs,
+  onStake,
 }: {
   table: Table;
   mine: number;
@@ -447,13 +522,19 @@ function Betting({
   listed: boolean;
   deadline: number | null;
   windowMs: number;
+  /** Tells the felt what was asked for, so it can show it before the reply. */
+  onStake: (amount: number) => void;
 }) {
   const stake = (amount: number) => {
-    // Sounded on the press rather than on the state coming back: the whole
-    // point of a chip sound is that it lands under your finger.
+    // Sounded and shown on the press rather than on the state coming back: the
+    // whole point of a chip is that it lands under your finger. The number is
+    // this player's own, so showing it early is not a guess.
     play("bet");
+    onStake(amount);
     table.act({ type: "bet", amount });
   };
+  // The pile jumps when it grows, so a chip you added is a chip you saw land.
+  const dropped = useBumped(mine, 320);
 
   /*
    * The clock is read here rather than handed to Countdown, because the same
@@ -492,7 +573,11 @@ function Betting({
       </div>
       {/* The pile you have built, beside the figure. The number is the exact
           answer; the stack is the one you can read without counting. */}
-      <div className={`bj__stake${mine > 0 ? " bj__stake--on" : ""}`}>
+      <div
+        className={`bj__stake${mine > 0 ? " bj__stake--on" : ""}${
+          dropped && mine > 0 ? " bj__stake--dropped" : ""
+        }`}
+      >
         {mine > 0 ? (
           <>
             <ChipStack amount={mine} width={64} />
@@ -595,6 +680,44 @@ function Betting({
   );
 }
 
+/**
+ * A table you have to be somebody to sit at.
+ *
+ * Reached by following a link to a table that plays for chips without an
+ * account. The link is not broken and this is not a refusal — it is the one
+ * step between them and the seat, with the seat still named so they can see
+ * they are in the right place.
+ */
+function SignInToJoin({ code, onWatch }: { code: string; onWatch: () => void }) {
+  // Back to this table once Discord is done, rather than the front door: the
+  // whole point of following a link is arriving where it pointed.
+  const back = `/auth/discord?to=${encodeURIComponent(`/blackjack/${code}`)}`;
+
+  return (
+    <div className="join join--gate">
+      <div className="panel gate">
+        <p className="panel__label">Table {code}</p>
+        <h2 className="gate__title">This one plays for chips</h2>
+        <p className="gate__note">
+          Chips come from an account, so there is one step before you sit down. Sign in and you
+          will land back at this table.
+        </p>
+        <a className="btn btn--wide btn--icon gate__in" href={back}>
+          <DiscordIcon />
+          <span>Sign in with Discord</span>
+        </a>
+        <button type="button" className="btn btn--ghost btn--wide" onClick={onWatch}>
+          Just watch this one
+        </button>
+        <p className="panel__note">
+          Or <Link to="/blackjack">open a table of your own</Link> — a for-fun one deals play
+          money and anybody can sit down.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Sit({
   table,
   invited,
@@ -607,6 +730,14 @@ function Sit({
   const [code, setCode] = useState(invited);
   const ready = code.length === CODE_LENGTH && !table.busy;
   const guest = account.profile === null;
+  /*
+   * What the link they followed actually leads to.
+   *
+   * Asked before they touch anything, because a table playing for chips needs
+   * an account and the useful thing to say then is "sign in", not a form for
+   * opening a table of your own.
+   */
+  const peek = useTablePeek(invited);
   const [typed, setTyped] = useState("");
   /*
    * A guest has no chips to stake, so their table is the play-money one. A
@@ -621,6 +752,16 @@ function Sit({
    */
   const name = account.profile?.name ?? typed.trim();
   const named = name.length > 0;
+
+  /*
+   * Below every hook on purpose. This screen has two shapes and the one it
+   * takes is decided here, which means the decision has to come after the
+   * state rather than in the middle of it.
+   */
+  const waiting = peek.table;
+  if (waiting !== null && !waiting.forFun && guest && !account.loading) {
+    return <SignInToJoin code={waiting.code} onWatch={() => table.watch(waiting.code)} />;
+  }
 
   return (
     <div className="join">

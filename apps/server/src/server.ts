@@ -416,7 +416,14 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       response.status(404).json({ error: "No table with that code." });
       return;
     }
-    response.json({ code, game: seated.game.listing.id });
+    /*
+     * Whether it plays for chips, so a link can ask somebody to sign in rather
+     * than letting them try, be refused, and be left looking at a form for
+     * opening a table of their own. Nothing else about the table: what is
+     * being played is not a thing to hand out to people with no seat at it.
+     */
+    const forFun = "forFun" in seated.table && seated.table.forFun === true;
+    response.json({ code, game: seated.game.listing.id, forFun });
   });
 
   // ------------------------------------------------- what a link looks like

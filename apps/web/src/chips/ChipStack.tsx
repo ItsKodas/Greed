@@ -84,8 +84,15 @@ export function ChipStack({ amount, width = 40 }: { amount: number; width?: numb
       {shown.map((value, index) => (
         // Position is the identity: a pile is built bottom upwards and two
         // chips of the same value are genuinely the same thing.
-        // biome-ignore lint/suspicious/noArrayIndexKey: a pile is append-only
-        <g key={index}>
+        <g
+          // biome-ignore lint/suspicious/noArrayIndexKey: a pile is append-only
+          key={index}
+          className="stack__chip"
+          /* Staggered, so a pile lands as a pile rather than as one object.
+             Capped, because a chip added to a stack of nine should land now
+             and not after half a second of waiting its turn. */
+          style={{ animationDelay: `${Math.min(index, 3) * 45}ms` }}
+        >
           <ChipFace
             cx={r + 1}
             cy={bottom - index * step}

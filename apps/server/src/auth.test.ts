@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avatarUrl, readAuthConfig } from "./auth.js";
+import { avatarUrl, readAuthConfig, safeReturn } from "./auth.js";
 
 describe("turning a Discord avatar into a picture", () => {
   it("builds a CDN url from the hash", () => {
@@ -37,5 +37,44 @@ describe("reading the auth configuration", () => {
     } as NodeJS.ProcessEnv);
     expect(config?.clientId).toBe("x");
     expect(config?.redirectUri).toContain("/auth/discord/callback");
+  });
+});
+
+describe("where somebody lands after signing in", () => {
+  it("keeps a path on this site", () => {
+    expect(safeReturn("/blackjack/XKQ37")).toBe("/blackjack/XKQ37");
+    expect(safeReturn("/")).toBe("/");
+    expect(safeReturn("/greed")).toBe("/greed");
+    expect(safeReturn("/6PMKG")).toBe("/6PMKG");
+  });
+
+  it("refuses anything that could leave this site", () => {
+    /*
+     * The open-redirect boundary. Every one of these is a real technique for
+     * turning a sign-in link into a link to somewhere else, and a browser
+     * reads several of them as absolute however innocent they look.
+     */
+    for (const nasty of [
+      "https://evil.example/steal",
+      "//evil.example",
+      "/\\evil.example",
+      "http://evil.example",
+      "javascript:alert(1)",
+      "/path?next=https://evil.example",
+      "/path#https://evil.example",
+      "/pa th",
+      "/%2f%2fevil.example",
+      "",
+      "blackjack/XKQ37",
+    ]) {
+      expect(safeReturn(nasty), nasty).toBeNull();
+    }
+  });
+
+  it("refuses anything that is not a string, or is absurdly long", () => {
+    expect(safeReturn(undefined)).toBeNull();
+    expect(safeReturn(null)).toBeNull();
+    expect(safeReturn(["/a", "/b"])).toBeNull();
+    expect(safeReturn(`/${"a".repeat(200)}`)).toBeNull();
   });
 });

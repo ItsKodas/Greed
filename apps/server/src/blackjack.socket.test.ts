@@ -176,9 +176,9 @@ function stateWhere(socket: Client, ok: (state: TableView) => boolean, ms = 2500
   });
 }
 
-function open_(socket: Client, name: string): Promise<Ack> {
+function open_(socket: Client, name: string, forFun = false): Promise<Ack> {
   return new Promise((resolve) =>
-    socket.emit("lobby:create", { name, game: "blackjack" }, resolve),
+    socket.emit("lobby:create", { name, game: "blackjack", forFun }, resolve),
   );
 }
 
@@ -530,5 +530,47 @@ describe("what a stake does when the hand is over", () => {
 
     expect(next.seats[0]?.bet).toBe(0);
     expect(next.seats[0]?.hands[0]?.cards).toHaveLength(0);
+  });
+});
+
+describe("what a link can find out before anybody sits down", () => {
+  /*
+   * Enough to ask somebody to sign in, and no more. A table playing for chips
+   * needs an account, and being told that when the link opens is the
+   * difference between a link that works and one that drops a stranger on a
+   * form for opening a table of their own.
+   */
+  async function peek(port: number, code: string) {
+    const response = await fetch(`http://localhost:${port}/api/table/${code}`);
+    return (await response.json()) as { code: string; game: string; forFun: boolean };
+  }
+
+  it("says a table plays for chips", async () => {
+    const { port } = await startRoom(["Ada"]);
+    const host = await client(port);
+    await open_(host, "Ada");
+    const view = await stateWhere(host, (state) => state.seats.length === 1);
+
+    expect(await peek(port, view.code)).toEqual({
+      code: view.code,
+      game: "blackjack",
+      forFun: false,
+    });
+  });
+
+  it("says a table plays for nothing", async () => {
+    const { port } = await startRoom(["Ada"]);
+    const host = await client(port);
+    await open_(host, "Ada", true);
+    const view = await stateWhere(host, (state) => state.seats.length === 1);
+
+    expect((await peek(port, view.code)).forFun).toBe(true);
+  });
+
+  it("tells nobody anything about a table that is not there", async () => {
+    const { port } = await startRoom(["Ada"]);
+    const response = await fetch(`http://localhost:${port}/api/table/ZZZZZ`);
+
+    expect(response.status).toBe(404);
   });
 });

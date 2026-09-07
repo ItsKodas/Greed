@@ -13,3 +13,4 @@ assets/audio/build/
 
 # copied from assets/audio/raw by scripts/sync-audio.mjs
 apps/web/public/audio/
+__pycache__/

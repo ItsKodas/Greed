@@ -1,4 +1,5 @@
 import type { Card as CardData, Rank, Suit } from "@backroom/game-blackjack";
+import type { PointerEvent } from "react";
 import { useId } from "react";
 import {
   CARD_H,
@@ -27,6 +28,32 @@ import {
  * Every number here lives in {@link deck.ts}, in the 100×140 box a real card
  * is shaped like. Nothing in this file nudges anything.
  */
+
+/**
+ * Angles a card toward the pointer.
+ *
+ * Written straight onto the element rather than held in state on purpose: this
+ * fires on every pointer move, and a re-render per move would be a re-render
+ * of the whole felt sixty times a second to move one card a few degrees.
+ */
+const tilt = {
+  onPointerMove(event: PointerEvent<SVGSVGElement>) {
+    const box = event.currentTarget.getBoundingClientRect();
+    // Where the pointer is on the card, from its middle: -0.5 to 0.5 each way.
+    const x = (event.clientX - box.left) / box.width - 0.5;
+    const y = (event.clientY - box.top) / box.height - 0.5;
+    // Toward the pointer, so the near edge dips. Reading the other way round
+    // makes a card that leans away from your finger, which feels wrong before
+    // anybody works out why.
+    event.currentTarget.style.setProperty("--tilt-x", `${(-y * 20).toFixed(1)}deg`);
+    event.currentTarget.style.setProperty("--tilt-y", `${(x * 24).toFixed(1)}deg`);
+  },
+  onPointerLeave(event: PointerEvent<SVGSVGElement>) {
+    // Back to flat, and let the transition carry it there.
+    event.currentTarget.style.removeProperty("--tilt-x");
+    event.currentTarget.style.removeProperty("--tilt-y");
+  },
+};
 
 /** The corner index: rank over suit, drawn at one corner and again at the other. */
 function Index({ rank, suit }: { rank: Rank; suit: Suit }) {
@@ -61,7 +88,23 @@ function Index({ rank, suit }: { rank: Rank; suit: Suit }) {
  * Red and black rather than four colours: a deck is two colours, and somebody
  * reading a hand at a glance is reading rank first and suit second.
  */
-export function Card({ card }: { card: CardData }) {
+export function Card({
+  card,
+  deal = 0,
+  turned = false,
+}: {
+  card: CardData;
+  /**
+   * Which card of the deal this is, for the stagger.
+   *
+   * Only the opening two are staggered. A card taken later arrives on its own
+   * and waiting a beat before showing it would read as lag, which is the exact
+   * thing the rest of this is here to avoid.
+   */
+  deal?: number;
+  /** Turned over rather than dealt in — the hole card, and only that. */
+  turned?: boolean;
+}) {
   const red = isRed(card.suit);
   const pips = pipsFor(card.rank);
   const court = isCourt(card.rank);
@@ -69,10 +112,15 @@ export function Card({ card }: { card: CardData }) {
 
   return (
     <svg
-      className={`bj-card${red ? " bj-card--red" : ""}`}
+      className={`bj-card${red ? " bj-card--red" : ""} ${turned ? "bj-card--turning" : "bj-card--dealing"}`}
       viewBox={`0 0 ${CARD_W} ${CARD_H}`}
       role="img"
       aria-label={`${card.rank} of ${card.suit}`}
+      {...tilt}
+      // A card is only ever dealt once, so this runs on mount and never again
+      // — which is precisely the behaviour wanted, and why the stagger can be
+      // a plain delay rather than something choreographed.
+      style={deal > 0 ? { animationDelay: `${deal * 90}ms` } : undefined}
     >
       <rect
         className="bj-card__face"
@@ -139,17 +187,18 @@ export function Card({ card }: { card: CardData }) {
  * The weave takes its colours from the page rather than from here, so a game
  * with its own theme deals its own deck without a second drawing of one.
  */
-export function FaceDown() {
+export function FaceDown({ arriving = false }: { arriving?: boolean }) {
   // A pattern needs an id unique to the document, and a felt can hold several
   // face-down cards at once.
   const weave = useId();
 
   return (
     <svg
-      className="bj-card bj-card--down"
+      className={`bj-card bj-card--down${arriving ? " bj-card--arriving" : " bj-card--dealing"}`}
       viewBox={`0 0 ${CARD_W} ${CARD_H}`}
       role="img"
       aria-label="face down"
+      {...tilt}
     >
       <defs>
         {/* Eight units, which is a compromise the small size wins: finer and
@@ -189,7 +238,25 @@ export function FaceDown() {
   );
 }
 
-export function Hand({ cards, hidden }: { cards: readonly CardData[]; hidden?: boolean }) {
+export function Hand({
+  cards,
+  hidden,
+  arriving = false,
+  turnedFrom,
+}: {
+  cards: readonly CardData[];
+  hidden?: boolean;
+  /**
+   * A card this player has asked for and the table has not sent yet.
+   *
+   * Shown face down, because that is the honest version: a card is on its way
+   * and nobody knows what it is. It is the only thing on the felt that is not
+   * the table's word, and it is replaced the moment the table speaks.
+   */
+  arriving?: boolean;
+  /** From this card on, the hand is being turned over rather than dealt. */
+  turnedFrom?: number;
+}) {
   /*
    * Four cards is where a hand stops fitting beside a seat.
    *
@@ -210,10 +277,16 @@ export function Hand({ cards, hidden }: { cards: readonly CardData[]; hidden?: b
          * enough that rank and suit are not unique — so keying by what the
          * card is would collide where keying by where it sits cannot.
          */
-        // biome-ignore lint/suspicious/noArrayIndexKey: a hand is append-only
-        <Card key={index} card={card} />
+        <Card
+          // biome-ignore lint/suspicious/noArrayIndexKey: a hand is append-only
+          key={index}
+          card={card}
+          deal={index}
+          turned={turnedFrom !== undefined && index >= turnedFrom}
+        />
       ))}
       {hidden === true ? <FaceDown /> : null}
+      {arriving ? <FaceDown arriving /> : null}
     </span>
   );
 }

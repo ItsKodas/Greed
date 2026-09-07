@@ -107,3 +107,18 @@ export function ClockIcon() {
     </Glyph>
   );
 }
+
+/**
+ * Discord's mark, filled rather than stroked.
+ *
+ * The one icon here that is somebody else's: it names a service, so it has to
+ * be recognisable rather than in the house style, and drawing it in outline
+ * would make it neither.
+ */
+export function DiscordIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+      <path d="M19.3 5.6A16.3 16.3 0 0 0 15.2 4.4l-.2.4a12.4 12.4 0 0 1 3.6 1.8 14.9 14.9 0 0 0-12.8 0 12.4 12.4 0 0 1 3.6-1.8l-.2-.4A16.3 16.3 0 0 0 5 5.6C2.4 9.4 1.7 13.2 2 17a16.5 16.5 0 0 0 5 2.5l.9-1.4a10.8 10.8 0 0 1-1.7-.8l.4-.3a11.8 11.8 0 0 0 10.1 0l.4.3a10.8 10.8 0 0 1-1.7.8l.9 1.4a16.5 16.5 0 0 0 5-2.5c.4-4.4-.7-8.2-2-11.4ZM9 14.6c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Zm6.1 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2 1.8.9 1.8 2-.8 2-1.8 2Z" />
+    </svg>
+  );
+}

@@ -201,8 +201,8 @@
   line-height: 0;
   cursor: pointer;
   transition:
-    transform 0.1s ease,
-    filter 0.1s ease;
+    transform 120ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    filter 120ms ease;
 }
 
 .bj__chip .chip {
@@ -212,13 +212,14 @@
   filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.5));
 }
 
-/* Picked up. */
+/* Picked up between finger and thumb, not merely nudged. */
 .bj__chip:hover:not(:disabled) {
-  transform: translateY(-3px);
+  transform: translateY(-5px) rotate(-4deg) scale(1.06);
 }
 
+/* And put down under the finger, rather than a round trip later. */
 .bj__chip:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: translateY(2px) scale(0.97);
 }
 
 .bj__chip:focus-visible {
@@ -255,6 +256,37 @@
 .stack {
   display: block;
   filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.5));
+}
+
+/*
+ * A chip put down.
+ *
+ * Dropped from a little above and settling, because that is what a chip does
+ * when somebody pushes one onto a felt. Each chip in a pile lands on its own,
+ * staggered, so a stake of four reads as four chips rather than as one object
+ * appearing all at once.
+ */
+@keyframes chip-land {
+  0% {
+    opacity: 0;
+    transform: translateY(-15px) scale(1.09);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(2px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.stack__chip {
+  /* An SVG group scales about the document's origin unless told otherwise,
+     which throws the chip across the felt instead of settling it. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: chip-land 280ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
 }
 
 /*
@@ -487,4 +519,267 @@
 /* Gold, because a blackjack is not a good score — it is a payout. */
 .bj__count--chip .bj__count-total {
   color: var(--gr-color-chip);
+}
+
+/* ============================================================ the motion */
+
+/*
+ * Everything that happens at a card table happens to something, and the point
+ * of animating it is to say which thing. A card comes from the shoe. A stake
+ * lands on the felt. A total changes because a card arrived. None of these are
+ * decoration: each one answers "what just changed?" without a word.
+ */
+
+/* Out of the shoe — up and to the right of the felt — turning as it comes. */
+@keyframes bj-deal {
+  0% {
+    opacity: 0;
+    transform: translate(90px, -120px) rotate(16deg) scale(0.86);
+  }
+  70% {
+    opacity: 1;
+    transform: translate(0, 3px) rotate(-2.5deg) scale(1.02);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+}
+
+/* The hole card, turned over. Squashed through the middle rather than rotated
+   in three dimensions: the card is a flat drawing either way, and a real flip
+   would need both faces to exist at once for one frame nobody sees. */
+@keyframes bj-turn {
+  0% {
+    transform: scaleX(0.06) rotate(-3deg);
+    filter: brightness(1.5);
+  }
+  55% {
+    transform: scaleX(1.06) rotate(1deg);
+    filter: brightness(1.12);
+  }
+  100% {
+    transform: scaleX(1) rotate(0deg);
+    filter: brightness(1);
+  }
+}
+
+/* A card asked for and not yet sent. It breathes rather than settles, because
+   it has not landed — the moment it does, a real card replaces it. */
+@keyframes bj-await {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.78;
+    transform: translateY(-3px);
+  }
+}
+
+.bj-card--dealing {
+  animation: bj-deal 380ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+}
+
+.bj-card--turning {
+  animation: bj-turn 320ms cubic-bezier(0.3, 0.8, 0.3, 1) backwards;
+}
+
+.bj-card--arriving {
+  animation: bj-await 900ms ease-in-out infinite;
+}
+
+/* ---- the stake */
+
+/* Dropped onto the felt from the hand that placed it. */
+@keyframes bj-drop {
+  0% {
+    transform: translateY(-16px) scale(1.1);
+  }
+  60% {
+    transform: translateY(2px) scale(0.98);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.bj__stake--dropped {
+  animation: bj-drop 300ms cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+/* ---- the count */
+
+/* A total that has just changed, because a card arrived. */
+@keyframes bj-tick {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.22);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Past twenty-one. Sharper than a tick and in the other direction, so it does
+   not read as one more card going well. */
+@keyframes bj-bust {
+  0%,
+  100% {
+    transform: translateX(0) scale(1);
+  }
+  15% {
+    transform: translateX(-5px) scale(1.06);
+  }
+  38% {
+    transform: translateX(5px) scale(1.06);
+  }
+  60% {
+    transform: translateX(-3px) scale(1.02);
+  }
+  80% {
+    transform: translateX(3px) scale(1.02);
+  }
+}
+
+.bj__count--ticked .bj__count-total {
+  animation: bj-tick 320ms cubic-bezier(0.3, 1.4, 0.5, 1);
+}
+
+.bj__count--bad .bj__count-total {
+  animation: bj-bust 420ms ease-in-out;
+}
+
+/* ---- the seat */
+
+/* Whose turn it is. Glow means it is happening now, and a glow that moves
+   means it is happening now and waiting on you. */
+@keyframes bj-waiting {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(46 123 255 / 0);
+  }
+  50% {
+    box-shadow: 0 0 18px 2px rgb(46 123 255 / 0.32);
+  }
+}
+
+.bj__seat--turn {
+  animation: bj-waiting 2.1s ease-in-out infinite;
+}
+
+/* Paid. Gold, and only on the way in — a loss gets nothing, which is both
+   quieter to sit through and truer to how a table treats one. */
+@keyframes bj-paid {
+  0% {
+    box-shadow: 0 0 0 0 rgb(224 176 72 / 0);
+    border-color: var(--gr-color-chip);
+  }
+  35% {
+    box-shadow: 0 0 26px 4px rgb(224 176 72 / 0.42);
+    border-color: var(--gr-color-chip-hi);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(224 176 72 / 0);
+  }
+}
+
+.bj__seat--paid {
+  animation: bj-paid 900ms ease-out;
+}
+
+/* What the hand came to, arriving under it rather than appearing. */
+@keyframes bj-said {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bj__result {
+  animation: bj-said 260ms ease-out;
+}
+
+/* ---- the controls */
+
+/* A press should land under the finger, not a round trip later. */
+.btn--move:active:not(:disabled) {
+  transform: translateY(2px) scale(0.97);
+}
+
+/* Sent, and waiting on the table. Dimmed rather than disabled-looking: the
+   move is going to happen, it just has not been confirmed. */
+.bj__moves--sent .btn--move {
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bj-card--dealing,
+  .bj-card--turning,
+  .bj-card--arriving,
+  .bj__stake--dropped,
+  .bj__count--ticked .bj__count-total,
+  .bj__count--bad .bj__count-total,
+  .bj__seat--turn,
+  .bj__seat--paid,
+  .bj__result {
+    animation: none;
+  }
+  .bj-card--arriving {
+    opacity: 0.6;
+  }
+}
+
+/* ---- picking a card up */
+
+/*
+ * A card leans toward the pointer and lifts off the felt.
+ *
+ * Two things at once and both wanted: the lift makes a card in an overlapped
+ * hand readable without moving anything else, and the lean is what stops it
+ * being a flat picture that got bigger. The angles come from the pointer, on
+ * the element, in Cards.tsx — this only says what to do with them.
+ */
+.bj-card {
+  --tilt-x: 0deg;
+  --tilt-y: 0deg;
+  position: relative;
+  transition:
+    transform 90ms ease-out,
+    filter 150ms ease-out;
+}
+
+.bj-card:hover {
+  /* Above its neighbours, which in an overlapped hand is the whole point. */
+  z-index: 6;
+  /*
+   * Turned rather than thrown forward. There is no translateZ here on purpose:
+   * pushing the card toward the viewer reads as it leaving the felt, and what
+   * is wanted is a card being tilted where it lies. The scale is just enough
+   * to lift it clear of the cards it overlaps.
+   */
+  transform: perspective(620px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y)) scale(1.05);
+  filter: drop-shadow(0 10px 16px rgb(0 0 0 / 0.6));
+}
+
+/* ---- the tray */
+
+@media (prefers-reduced-motion: reduce) {
+  .stack__chip {
+    animation: none;
+  }
+  .bj-card,
+  .bj-card:hover,
+  .bj__chip,
+  .bj__chip:hover:not(:disabled) {
+    transition: none;
+    transform: none;
+  }
 }

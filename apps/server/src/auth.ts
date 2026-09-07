@@ -22,6 +22,8 @@ declare module "express-session" {
   interface SessionData {
     userId?: string;
     oauthState?: string;
+    /** Where to put somebody down once they are signed in. */
+    returnTo?: string;
     oauthVerifier?: string;
   }
 }
@@ -105,6 +107,17 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
   app.get("/auth/discord", (request, response) => {
     const state = generateState();
     const verifier = generateCodeVerifier();
+    /*
+     * Where they were going. Somebody who followed a link to a table and was
+     * asked to sign in should land back at that table, not at the front door
+     * having forgotten why they came.
+     */
+    const to = safeReturn(request.query["to"]);
+    if (to === null) {
+      delete request.session.returnTo;
+    } else {
+      request.session.returnTo = to;
+    }
     // Both bound to the session and single-use, so a callback cannot be
     // replayed, forged from another tab, or intercepted mid-flight.
     request.session.oauthState = state;
@@ -154,7 +167,11 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
           accentColor: discordUser.accent_color ?? null,
         });
         request.session.userId = profile.id;
-        response.redirect(`${config.clientUrl}/?signin=ok`);
+        // Single use, like the state and the verifier: a stale destination is
+        // a surprise the next time somebody signs in from the front door.
+        const to = request.session.returnTo ?? "/";
+        delete request.session.returnTo;
+        response.redirect(`${config.clientUrl}${to}?signin=ok`);
       } catch (error) {
         // An OAuth2RequestError used to be swallowed here as "expected". It is
         // not: a mismatched redirect URI and a wrong client secret both arrive
@@ -169,4 +186,31 @@ export function mountAuth(app: Express, store: Store, config: AuthConfig | null)
       }
     })();
   });
+}
+
+/**
+ * Where to put somebody down after they sign in.
+ *
+ * A path on this site and nothing else. This is the open-redirect boundary:
+ * the value arrives in a query string, so anybody can put anything in it, and
+ * a signed-in redirect to a host of somebody else's choosing is how a phishing
+ * page gets to look like it came from here.
+ *
+ * Refused outright rather than tidied up. There is no cleaning branch on
+ * purpose — every open redirect worth the name got through one.
+ */
+export function safeReturn(to: unknown): string | null {
+  if (typeof to !== "string" || to.length === 0 || to.length > 120) {
+    return null;
+  }
+  // A browser reads "//host" and "/\host" as absolute, whatever they look like.
+  if (!to.startsWith("/") || to.startsWith("//") || to.startsWith("/\\")) {
+    return null;
+  }
+  // Letters, digits and the few punctuation marks a path of ours can hold. No
+  // query, no fragment, no escapes: nothing here needs them.
+  if (!/^\/[A-Za-z0-9\-._~/]*$/.test(to)) {
+    return null;
+  }
+  return to;
 }

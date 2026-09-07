@@ -2058,3 +2058,50 @@
   font-size: var(--gr-text-xs);
   color: var(--gr-color-ink-faint);
 }
+
+/* ---------------------------------------------------- the one step in */
+
+/*
+ * Where somebody who followed a link to a table they cannot yet sit at lands.
+ *
+ * Narrow and centred, because there is exactly one thing to do on it. Anything
+ * else here — a code field, a form for opening a table — is the screen arguing
+ * with the link that brought them.
+ */
+.join--gate {
+  max-width: 460px;
+  margin-inline: auto;
+}
+
+.gate {
+  display: grid;
+  gap: var(--gr-space-3);
+  text-align: center;
+}
+
+.gate__title {
+  margin: 0;
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-xl);
+  color: var(--gr-color-ink-lit);
+}
+
+.gate__note {
+  margin: 0;
+  color: var(--gr-color-ink-dim);
+  line-height: 1.55;
+}
+
+/* Discord's own blurple, because it names Discord. The one place in the
+   building a colour is somebody else's rather than the room's. */
+.gate__in {
+  background: #5865f2;
+  border-color: #5865f2;
+  color: #fff;
+  text-decoration: none;
+}
+
+.gate__in:hover {
+  background: #4752c4;
+  border-color: #4752c4;
+}
