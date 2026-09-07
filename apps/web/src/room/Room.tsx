@@ -6,6 +6,7 @@ import { TileArt } from "./TileArt.js";
 // Both rooms' colours, because the tiles below are dressed in them.
 import "@backroom/game-greed/theme.css";
 import "@backroom/game-blackjack/theme.css";
+import "@backroom/game-slots/theme.css";
 
 interface GameOnOffer {
   id: string;
@@ -152,11 +153,35 @@ function TableTile({ game }: { game: GameOnOffer }) {
 }
 
 function Cabinet({ game }: { game: GameOnOffer }) {
-  return (
-    <div className={`cabinet${game.open ? "" : " cabinet--shut"}`}>
-      <div className="cabinet__screen">{game.open ? "777" : "?"}</div>
-      <span className="cabinet__name">{game.name}</span>
-      <span className="cabinet__note">{game.open ? game.blurb : "Not open yet"}</span>
+  const body = (
+    <>
+      {/* Reels behind glass, rolling when the pointer comes near. A machine
+          does not throw its furniture into the air; it spins. */}
+      <span className="cabinet__screen" aria-hidden="true">
+        {game.open ? <TileArt game={game.id} /> : "?"}
+      </span>
+      <span className="cabinet__name">
+        <Mark game={game} />
+      </span>
+      <span className="cabinet__note">
+        {game.tables > 0 ? <i className="tile__live" /> : null}
+        {game.open ? game.blurb : "Not open yet"}
+      </span>
+    </>
+  );
+
+  /*
+   * Dressed in the machine's own colours, the same way a table's tile is: the
+   * theme files set them on anything carrying data-game, so this is a window
+   * into that room rather than a picture of one.
+   */
+  return game.open ? (
+    <Link className="cabinet" data-game={game.id} to={`/${game.id}`}>
+      {body}
+    </Link>
+  ) : (
+    <div className="cabinet cabinet--shut" data-game={game.id}>
+      {body}
     </div>
   );
 }

@@ -51,20 +51,7 @@ import { Avatars, Cards } from "./og.js";
  * carry, so a game cannot be advertised here with a name, a seat count or an
  * open sign that differs from the one it is actually played under.
  */
-const CATALOGUE = new Catalogue()
-  .add(GREED)
-  .add(BLACKJACK)
-  .add({
-    id: "slots",
-    name: "Slots",
-    blurb: "One player, one lever.",
-    shape: "machine",
-    minSeats: 1,
-    maxSeats: 1,
-    open: false,
-    // The room's own colours until it has any of its own to be painted in.
-    theme: { wall: "#141822", felt: "#1b2130", accent: "#2e7bff", accentHi: "#7ba9ff" },
-  });
+const CATALOGUE = new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS);
 
 
 export interface BackRoomServerOptions {

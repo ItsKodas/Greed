@@ -911,8 +911,7 @@ describe("what the room offers", () => {
     expect(ids).toContain("greed");
     expect(body.games.find((game) => game.id === "greed")?.open).toBe(true);
     expect(body.games.find((game) => game.id === "blackjack")?.open).toBe(true);
-    // Listed but not yet openable, so the room can show what is coming.
-    expect(body.games.find((game) => game.id === "slots")?.open).toBe(false);
+    expect(body.games.find((game) => game.id === "slots")?.open).toBe(true);
     // A machine is not a table, and says so.
     expect(body.games.find((game) => game.id === "slots")?.shape).toBe("machine");
   });
@@ -992,11 +991,16 @@ describe("what a link to this place looks like", () => {
     const body = await (await fetch(at("/sitemap.xml"))).text();
 
     expect(body).toContain("<loc>http://localhost");
-    expect(body).toContain("/greed</loc>");
+    // Every game somebody can actually sit down at, and nothing else. Written
+    // against the catalogue rather than a hand-listed set, so a game added
+    // later is either on the map or fails here — the previous version of this
+    // named the one game that happened to be unopenable at the time, and went
+    // stale the moment it opened.
+    for (const game of ["greed", "blackjack", "slots"]) {
+      expect(body).toContain(`/${game}</loc>`);
+    }
     // A table is a room that will not exist next week.
     expect(body).not.toContain(code);
-    // And a game nobody can sit down at yet is not a page worth finding.
-    expect(body).not.toContain("/slots</loc>");
   });
 });
 
