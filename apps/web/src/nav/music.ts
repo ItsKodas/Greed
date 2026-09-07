@@ -86,6 +86,8 @@ let showing = false;
  * simply parked over the panel that pretends to contain it.
  */
 let shell: HTMLDivElement | null = null;
+/** Told when the pointer is over the player, which is not inside the panel. */
+let onHover: ((over: boolean) => void) | null = null;
 
 const state: MusicState = {
   on: read(ON_KEY, "false") === "true",
@@ -197,6 +199,13 @@ function makeShell(): HTMLDivElement {
   element.style.borderRadius = "2px";
   element.style.lineHeight = "0";
   park(element);
+  /*
+   * The player is not a descendant of the control that opens the panel — it
+   * cannot be — so hovering it counts as leaving, and the panel closed the
+   * moment the pointer reached the video. These put it back on the map.
+   */
+  element.addEventListener("mouseenter", () => onHover?.(true));
+  element.addEventListener("mouseleave", () => onHover?.(false));
   document.body.append(element);
   // Capture, because the panel can sit inside a scrolling area of its own.
   window.addEventListener("scroll", place, { passive: true, capture: true });
@@ -245,6 +254,17 @@ export function place(): void {
  * whole reason walking from the room to a table no longer restarts the track:
  * nothing about the player changes when the page around it is replaced.
  */
+/**
+ * Who to tell when the pointer moves on and off the player.
+ *
+ * The panel that appears to contain the player has to stay open while it is
+ * being pointed at, and it cannot work that out for itself: as far as the DOM
+ * is concerned the two are nowhere near each other.
+ */
+export function watchShellHover(handler: ((over: boolean) => void) | null): void {
+  onHover = handler;
+}
+
 export function attachMusic(element: HTMLElement | null, open: boolean): void {
   host = element;
   showing = open && element !== null;

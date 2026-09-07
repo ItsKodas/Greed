@@ -8,6 +8,7 @@ import {
   setMusicVolume,
   skipTrack,
   watchMusic,
+  watchShellHover,
 } from "./music.js";
 
 /**
@@ -62,6 +63,31 @@ export function Sound() {
    */
   const [open, setOpen] = useState(false);
   const stage = useRef<HTMLDivElement | null>(null);
+  const closing = useRef<number | null>(null);
+
+  /*
+   * Opening and closing with a moment's grace.
+   *
+   * The pointer has to cross between two elements that are not related in the
+   * DOM — the control, and the player laid over the gap in it — and every
+   * crossing is a leave immediately followed by an enter. Closing on the leave
+   * shut the panel in the middle of the journey; waiting a beat and letting
+   * the enter cancel it does not.
+   */
+  const hold = (wanted: boolean) => {
+    if (closing.current !== null) {
+      window.clearTimeout(closing.current);
+      closing.current = null;
+    }
+    if (wanted) {
+      setOpen(true);
+      return;
+    }
+    closing.current = window.setTimeout(() => {
+      closing.current = null;
+      setOpen(false);
+    }, 160);
+  };
 
   useEffect(() => {
     attachMusic(stage.current, open);
@@ -70,22 +96,27 @@ export function Sound() {
     return () => attachMusic(null, false);
   }, [open]);
 
+  useEffect(() => {
+    watchShellHover(hold);
+    return () => watchShellHover(null);
+  });
+
   return (
     <span
-      className={`vol${muted ? " vol--muted" : ""}`}
+      className={`vol${muted ? " vol--muted" : ""}${open ? " vol--open" : ""}`}
       /* A named group rather than a bare span: it carries the pointer and
          focus handlers that decide whether the panel is open, and the things
          inside it are one set of controls rather than several. */
       role="group"
       aria-label="Sound"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onMouseEnter={() => hold(true)}
+      onMouseLeave={() => hold(false)}
+      onFocus={() => hold(true)}
       onBlur={(event) => {
         // Only when focus has actually left the whole control, not when it
         // moves from one slider to the other.
         if (!event.currentTarget.contains(event.relatedTarget)) {
-          setOpen(false);
+          hold(false);
         }
       }}
     >

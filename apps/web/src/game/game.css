@@ -390,6 +390,16 @@
   height: 10px;
 }
 
+/*
+ * Three ways in, and none of them can close it against the others.
+ *
+ * :hover and :focus-within cover the ordinary cases. --open is set from
+ * JavaScript, and is the only one that can be true while the pointer is over
+ * the player: that is a fixed element under the body rather than a child of
+ * this control, so as far as the DOM is concerned pointing at the video is
+ * pointing at nothing to do with the panel it appears to be inside.
+ */
+.vol--open .vol__pop,
 .vol:hover .vol__pop,
 .vol:focus-within .vol__pop {
   opacity: 1;
