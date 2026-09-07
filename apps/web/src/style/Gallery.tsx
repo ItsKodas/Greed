@@ -1,4 +1,5 @@
 import { Sign } from "../game/Sign.js";
+import { Deck } from "./Deck.js";
 import { Swatches } from "./Swatches.js";
 import { TextureTiles } from "./TextureTiles.js";
 import { TypeSpecimen } from "./TypeSpecimen.js";
@@ -19,6 +20,7 @@ export function Gallery() {
       <Swatches />
       <TypeSpecimen />
       <TextureTiles />
+      <Deck />
     </main>
   );
 }

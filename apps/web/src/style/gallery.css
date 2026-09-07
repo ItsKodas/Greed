@@ -117,3 +117,42 @@
   font-size: var(--gr-text-xs);
   color: var(--gr-color-ink-dim);
 }
+
+/* ------------------------------------------------------------- the deck */
+
+.deck__row {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-3);
+  margin-bottom: var(--gr-space-3);
+}
+
+.deck__suit {
+  width: 68px;
+  flex: none;
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.05em;
+  color: var(--gr-color-ink-faint);
+}
+
+.deck__cards {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* Big enough to argue about the placement of a pip. */
+.deck__big {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gr-space-3);
+  margin: var(--gr-space-3) 0 var(--gr-space-5);
+  --bj-card-w: 150px;
+}
+
+.deck__hands {
+  display: flex;
+  gap: var(--gr-space-6);
+  align-items: flex-start;
+  margin-top: var(--gr-space-3);
+}

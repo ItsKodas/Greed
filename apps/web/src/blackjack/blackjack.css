@@ -297,60 +297,101 @@
 /*
  * A hand that has outgrown its row, overlapped rather than spread.
  *
- * The index moves into the corner at the same time, because that is the part
- * still showing — a rank centred on a card that is three-quarters covered is
- * a rank nobody can read, which would trade one broken layout for another.
+ * The index lives in the corner of every card, so an overlapped one still
+ * says what it is — which is the whole reason a real deck puts it there.
  */
 .bj-hand--tight .bj-card + .bj-card {
-  margin-left: -24px;
+  margin-left: -26px;
 }
 
-.bj-hand--tight .bj-card {
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 4px 0 0 5px;
-}
-
+/*
+ * One card, at the size the felt asks for.
+ *
+ * Width only. The drawing carries its own 2.5×3.5 proportion, so a card can
+ * never be set to a shape a card is not — and every number inside it scales
+ * with the box rather than being re-tuned per size.
+ */
 .bj-card {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 46px;
-  height: 66px;
+  width: var(--bj-card-w, 47px);
+  height: auto;
+  flex: none;
+  display: block;
   border-radius: var(--gr-radius-md);
-  /* Paper, and the only white thing in the room besides the burning middle of
-     the sign — which is why a dealt hand pulls the eye without being lit. */
-  background: linear-gradient(170deg, #fdfbf6, #e6e1d6);
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.5));
+  /* The ink. Everything drawn on the face inherits it, which is the whole of
+     the red/black distinction — there is no second set of shapes. */
   color: #1b1b1b;
-  border: 1px solid rgb(0 0 0 / 0.4);
-  box-shadow: var(--gr-lift-low);
-  font-family: var(--gr-font-display);
-  line-height: 1;
 }
 
 .bj-card--red {
   color: #b0202a;
 }
 
+/* Paper, and the only white thing in the room besides the burning middle of
+   the sign — which is why a dealt hand pulls the eye without being lit. */
+.bj-card__face {
+  fill: #fdfbf6;
+  stroke: rgb(0 0 0 / 0.32);
+  stroke-width: 1;
+}
+
 .bj-card__rank {
-  font-size: var(--gr-text-lg);
+  font-family: var(--gr-font-display);
+  /* A sixth of the card's height, which is where a real deck puts it. Bigger
+     and the index starts competing with the pips for the middle of the card. */
+  font-size: 23px;
+  fill: currentColor;
 }
 
-.bj-card__pip {
-  font-size: var(--gr-text-base);
+/* The court's panel: the suit's own colour, at the weight of a wash. */
+.bj-card__panel {
+  fill: color-mix(in srgb, currentColor 8%, transparent);
+  stroke: color-mix(in srgb, currentColor 45%, transparent);
+  stroke-width: 1.2;
 }
 
-/* The back of a card nobody has been told the face of. Patterned rather than
-   plain, so it is obviously a card and obviously not readable. */
+.bj-card__rule {
+  stroke: color-mix(in srgb, currentColor 32%, transparent);
+  stroke-width: 1.2;
+  fill: none;
+}
+
+/* ------------------------------------------------------------- the back */
+
+/*
+ * The weave, in whatever colours the game being played is dressed in.
+ *
+ * Read off the page rather than written here: a table's theme sets these three
+ * and gets a deck of its own without a second drawing of one. The defaults are
+ * the room's own blue.
+ */
 .bj-card--down {
-  background:
-    repeating-linear-gradient(
-      45deg,
-      var(--gr-color-neon-dim) 0 3px,
-      var(--gr-color-shadow) 3px 6px
-    );
-  border-color: var(--gr-color-neon-dim);
+  --bj-back: var(--gr-color-neon-deep, #0b3fd4);
+  --bj-back-weft: #12203c;
+  --bj-back-warp: #1f3a70;
+}
+
+.bj-card__back {
+  fill: #0d1220;
+  stroke: var(--bj-back);
+  stroke-width: 1;
+}
+
+.bj-card__weft {
+  fill: var(--bj-back-weft);
+}
+
+.bj-card__warp {
+  fill: var(--bj-back-warp);
+}
+
+/* The one gold line on the back, which is the only thing tying it to the
+   chips — a back with no warm colour on it belongs to a different room. */
+.bj-card__edge {
+  fill: none;
+  stroke: var(--gr-color-chip);
+  stroke-width: 1.1;
+  opacity: 0.75;
 }
 
 @media (max-width: 720px) {
