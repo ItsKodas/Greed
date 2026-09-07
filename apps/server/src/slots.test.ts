@@ -265,14 +265,16 @@ describe("stocking the bank", () => {
 
     const response = await post(`${base}/api/admin/bank`, { amount: 50_000 });
 
-    expect(response.status).toBe(403);
+    // 404 rather than 403, in step with every other admin route: whether this
+    // endpoint exists is not something an unauthorised visitor needs to learn.
+    expect(response.status).toBe(404);
     expect(await store.bank()).toBe(0);
   });
 
   it("refuses everybody when the admin list is unset", async () => {
     // admin.ts fails closed, and so does this.
     const { base, store } = await openMachine({ bank: 0, discordId: "d-admin" });
-    expect((await post(`${base}/api/admin/bank`, { amount: 500 })).status).toBe(403);
+    expect((await post(`${base}/api/admin/bank`, { amount: 500 })).status).toBe(404);
     expect(await store.bank()).toBe(0);
   });
 

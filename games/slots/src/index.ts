@@ -20,3 +20,4 @@ export {
   STAKE_DIVISOR,
   worstCase,
 } from "./bank.js";
+export { SLOTS } from "./listing.js";
