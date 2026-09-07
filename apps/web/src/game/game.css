@@ -39,9 +39,21 @@
  * near its bottom, which is why the sign never lined up with the words beside
  * it however the row itself was aligned.
  */
-.play__mark a,
-.room__mark a {
+/*
+ * Only the game header wraps the sign in a link. The room picker puts the sign
+ * straight into its heading, which is already a centred flex row, so the sign
+ * is a flex item there and none of this applies.
+ */
+.play__mark a {
   display: flex;
+  /*
+   * No underline. A flex item is block-level, and text-decoration propagates
+   * into block-level descendants where it would have skipped an atomic inline
+   * box — so the moment this link stopped being a line of text, the browser's
+   * default underline appeared under the sign and lit up with the rest of it.
+   */
+  text-decoration: none;
+  color: inherit;
 }
 
 /*
@@ -1290,10 +1302,6 @@
   align-items: center;
 }
 
-.room__mark a {
-  text-decoration: none;
-  color: inherit;
-}
 
 .room__spacer {
   flex: 1;
