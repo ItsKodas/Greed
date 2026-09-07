@@ -60,6 +60,8 @@ const CATALOGUE = new Catalogue()
     minSeats: 1,
     maxSeats: 1,
     open: false,
+    // The room's own colours until it has any of its own to be painted in.
+    theme: { wall: "#141822", felt: "#1b2130", accent: "#2e7bff", accentHi: "#7ba9ff" },
   });
 
 
@@ -449,7 +451,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     const listing = seated.game.listing;
     const host = seated.table.seats.find((seat) => seat.id === seated.table.hostId);
     return {
-      game: { id: listing.id, name: listing.name },
+      game: { id: listing.id, name: listing.name, theme: listing.theme, mark: listing.mark },
       host: host?.name ?? null,
       code,
       seats: seated.table.seats.length,
@@ -465,7 +467,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       return null;
     }
     return {
-      game: { id: listing.id, name: listing.name },
+      game: { id: listing.id, name: listing.name, theme: listing.theme, mark: listing.mark },
       host: null,
       code: null,
       seats: 0,

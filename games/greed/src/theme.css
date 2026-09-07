@@ -19,7 +19,7 @@
  * avoid. It is survivable here because money is always a figure and never a
  * border, a label or a lit edge, so the two never sit in the same role.
  */
-:root[data-game="greed"] {
+[data-game="greed"] {
   --gr-color-night: #241811;
   --gr-color-slate: #3a281c;
   --gr-color-shadow: #170f0a;

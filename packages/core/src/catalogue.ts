@@ -28,6 +28,35 @@ export interface GameListing {
   maxSeats: number;
   /** False while it is being built, so it can be listed but not opened. */
   open: boolean;
+  /**
+   * How the game writes its own name.
+   *
+   * Greed has been written GRE-E-D since its first screen and it is the whole
+   * mark; a game that wants nothing of the sort leaves this out and its name
+   * is written plainly.
+   */
+  mark?: {
+    text: string;
+    /** Which letter is picked out in the room's own colour, by index. */
+    accentAt: number;
+  };
+  /**
+   * The three colours a picture of this game is painted in.
+   *
+   * The same values its theme.css sets, repeated here because the link cards
+   * are drawn on the server where there is no stylesheet to read. They have to
+   * agree: change one and change the other.
+   */
+  theme: {
+    /** The room's walls. */
+    wall: string;
+    /** What the game is played on. */
+    felt: string;
+    /** The lit colour of the room — Greed's brass, the building's blue. */
+    accent: string;
+    /** The light inside the tube, a step up from the accent. */
+    accentHi: string;
+  };
 }
 
 /** Every game the room knows about, in the order they should be shown. */

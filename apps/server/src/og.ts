@@ -18,8 +18,19 @@ export const OG_HEIGHT = 630;
 
 /** What one card has to say. */
 export interface CardSpec {
-  /** The game on the felt, or null for the room's own banner. */
-  game: { id: string; name: string } | null;
+  /**
+   * The game on the felt, or null for the room's own banner.
+   *
+   * Carries the colours it is painted in and how it writes its name, because
+   * a picture of Greed should look like Greed rather than like the building
+   * with the word "Greed" on it.
+   */
+  game: {
+    id: string;
+    name: string;
+    theme: { wall: string; felt: string; accent: string; accentHi: string };
+    mark?: { text: string; accentAt: number } | undefined;
+  } | null;
   /** Who opened the table. Null when the card is not about one table. */
   host: string | null;
   /** The table's code, which is also how anybody gets to it. */
@@ -107,10 +118,16 @@ function chip(cx: number, cy: number, r: number, taken: boolean): string {
  * underneath in blue and blurred, twice, with the burning white core on top. A
  * filter rather than a text-shadow, because that is what an SVG has.
  */
-function sign(x: number, y: number, scale: number): string {
+function sign(x: number, y: number, scale: number, accent: string, accentHi: string): string {
+  /*
+   * "The" hangs where the stylesheet hangs it. The page sets it at 0.44 of the
+   * sign's size and indents it 1.9 of its own ems, which comes to 0.836 of the
+   * big text — measured out here rather than guessed at, because a sign that
+   * differs between the wall and the card is two signs.
+   */
   const words = (fill: string, filter: string) => `
     <g fill="${fill}"${filter}>
-      <text x="${x + 34 * scale}" y="${y - 30 * scale}" font-family="Dancing Script" font-weight="700" font-size="${30 * scale}">The</text>
+      <text x="${x + 53.5 * scale}" y="${y - 30 * scale}" font-family="Dancing Script" font-weight="700" font-size="${28.2 * scale}">The</text>
       <text x="${x}" y="${y}" font-family="Dancing Script" font-weight="700" font-size="${64 * scale}">Back Room</text>
     </g>`;
 
@@ -119,11 +136,16 @@ function sign(x: number, y: number, scale: number): string {
    * a tube on a dark wall throws more light than that, and a blur spreads
    * whatever it is given thinly enough that stacking is how you get it back.
    */
+  /*
+   * Lit in whatever colour the room is lit. Greed has burned brass since its
+   * first screen and a blue sign over a brass room is the building's sign in
+   * somebody else's doorway.
+   */
   return `<g transform="rotate(-2.4 ${x} ${y})">
-    ${words("#2e7bff", ' filter="url(#tube-wide)"')}
-    ${words("#2e7bff", ' filter="url(#tube-wide)"')}
-    ${words("#7ba9ff", ' filter="url(#tube-near)"')}
-    ${words("#7ba9ff", ' filter="url(#tube-near)"')}
+    ${words(accent, ' filter="url(#tube-wide)"')}
+    ${words(accent, ' filter="url(#tube-wide)"')}
+    ${words(accentHi, ' filter="url(#tube-near)"')}
+    ${words(accentHi, ' filter="url(#tube-near)"')}
     ${words("#ffffff", "")}
   </g>`;
 }
@@ -201,13 +223,45 @@ function motif(game: string | null): string {
 }
 
 /**
+ * The game's name, with the one letter it picks out in its own colour.
+ *
+ * Drawn as separate runs rather than as one string, because SVG has no span:
+ * the accented letter is placed by measuring what comes before it, which is
+ * why this marks a single letter and never a phrase.
+ */
+function name(text: string, accentAt: number | undefined, accent: string): string {
+  const at = accentAt ?? -1;
+  /*
+   * One text element with a coloured run inside it, rather than three placed
+   * beside each other. Placing them meant guessing an advance width, and
+   * Bevan's capitals are nothing like equal — GREED came out as GRED with the
+   * marked letter sitting on top of its neighbour. A tspan asks the text
+   * engine where the letter goes, which is the only thing that knows.
+   */
+  const body =
+    at < 0 || at >= text.length
+      ? esc(text)
+      : `${esc(text.slice(0, at))}<tspan fill="${accent}">${esc(text[at] ?? "")}</tspan>${esc(
+          text.slice(at + 1),
+        )}`;
+  return `<text x="72" y="288" font-family="Bevan" font-size="88" fill="${INK}">${body}</text>`;
+}
+
+/**
  * The card, as an SVG document.
  *
  * Pure, and exported, so the layout can be tested without a rasterizer in the
  * way — what a name does to it matters more than what the pixels come out as.
  */
 export function cardSvg(spec: CardSpec): string {
-  const title = spec.game?.name ?? "The Back Room";
+  const title = spec.game?.mark?.text ?? spec.game?.name ?? "The Back Room";
+  /* The room's own colours when there is no game to borrow any from. */
+  const room = spec.game?.theme ?? {
+    wall: "#101828",
+    felt: "#132033",
+    accent: "#2e7bff",
+    accentHi: "#7ba9ff",
+  };
   const line = spec.host === null ? null : `${spec.host}’s table`;
   // Seats mean something at a table and nothing on a banner for a whole game.
   const atTable = spec.game !== null && spec.code !== null;
@@ -231,19 +285,25 @@ export function cardSvg(spec: CardSpec): string {
       <feGaussianBlur stdDeviation="${3 * SIGN_SCALE}"/>
     </filter>
     <radialGradient id="sign" cx="18%" cy="6%" r="78%">
-      <stop offset="0%" stop-color="#2e7bff" stop-opacity="0.28"/>
-      <stop offset="100%" stop-color="#2e7bff" stop-opacity="0"/>
+      <stop offset="0%" stop-color="${room.accent}" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="${room.accent}" stop-opacity="0"/>
+    </radialGradient>
+    <!-- The floor of the room, coming up from under the furniture. -->
+    <radialGradient id="floor" cx="50%" cy="118%" r="86%">
+      <stop offset="0%" stop-color="${room.felt}" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="${room.felt}" stop-opacity="0"/>
     </radialGradient>
     <radialGradient id="lamp" cx="86%" cy="94%" r="66%">
       <stop offset="0%" stop-color="#e0b048" stop-opacity="0.15"/>
       <stop offset="100%" stop-color="#e0b048" stop-opacity="0"/>
     </radialGradient>
   </defs>
-  <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="#0d1015"/>
+  <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="${room.wall}"/>
+  <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#floor)"/>
   <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#sign)"/>
   <rect width="${OG_WIDTH}" height="${OG_HEIGHT}" fill="url(#lamp)"/>
   ${motif(spec.game?.id ?? null)}
-  <rect x="0" y="0" width="${OG_WIDTH}" height="6" fill="#2e7bff" opacity="0.6"/>
+  <rect x="0" y="0" width="${OG_WIDTH}" height="6" fill="${room.accent}" opacity="0.7"/>
 
   ${
     /*
@@ -253,9 +313,9 @@ export function cardSvg(spec: CardSpec): string {
      * face was the building introducing itself twice.
      */
     spec.game === null
-      ? sign(76, 300, 1.5)
-      : `${sign(74, 110, SIGN_SCALE)}
-  <text x="72" y="288" font-family="Bevan" font-size="88" fill="${INK}">${esc(fit(title, 88, 780, 0.62))}</text>`
+      ? sign(76, 300, 1.5, room.accent, room.accentHi)
+      : `${sign(74, 110, SIGN_SCALE, room.accent, room.accentHi)}
+  ${name(fit(title, 88, 780, 0.62), spec.game?.mark?.accentAt, room.accent)}`
   }
   ${
     line === null

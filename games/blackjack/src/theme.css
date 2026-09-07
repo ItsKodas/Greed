@@ -15,7 +15,7 @@
  * floor rather than one table on it, and the walls are the same green gone
  * dark rather than a separate colour.
  */
-:root[data-game="blackjack"] {
+[data-game="blackjack"] {
   --gr-color-night: #0b1712;
   --gr-color-slate: #12241c;
   --gr-color-shadow: #050c09;

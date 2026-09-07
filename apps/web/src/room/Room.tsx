@@ -2,11 +2,17 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
+import { TileArt } from "./TileArt.js";
+// Both rooms' colours, because the tiles below are dressed in them.
+import "@backroom/game-greed/theme.css";
+import "@backroom/game-blackjack/theme.css";
 
 interface GameOnOffer {
   id: string;
   name: string;
   blurb: string;
+  /** How the game writes its own name, if it writes it any particular way. */
+  mark?: { text: string; accentAt: number };
   shape: "table" | "machine";
   open: boolean;
   tables: number;
@@ -87,24 +93,39 @@ function busyness(game: GameOnOffer): string {
   return `${tables}, ${people}`;
 }
 
+/**
+ * A game's name, written the way that game writes it.
+ *
+ * Greed has been GRE-E-D since its first screen and the marked letter is the
+ * whole thing; a game with nothing of the sort has its name written plainly.
+ * The same treatment the navbar gives it, and the same the link cards do.
+ */
+function Mark({ game }: { game: GameOnOffer }) {
+  const mark = game.mark;
+  if (mark === undefined) {
+    return <>{game.name}</>;
+  }
+  return (
+    <>
+      {mark.text.slice(0, mark.accentAt)}
+      <em>{mark.text[mark.accentAt]}</em>
+      {mark.text.slice(mark.accentAt + 1)}
+    </>
+  );
+}
+
 function TableTile({ game }: { game: GameOnOffer }) {
   const body = (
     <>
-      {/*
-       * The same card a link to this game unfurls into.
-       *
-       * One drawing rather than two: the banner already carries the name, the
-       * blurb and the game's own furniture, and keeping a second version of
-       * all that in markup is how the two come to disagree. The alt text is
-       * what it says, so a tile still reads if the image never arrives.
-       */}
-      <img
-        className="tile__art"
-        src={`/og/${game.id}.png`}
-        alt={`${game.name} — ${game.blurb}`}
-        width={1200}
-        height={630}
-      />
+      {/* The room's own furniture, tucked into the corner until the pointer
+          comes near and then thrown up and apart. */}
+      <span className="tile__art" aria-hidden="true">
+        <TileArt game={game.id} />
+      </span>
+      <span className="tile__mark">
+        <Mark game={game} />
+      </span>
+      <span className="tile__blurb">{game.blurb}</span>
       <span className="tile__foot">
         {/* The only lit thing on this page besides the sign, and it means
             people are in there right now. */}
@@ -114,12 +135,19 @@ function TableTile({ game }: { game: GameOnOffer }) {
     </>
   );
 
+  /*
+   * Dressed in the game's own room. The theme files set their colours on
+   * anything carrying data-game rather than only on the document, so a tile
+   * is a window into that room rather than a picture of one.
+   */
   return game.open ? (
-    <Link className="tile" to={`/${game.id}`}>
+    <Link className="tile" data-game={game.id} to={`/${game.id}`}>
       {body}
     </Link>
   ) : (
-    <div className="tile tile--shut">{body}</div>
+    <div className="tile tile--shut" data-game={game.id}>
+      {body}
+    </div>
   );
 }
 

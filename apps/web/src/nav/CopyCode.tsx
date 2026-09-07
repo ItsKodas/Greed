@@ -50,7 +50,7 @@ export function CopyCode({ code }: { code: string }) {
     <button
       type="button"
       className={`nav__code${copied ? " nav__code--took" : ""}`}
-      title="Copy this table's code"
+      aria-label={`Copy this table's code, ${code}`}
       onClick={take}
     >
       {copied ? "Copied" : code}

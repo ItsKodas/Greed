@@ -1676,19 +1676,40 @@
   gap: var(--gr-space-3);
 }
 
+/*
+ * A game's own corner of the building.
+ *
+ * Painted in that game's colours — the theme files light anything carrying
+ * data-game, so this is a window into the room rather than a picture of one —
+ * and deep enough for its furniture to sit in.
+ */
 .tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-2);
-  padding: var(--gr-space-2);
+  padding: var(--gr-space-4);
+  min-height: 168px;
   overflow: hidden;
   border: var(--gr-edge-soft);
   border-radius: var(--gr-radius-sm);
   background:
-    radial-gradient(90% 120% at 50% 130%, var(--gr-color-felt-lit) 0%, transparent 70%),
-    var(--gr-color-felt);
+    radial-gradient(88% 120% at 50% 128%, var(--gr-color-felt) 0%, transparent 72%),
+    radial-gradient(70% 90% at 8% -10%, var(--gr-color-smoke-lit) 0%, transparent 70%),
+    var(--gr-color-night);
   text-decoration: none;
   color: inherit;
+}
+
+/* Everything written stays above the furniture. */
+.tile > span:not(.tile__art) {
+  position: relative;
+  z-index: 1;
+}
+
+/* The foot sits at the bottom whatever the blurb runs to. */
+.tile__foot {
+  margin-top: auto;
 }
 
 .tile:hover {
@@ -1706,18 +1727,97 @@
   opacity: 0.55;
 }
 
+.tile__mark {
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-2xl, 2rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--gr-color-ink-lit);
+}
+
+/* The one letter a game picks out, in the colour its own room is lit. */
+.tile__mark em {
+  font-style: normal;
+  color: var(--gr-color-neon);
+}
+
+.tile__blurb {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
 /*
- * The link card, as the face of the tile.
+ * The furniture in the corner of the room.
  *
- * Full bleed to the tile's edges, which is why the tile carries no padding of
- * its own any more — a banner with a margin around it reads as a picture of a
- * card rather than as the card.
+ * Tucked low and to the right, half of it past the edge, so the tile reads as
+ * a corner of somewhere rather than as a picture with objects arranged on it.
+ * It is behind everything and catches no clicks.
  */
 .tile__art {
+  position: absolute;
+  right: -6%;
+  bottom: -14%;
+  width: 52%;
+  max-width: 240px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tile__art svg {
   display: block;
   width: 100%;
   height: auto;
-  border-radius: calc(var(--gr-radius-sm) - 1px);
+  overflow: visible;
+  filter: drop-shadow(0 6px 10px rgb(0 0 0 / 0.5));
+}
+
+/*
+ * Thrown up and apart when the pointer arrives.
+ *
+ * Out of the corner rather than into the middle: they come up the way things
+ * come off a table somebody has just knocked, each on its own timing, so it
+ * lands as a handful and not as one object growing.
+ */
+.art__piece {
+  transform: translate(26px, 34px) scale(0.86);
+  transition:
+    transform 460ms cubic-bezier(0.16, 1.06, 0.28, 1),
+    opacity 260ms ease;
+  opacity: 0.9;
+}
+
+.tile:hover .art__piece,
+.tile:focus-visible .art__piece {
+  opacity: 1;
+}
+
+.tile:hover .art__piece--1,
+.tile:focus-visible .art__piece--1 {
+  transform: translate(-16px, -26px) rotate(-12deg) scale(1);
+}
+
+.tile:hover .art__piece--2,
+.tile:focus-visible .art__piece--2 {
+  transform: translate(16px, -46px) rotate(14deg) scale(1.04);
+  transition-delay: 45ms;
+}
+
+/* Far enough up to clear the tile's own edge: a piece that comes half way
+   reads as one that got caught on the way out. */
+.tile:hover .art__piece--3,
+.tile:focus-visible .art__piece--3 {
+  transform: translate(-40px, -38px) rotate(20deg) scale(0.98);
+  transition-delay: 90ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art__piece,
+  .tile:hover .art__piece--1,
+  .tile:hover .art__piece--2,
+  .tile:hover .art__piece--3 {
+    transition: none;
+    transform: none;
+  }
 }
 
 .tile__foot {

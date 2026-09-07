@@ -8,5 +8,7 @@ export const GREED: GameListing = {
   shape: "table",
   minSeats: 1,
   maxSeats: 10,
+  mark: { text: "GREED", accentAt: 3 },
+  theme: { wall: "#241811", felt: "#16241c", accent: "#c08a2e", accentHi: "#e8c168" },
   open: true,
 };
