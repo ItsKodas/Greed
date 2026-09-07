@@ -17,10 +17,18 @@ export type Cue =
   | "greed"
   | "hotDice"
   | "yourTurn"
-  | "win";
+  | "win"
+  /* Cards. A hand going out, one card landing, and the hole card turning. */
+  | "deal"
+  | "card"
+  | "reveal"
+  /* Money, in both directions: staked, and counted back to you. */
+  | "bet"
+  | "payout";
 
 interface Manifest {
   dice?: string[];
+  cards?: string[];
   chips?: string[];
   ui?: string[];
   stingers?: string[];
@@ -217,18 +225,28 @@ function pick(list: string[] | undefined): string | null {
 }
 
 /**
- * Prefers dice files whose name mentions a phase, falling back to any of them.
+ * The files in a list whose names mention a word, or all of them if none do.
  *
- * Naming a file "diceshake2.mp3" is a hint, not a requirement — drop in a pile
- * of unnamed clips and they still all play, just without the split.
+ * Naming a file "diceshake2.mp3" or "placing_chips1.mp3" is a hint, not a
+ * requirement — drop in a pile of unnamed clips and they still all play, just
+ * without the split. That is what keeps the drop-a-file workflow honest: a
+ * folder is never wrong, it is only ever less specific.
+ *
+ * Exported because this is the seam that fails quietly. A renamed file does
+ * not break anything; it just stops matching, falls back to the whole folder,
+ * and the wrong sound plays forever without a single error.
  */
-function pickPhase(word: string): string | null {
-  const all = samples.dice;
+export function preferring(files: readonly string[], word: string): string[] {
+  const matching = files.filter((url) => url.toLowerCase().includes(word));
+  return matching.length > 0 ? matching : [...files];
+}
+
+function pickNamed(group: keyof Manifest, word: string): string | null {
+  const all = samples[group];
   if (all === undefined || all.length === 0) {
     return null;
   }
-  const matching = all.filter((url) => url.toLowerCase().includes(word));
-  return pick(matching.length > 0 ? matching : all);
+  return pick(preferring(all, word));
 }
 
 /** Plays a sample with a little pitch variation so repeats stay alive. */
@@ -313,7 +331,7 @@ export function play(cue: Cue): void {
   switch (cue) {
     case "shake":
       // The throw. Recorded if we have one, a rattle of noise if not.
-      void sample(pickPhase("shake"), 0.85).then((played) => {
+      void sample(pickNamed("dice", "shake"), 0.85).then((played) => {
         if (!played) {
           for (let hit = 0; hit < 6; hit += 1) {
             window.setTimeout(() => noise(0.04, 1100 + Math.random() * 800, 0.16), hit * 70);
@@ -322,7 +340,7 @@ export function play(cue: Cue): void {
       });
       break;
     case "land":
-      void sample(pickPhase("roll"), 0.9).then((played) => {
+      void sample(pickNamed("dice", "roll"), 0.9).then((played) => {
         if (!played) {
           for (let hit = 0; hit < 4; hit += 1) {
             window.setTimeout(() => noise(0.05, 800 + Math.random() * 600, 0.22), hit * 45);
@@ -338,7 +356,7 @@ export function play(cue: Cue): void {
       noise(0.03, 1400, 0.12);
       break;
     case "bank":
-      void sample(pick(samples.chips), 0.8).then((played) => {
+      void sample(pickNamed("chips", "placing"), 0.8).then((played) => {
         if (!played) {
           tone({ frequency: 520, duration: 0.12, type: "triangle", gain: 0.16 });
           tone({ frequency: 780, duration: 0.16, type: "triangle", gain: 0.14, delay: 0.08 });
@@ -374,6 +392,77 @@ export function play(cue: Cue): void {
     case "win":
       [523, 659, 784, 1046, 1318].forEach((frequency, step) => {
         tone({ frequency, duration: 0.35, type: "triangle", gain: 0.14, delay: step * 0.11 });
+      });
+      break;
+
+    /*
+     * A whole hand going out, rather than one card.
+     *
+     * Six cards played from a single sample would machine-gun even with the
+     * pitch wobble, so this draws a fresh file per card from the entire card
+     * folder — placing and taking alike — and staggers them unevenly. A dealer
+     * does not deal on a metronome.
+     */
+    case "deal": {
+      const cards = samples.cards ?? [];
+      const count = cards.length === 0 ? 0 : 4;
+      for (let index = 0; index < count; index += 1) {
+        const delay = index * 135 + Math.random() * 50;
+        /*
+         * Quieter than a single card on purpose. These clips run about half a
+         * second each and the stagger is shorter than that, so three of them
+         * are sounding at once in the middle of a deal — at the gain one card
+         * gets, four of them sum past full scale and clip.
+         */
+        window.setTimeout(() => void sample(pick(cards), 0.38), delay);
+      }
+      if (count === 0) {
+        for (let hit = 0; hit < 4; hit += 1) {
+          window.setTimeout(() => noise(0.03, 1600 + Math.random() * 500, 0.1), hit * 110);
+        }
+      }
+      break;
+    }
+
+    // One card off the shoe: a hit, a double, or the dealer drawing.
+    case "card":
+      void sample(pickNamed("cards", "taking"), 0.7).then((played) => {
+        if (!played) {
+          noise(0.035, 1700, 0.12);
+        }
+      });
+      break;
+
+    // The hole card turned over, which is the moment the hand is decided.
+    case "reveal":
+      void sample(pickNamed("cards", "placing"), 0.8).then((played) => {
+        if (!played) {
+          noise(0.05, 900, 0.16);
+        }
+      });
+      break;
+
+    // Chips onto the felt.
+    case "bet":
+      void sample(pickNamed("chips", "placing"), 0.75).then((played) => {
+        if (!played) {
+          noise(0.04, 2400, 0.12);
+          tone({ frequency: 660, duration: 0.06, type: "triangle", gain: 0.06 });
+        }
+      });
+      break;
+
+    /*
+     * Chips counted back to you. Only ever on the way in — a loss is silence,
+     * which is both cheaper to listen to and truer to a table.
+     */
+    case "payout":
+      void sample(pickNamed("chips", "counting"), 0.85).then((played) => {
+        if (!played) {
+          [660, 880].forEach((frequency, step) => {
+            tone({ frequency, duration: 0.18, type: "triangle", gain: 0.12, delay: step * 0.09 });
+          });
+        }
       });
       break;
   }

@@ -3,6 +3,7 @@ import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
+import { play } from "../game/audio.js";
 import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
@@ -10,6 +11,7 @@ import { Navbar } from "../nav/Navbar.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
+import { useCardSound } from "./useCardSound.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
 
@@ -31,6 +33,7 @@ export function Blackjack() {
   const back = useCallback(() => navigate("/blackjack"), [navigate]);
   const table = useTableSocket<TableView>("blackjack", back);
   const { state, seatId } = table;
+  useCardSound(state, seatId);
 
   /*
    * Which room you are standing in, on the document rather than this element:
@@ -294,7 +297,12 @@ function Betting({
   isHost: boolean;
   seats: number;
 }) {
-  const stake = (amount: number) => table.act({ type: "bet", amount });
+  const stake = (amount: number) => {
+    // Sounded on the press rather than on the state coming back: the whole
+    // point of a chip sound is that it lands under your finger.
+    play("bet");
+    table.act({ type: "bet", amount });
+  };
 
   return (
     <>

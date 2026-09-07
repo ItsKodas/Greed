@@ -65,7 +65,17 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
 
     if (before !== null && before.status !== "over" && room.status === "over") {
       play("win");
+      // Chips counted out under the fanfare, but only for somebody who is
+      // actually being paid and only when there was a pot to pay from.
+      if (room.pot > 0 && seatId !== null && room.winnerIds.includes(seatId)) {
+        window.setTimeout(() => play("payout"), 520);
+      }
       return;
+    }
+
+    // The stake going on the table, which is a lobby change everyone hears.
+    if (before !== null && room.buyIn > before.buyIn) {
+      play("bet");
     }
 
     if (turn === null) {
