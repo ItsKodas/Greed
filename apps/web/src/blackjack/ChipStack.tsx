@@ -66,8 +66,16 @@ export function ChipStack({ amount, width = 76 }: { amount: number; width?: numb
   const shown = all.slice(0, MOST);
   const hidden = all.length - shown.length;
 
-  const height = (shown.length - 1) * RISE + SIDE + TOP * 2 + 4;
-  const base = height - TOP - 4;
+  /*
+   * The box has to hold the whole drawing, and the bottom chip is the part
+   * that catches you out: its lower edge is an arc that bulges a further TOP
+   * below where the side ends, so a box measured to the side alone clips it.
+   *
+   * Top of the drawing:    base - (n - 1) * RISE - TOP
+   * Bottom of the drawing: base + SIDE + TOP
+   */
+  const base = (shown.length - 1) * RISE + TOP + 1;
+  const height = base + SIDE + TOP + 1;
 
   return (
     <svg
