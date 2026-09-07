@@ -19,6 +19,19 @@
  * avoid. It is survivable here because money is always a figure and never a
  * border, a label or a lit edge, so the two never sit in the same role.
  */
+/*
+ * Two selectors, one block.
+ *
+ * The first is the document wearing this room, and it has to out-rank the
+ * building's own :root tokens — matched on the same element, a bare attribute
+ * selector only ties with them and then loses on whichever stylesheet the
+ * bundler happened to put last. That is how Greed came to be lit blue.
+ *
+ * The second is any element inside a page saying it is a corner of this room —
+ * a tile on the front page. Nothing on <html> competes for those, because a
+ * value set on the element itself always beats one inherited from the root.
+ */
+:root[data-game="greed"],
 [data-game="greed"] {
   --gr-color-night: #241811;
   --gr-color-slate: #3a281c;

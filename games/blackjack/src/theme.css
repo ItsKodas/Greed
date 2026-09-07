@@ -15,6 +15,19 @@
  * floor rather than one table on it, and the walls are the same green gone
  * dark rather than a separate colour.
  */
+/*
+ * Two selectors, one block.
+ *
+ * The first is the document wearing this room, and it has to out-rank the
+ * building's own :root tokens — matched on the same element, a bare attribute
+ * selector only ties with them and then loses on whichever stylesheet the
+ * bundler happened to put last. That is how Greed came to be lit blue.
+ *
+ * The second is any element inside a page saying it is a corner of this room —
+ * a tile on the front page. Nothing on <html> competes for those, because a
+ * value set on the element itself always beats one inherited from the root.
+ */
+:root[data-game="blackjack"],
 [data-game="blackjack"] {
   --gr-color-night: #0b1712;
   --gr-color-slate: #12241c;
