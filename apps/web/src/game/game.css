@@ -1960,6 +1960,15 @@
 }
 
 
+/* The rack under the figure. Centred with it, and never wider than the card. */
+.purse .rack {
+  display: block;
+  margin: var(--gr-space-3) auto 0;
+  max-width: 100%;
+  height: auto;
+  filter: drop-shadow(0 3px 5px rgb(0 0 0 / 0.55));
+}
+
 .purse__note {
   text-align: center;
   font-size: var(--gr-text-xs);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar } from "../game/Avatar.js";
 import { useAccount } from "../game/useAccount.js";
+import { ChipColumns } from "../chips/ChipColumns.js";
 import { Navbar } from "../nav/Navbar.js";
 import { bundle, signed } from "./history.js";
 import type { PlayedGame } from "./history.js";
@@ -102,6 +103,11 @@ function Signed({
           <div className="purse">
             <b className="purse__count">{fmt(profile.chips)}</b>
             <small>chips</small>
+            {/* Racked the way a dealer racks a balance: a short column per
+                denomination, so a large number spreads sideways rather than
+                growing into a tower. The figure above is the exact answer;
+                this is the one you can see the size of. */}
+            <ChipColumns amount={profile.chips} unit={30} />
           </div>
           {/* Only offered when it would grant something. A button whose only
               possible answer is "you have plenty already" is not an offer. */}
