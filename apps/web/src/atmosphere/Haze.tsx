@@ -208,10 +208,13 @@ export function Haze() {
   }, []);
 
   /*
-   * role="presentation" rather than aria-hidden: a canvas counts as focusable,
-   * and hiding a focusable element from the accessibility tree leaves a screen
-   * reader able to land somewhere it is told does not exist. Presentational
-   * says the same thing about a decoration without that contradiction.
+   * No role and no aria-hidden, both deliberately.
+   *
+   * A canvas counts as focusable for the purposes of aria-hidden and as
+   * interactive for the purposes of a presentational role, so it can be given
+   * neither. It needs neither: there is nothing inside it, so there is nothing
+   * for a screen reader to reach or to announce. The empty element is already
+   * the accurate description.
    */
-  return <canvas className="haze" ref={canvasRef} role="presentation" />;
+  return <canvas className="haze" ref={canvasRef} />;
 }
