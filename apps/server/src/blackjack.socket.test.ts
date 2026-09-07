@@ -522,8 +522,12 @@ describe("what a stake does when the hand is over", () => {
     await stateWhere(host, (view) => view.seats.length === 1);
 
     await act(host, { type: "bet", amount: 500 });
-    await stateWhere(host, (view) => view.phase !== "betting", 3000);
-    await stateWhere(host, (view) => view.phase === "settled", 4000);
+    // A natural settles the hand where it stands, so waiting for a settled
+    // state after this one would be waiting for a second hand nobody deals.
+    const dealt = await stateWhere(host, (view) => view.phase !== "betting", 3000);
+    if (dealt.phase !== "settled") {
+      await stateWhere(host, (view) => view.phase === "settled", 4000);
+    }
 
     // The window after that one: nobody has bet in it.
     const next = await stateWhere(host, (view) => view.phase === "betting", 4000);

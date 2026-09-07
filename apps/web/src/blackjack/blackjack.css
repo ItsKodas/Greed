@@ -44,6 +44,10 @@
   min-width: 5.5em;
 }
 
+.bj__dealer .bj-card {
+  --bj-card-w: 64px;
+}
+
 .bj__total {
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
@@ -58,7 +62,15 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
   gap: var(--gr-space-3);
-  align-items: start;
+  /*
+   * Every seat in a row the same height, rather than each one its own.
+   *
+   * Not a fixed height: a stake of nine chips is genuinely taller than a stake
+   * of one, and squashing the pile would throw away the thing a pile is for.
+   * The row grows to whatever the fullest seat in it needs and the rest keep
+   * up, so nothing jumps as a hand is played.
+   */
+  align-items: stretch;
 }
 
 .bj__seat {
@@ -148,18 +160,49 @@
   color: var(--gr-color-chip);
 }
 
+/*
+ * How the hand went, as a mark on the felt rather than a caption under it.
+ *
+ * A pill because it is a verdict: it wants to be findable across four seats at
+ * a glance, and bare text under a row of cards reads as a footnote. Sized to
+ * its own words so a seat with nothing to say has nothing sitting under it.
+ */
 .bj__result {
+  /* Sized to its own words, so it is a pill around the verdict rather than a
+     bar across the seat. */
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: var(--gr-space-2);
+  /* Off the cards. It was sitting against them, which is what made it read as
+     part of the hand rather than as what became of it. */
+  margin-top: var(--gr-space-3);
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
   font-size: var(--gr-text-sm);
-  color: var(--gr-color-ink-dim);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
+  color: var(--gr-color-ink-dim);
+  background: rgb(255 255 255 / 0.05);
+}
+
+/* A hand still being played has nothing to say, and an empty pill is worse
+   than no pill — it is a shape with no content, which reads as a bug. */
+.bj__result:empty {
+  display: none;
 }
 
 .bj__result--good {
   color: var(--gr-color-good);
+  background: color-mix(in srgb, var(--gr-color-good) 15%, transparent);
+  border-color: color-mix(in srgb, var(--gr-color-good) 32%, transparent);
 }
 
 .bj__result--bad {
   color: var(--gr-color-bad);
+  background: color-mix(in srgb, var(--gr-color-bad) 15%, transparent);
+  border-color: color-mix(in srgb, var(--gr-color-bad) 32%, transparent);
 }
 
 .bj__watchers {
@@ -297,7 +340,10 @@
  */
 .bj__felt {
   display: flex;
-  align-items: flex-end;
+  /* The pile, the cards and the count on one line through their middles. The
+     pile sat on the cards' bottom edge before, which read as three things
+     resting on a shelf rather than one hand. */
+  align-items: center;
   gap: var(--gr-space-3);
   /* A long hand shrinks; the number beside it never does. */
   min-width: 0;
@@ -320,11 +366,14 @@
   align-items: flex-start;
 }
 
-/* Nothing dealt yet, so nothing to hold room for — a waiting seat would
-   otherwise be a name above an empty box the size of a hand. */
-.bj-hand:empty {
-  min-height: 0;
-}
+/*
+ * A seat with no cards still holds room for them.
+ *
+ * This used to collapse, on the reasoning that an empty box the size of a hand
+ * is nothing worth showing. It is worth showing: without it a seat sitting a
+ * round out is half the height of the seats beside it, and the whole row
+ * jumps every time somebody joins, folds or is dealt in.
+ */
 
 /*
  * A hand that has outgrown its row, overlapped rather than spread.
@@ -343,6 +392,19 @@
  * never be set to a shape a card is not — and every number inside it scales
  * with the box rather than being re-tuned per size.
  */
+/*
+ * Nothing on the felt is text to be selected.
+ *
+ * Dragging across a hand should not leave half the table highlighted in blue,
+ * and a rank is a drawing that happens to be made of letters. Chat sits
+ * outside this, where selecting text is the entire point.
+ */
+.bj,
+.bj-card {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .bj-card {
   width: var(--bj-card-w, 47px);
   height: auto;
@@ -487,9 +549,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* Level with the cards rather than sitting on their bottom edge: the number
-     answers the whole hand, not its last card. */
-  align-self: center;
   flex: none;
   margin: 0 0 0 var(--gr-space-2);
   line-height: 1;
@@ -751,9 +810,30 @@
   --tilt-x: 0deg;
   --tilt-y: 0deg;
   position: relative;
+  /*
+   * The transition is for coming back to rest, not for following the pointer.
+   * A move sets the angles every frame, and a transform transition restarts on
+   * every one of them — so the card is always easing toward an angle the
+   * pointer has already left, which is what made the corner type shiver.
+   */
   transition:
-    transform 90ms ease-out,
+    transform 220ms ease-out,
     filter 150ms ease-out;
+}
+
+.bj-card:hover {
+  /* Following the pointer directly. Sixty updates a second is already smooth;
+     interpolating between them is what was not. */
+  transition: filter 150ms ease-out;
+  /* Composited as one layer, so the type is not re-hinted every frame. */
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* Snapped-to-pixel hinting is what makes small type jump a whole pixel at a
+   time as a card turns. Precision costs nothing at these sizes. */
+.bj-card__rank {
+  text-rendering: geometricPrecision;
 }
 
 .bj-card:hover {
