@@ -1,10 +1,21 @@
 import type { AddressInfo } from "node:net";
 import { MemoryStore, STARTING_CHIPS } from "@backroom/economy";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createBackRoomServer } from "./server.js";
 import type { BackRoomServer } from "./server.js";
 
 let server: BackRoomServer | null = null;
+
+/*
+ * Who is on the admin list is process-wide state, and a test that reads it
+ * without setting it is a test that depends on whatever ran before it —
+ * including, if the runner ever shares a process between files, something in
+ * another file entirely. Cleared going in as well as coming out, so every test
+ * here starts from the same place whatever happened first.
+ */
+beforeEach(() => {
+  delete process.env["ADMIN_DISCORD_IDS"];
+});
 
 afterEach(async () => {
   if (server !== null) {

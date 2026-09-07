@@ -24,7 +24,9 @@ export type Cue =
   | "reveal"
   /* Money, in both directions: staked, and counted back to you. */
   | "bet"
-  | "payout";
+  | "payout"
+  /* The interface itself: any press, anywhere. */
+  | "tap";
 
 interface Manifest {
   dice?: string[];
@@ -391,6 +393,16 @@ export function play(cue: Cue): void {
       break;
     case "drop":
       noise(0.03, 1400, 0.12);
+      break;
+    case "tap":
+      /*
+       * Under everything, so it has to be felt rather than heard. Shorter and
+       * a third the level of picking a die up: this fires on every press on
+       * the site, and a click with any body to it becomes a nag by the
+       * twentieth time somebody hears it.
+       */
+      noise(0.014, 3400, 0.05);
+      tone({ frequency: 1250, duration: 0.028, type: "triangle", gain: 0.022 });
       break;
     case "bank":
       void sample(pickNamed("chips", "placing"), 0.8).then((played) => {

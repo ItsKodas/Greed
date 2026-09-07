@@ -557,7 +557,7 @@ function Betting({
           </span>
         </p>
       )}
-      <div className="bj__chips">
+      <div className="bj__chips" data-quiet>
         {CHIPS.map((amount) => (
           <button
             key={amount}

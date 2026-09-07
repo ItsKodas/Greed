@@ -3,12 +3,17 @@ import { Admin } from "./admin/Admin.js";
 import { Haze } from "./atmosphere/Haze.js";
 import { Blackjack } from "./blackjack/Blackjack.js";
 import { Play } from "./game/Play.js";
+import { useButtonSound } from "./game/useButtonSound.js";
 import { Profile } from "./profile/Profile.js";
 import { Room } from "./room/Room.js";
 import { TableLink } from "./room/TableLink.js";
 import { Gallery } from "./style/Gallery.js";
 
 export default function App() {
+  // Every press on the site, from one listener. Mounted here because it
+  // belongs to the building rather than to any room in it.
+  useButtonSound();
+
   return (
     <>
       {/* Behind every page, and mounted out here rather than in one: it is the
