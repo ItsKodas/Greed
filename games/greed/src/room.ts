@@ -6,7 +6,7 @@ import {
   scoreSelection,
 } from "@backroom/rules";
 import type { Die, Ruleset } from "@backroom/rules";
-import { MIN_SEATS, Seating, TableError } from "@backroom/core";
+import { MAX_SEATS, MIN_SEATS, Seating, TableError } from "@backroom/core";
 import type { Seat as TableSeat, SeatIdentity } from "@backroom/core";
 import type { Phase, RoomStatus, RoomView, SeatView, TurnView } from "@backroom/shared";
 import type { BotSkill } from "./bot.js";
@@ -60,7 +60,7 @@ export class Room {
   readonly code: string;
   ruleset: Ruleset;
   /** Who is here. Greed adds a score and a board flag to each seat. */
-  private readonly seating = new Seating();
+  private readonly seating: Seating;
 
   get seats(): Seat[] {
     return this.seating.seats as Seat[];
@@ -81,13 +81,25 @@ export class Room {
   /** Seat that reached the target; everyone after it gets one last turn. */
   private finalRoundTrigger: string | null = null;
 
-  constructor(code: string, roll: Roller, ruleset: Ruleset = DEFAULT_RULESET) {
+  constructor(
+    code: string,
+    roll: Roller,
+    ruleset: Ruleset = DEFAULT_RULESET,
+    /** How many may sit here. The host's choice, made when the room opened. */
+    maxSeats: number = MAX_SEATS,
+  ) {
+    this.seating = new Seating(maxSeats);
     this.code = code;
     this.roll = roll;
     this.ruleset = ruleset;
   }
 
   // ---------------------------------------------------------------- lobby
+
+  /** How many may sit here, which the host chose when this table opened. */
+  get maxSeats(): number {
+    return this.seating.limit;
+  }
 
   get hostId(): string | null {
     return this.seating.hostId;

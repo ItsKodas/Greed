@@ -1,4 +1,4 @@
-import { MAX_NAME, MAX_SEATS, TableError } from "./types.js";
+import { MAX_NAME, MAX_SEATS, seatLimit, TableError } from "./types.js";
 import type { BotSkill, Seat, SeatIdentity, TableStatus } from "./types.js";
 
 /**
@@ -15,6 +15,18 @@ import type { BotSkill, Seat, SeatIdentity, TableStatus } from "./types.js";
  */
 export class Seating {
   readonly seats: Seat[] = [];
+  /**
+   * How many may sit here, which the host chose when the table was opened.
+   *
+   * Held by the seating rather than by the game, because "that table is full"
+   * is the seating's answer to give and every game would otherwise have to
+   * remember to ask the same question in the same two places.
+   */
+  readonly limit: number;
+
+  constructor(limit: number = MAX_SEATS) {
+    this.limit = seatLimit(limit);
+  }
   /**
    * Sockets watching without a seat. Held by socket rather than by person:
    * watching is something a connection does, not something an account is, and
@@ -62,7 +74,7 @@ export class Seating {
     identity: SeatIdentity | null = null,
     requireIdentity = false,
   ): Seat {
-    if (this.seats.length >= MAX_SEATS) {
+    if (this.seats.length >= this.limit) {
       throw new TableError("That table is full.");
     }
     const trimmed = name.trim().slice(0, MAX_NAME);
@@ -89,7 +101,7 @@ export class Seating {
   }
 
   addBot(id: string, name: string, skill: BotSkill): Seat {
-    if (this.seats.length >= MAX_SEATS) {
+    if (this.seats.length >= this.limit) {
       throw new TableError("That table is full.");
     }
     const seat: Seat = {

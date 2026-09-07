@@ -123,6 +123,8 @@ export interface ClientToServer {
       game?: string;
       ruleset?: string;
       listed?: boolean;
+      /** How many seats the host wants. Absent means as many as the game allows. */
+      maxSeats?: number;
       /** Play money, so anybody may sit down. The game decides what it means. */
       forFun?: boolean;
     },

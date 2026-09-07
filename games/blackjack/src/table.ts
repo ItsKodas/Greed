@@ -1,5 +1,5 @@
 import type { BotSkill, Seat as TableSeat, SeatIdentity, TableStatus } from "@backroom/core";
-import { MIN_SEATS, Seating, TableError } from "@backroom/core";
+import { MAX_SEATS, MIN_SEATS, Seating, TableError } from "@backroom/core";
 import type { Card } from "./cards.js";
 import { Shoe } from "./cards.js";
 import { isBlackjack, value } from "./hand.js";
@@ -112,6 +112,8 @@ export interface TableView {
    * cannot see how long it started at.
    */
   bettingMs: number;
+  /** How many may sit here, which the host chose when the table opened. */
+  maxSeats: number;
   /**
    * True while the table is holding because there is nobody to play against.
    *
@@ -256,12 +258,19 @@ export class Table {
    */
   lastCallMs = LAST_CALL_MS;
   private turnIndex = -1;
-  private readonly seating = new Seating();
+  private readonly seating: Seating;
   private readonly shoe: Shoe;
 
-  constructor(code: string, random: () => number = Math.random, forFun = false) {
+  constructor(
+    code: string,
+    random: () => number = Math.random,
+    forFun = false,
+    /** How many may sit here. The host's choice, made when the table opened. */
+    maxSeats: number = MAX_SEATS,
+  ) {
     this.code = code;
     this.forFun = forFun;
+    this.seating = new Seating(maxSeats);
     this.shoe = new Shoe(random);
     // Open for business from the moment it exists. There is nobody to press
     // start, because there is no start.
@@ -270,6 +279,11 @@ export class Table {
 
   get seats(): Seat[] {
     return this.seating.seats as Seat[];
+  }
+
+  /** How many may sit here, which the host chose when this table opened. */
+  get maxSeats(): number {
+    return this.seating.limit;
   }
 
   get hostId(): string | null {
@@ -889,6 +903,7 @@ export class Table {
       forFun: this.forFun,
       deadline: this.deadline,
       bettingMs: this.bettingMs,
+      maxSeats: this.seating.limit,
       waitingForPlayers: !this.canDeal,
       dealer: {
         cards: shown,

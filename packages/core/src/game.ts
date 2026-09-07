@@ -16,6 +16,13 @@ export interface PlayTable {
   readonly hostId: string | null;
   readonly isEmpty: boolean;
   readonly lastEvent: string | null;
+  /**
+   * How many may sit here, which the host chose when the table was opened.
+   *
+   * On the table rather than read off the game's listing: a listing says what
+   * a game allows, and two tables of the same game may be different sizes.
+   */
+  readonly maxSeats: number;
 
   join(id: string, name: string, identity: SeatIdentity | null): Seat;
   removeSeat(seatId: string): void;

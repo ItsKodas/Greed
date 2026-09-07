@@ -149,9 +149,6 @@ function Who({ account }: { account: Account }) {
           Top up
         </button>
       ) : null}
-      <button type="button" className="nav__out" onClick={account.signOut}>
-        sign out
-      </button>
     </>
   );
 }

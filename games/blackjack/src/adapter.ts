@@ -1,5 +1,5 @@
 import type { BotMove, Clock, GameAdapter } from "@backroom/core";
-import { TableError } from "@backroom/core";
+import { seatLimit, TableError } from "@backroom/core";
 import { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
 import { value } from "./hand.js";
 import { BLACKJACK } from "./listing.js";
@@ -37,7 +37,12 @@ export function blackjackAdapter(
       // Fixed at the table rather than changeable later: a table anybody may
       // sit at and a table that spends real chips are not the same game with
       // a different label.
-      const table = new Table(code, random, made?.["forFun"] === true);
+      const table = new Table(
+        code,
+        random,
+        made?.["forFun"] === true,
+        seatLimit(made?.["maxSeats"], BLACKJACK.maxSeats),
+      );
       if (options.bettingMs !== undefined) {
         table.bettingMs = options.bettingMs;
         table.deadline = Date.now() + options.bettingMs;

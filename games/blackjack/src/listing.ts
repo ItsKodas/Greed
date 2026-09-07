@@ -7,6 +7,6 @@ export const BLACKJACK: GameListing = {
   blurb: "Beat the dealer to twenty-one.",
   shape: "table",
   minSeats: 1,
-  maxSeats: 6,
+  maxSeats: 10,
   open: true,
 };

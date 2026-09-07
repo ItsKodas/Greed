@@ -389,7 +389,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         game: id,
         host: host?.name ?? "nobody",
         seats: seats.length,
-        maxSeats: seated.game.listing.maxSeats,
+        maxSeats: seated.table.maxSeats,
         watching: seatsWatching(seated.table),
         status: seated.table.status,
       });
@@ -453,7 +453,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       host: host?.name ?? null,
       code,
       seats: seated.table.seats.length,
-      maxSeats: listing.maxSeats,
+      maxSeats: seated.table.maxSeats,
       note: seated.table.status === "lobby" ? "Open — pull up a chair" : "Hand in play",
     };
   }
@@ -1182,6 +1182,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         const table = game.create(code, {
           ruleset: parsed.data.ruleset,
           forFun: parsed.data.forFun,
+          maxSeats: parsed.data.maxSeats,
         });
         rooms.set(code, { game, table, listed: parsed.data.listed ?? true });
         table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);

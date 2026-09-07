@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Seating } from "./seating.js";
-import { MAX_SEATS, TableError } from "./types.js";
+import { MAX_SEATS, MIN_TABLE_SEATS, seatLimit, TableError } from "./types.js";
 
 function identity(userId: string) {
   return { userId, avatar: null, accentColor: null };
@@ -127,5 +127,49 @@ describe("who is at a table", () => {
     expect(bot.skill).toBe("hard");
     expect(bot.userId).toBeNull();
     expect(bot.waiting).toBe(false);
+  });
+});
+
+describe("how big a table the host asked for", () => {
+  it("seats exactly as many as it was opened for, and no more", () => {
+    const seating = new Seating(4);
+    for (let index = 0; index < 4; index += 1) {
+      seating.join(`s${index}`, `P${index}`, "lobby");
+    }
+
+    expect(seating.seats).toHaveLength(4);
+    expect(() => seating.join("late", "Late", "lobby")).toThrow(/full/i);
+  });
+
+  it("never seats more than the house allows, whatever was asked for", () => {
+    // The number arrives from a client, so the ceiling is not negotiable.
+    expect(new Seating(400).limit).toBe(MAX_SEATS);
+    expect(seatLimit(400)).toBe(MAX_SEATS);
+  });
+
+  it("treats one seat, none, and nonsense as no answer at all", () => {
+    /*
+     * A table that will not open is a worse answer than a table with room for
+     * everybody, so anything unusable becomes the ceiling rather than an error.
+     */
+    expect(seatLimit(1)).toBe(MIN_TABLE_SEATS);
+    expect(seatLimit(0)).toBe(MIN_TABLE_SEATS);
+    expect(seatLimit(-5)).toBe(MIN_TABLE_SEATS);
+    expect(seatLimit(undefined)).toBe(MAX_SEATS);
+    expect(seatLimit("six")).toBe(MAX_SEATS);
+    expect(seatLimit(4.5)).toBe(MAX_SEATS);
+  });
+
+  it("cannot be talked past a game's own smaller ceiling", () => {
+    expect(seatLimit(10, 6)).toBe(6);
+    expect(seatLimit(4, 6)).toBe(4);
+  });
+
+  it("holds bots to the same limit as people", () => {
+    const seating = new Seating(2);
+    seating.join("a", "Ada", "lobby");
+    seating.addBot("bot", "Cassie", "normal");
+
+    expect(() => seating.addBot("bot2", "Dot", "normal")).toThrow(/full/i);
   });
 });

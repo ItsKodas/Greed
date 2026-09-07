@@ -51,6 +51,30 @@ export type TableStatus = "lobby" | "playing" | "over";
 
 /** Nobody sits at a table alone by accident; a solo table is practice. */
 export const MIN_SEATS = 1;
-export const MAX_SEATS = 8;
+/**
+ * The most anybody may seat, whatever the game.
+ *
+ * A ceiling rather than a size: a table picks its own limit within this when
+ * it is opened, because six at a card table and ten at one are different
+ * evenings and the host is the one who knows which they want.
+ */
+export const MAX_SEATS = 10;
+/** The fewest a host may cap a table at. One seat is not a table. */
+export const MIN_TABLE_SEATS = 2;
+
+/**
+ * A seat limit somebody asked for, brought inside the house's own.
+ *
+ * Anything unusable becomes the ceiling rather than an error: this arrives
+ * from a client, and a table that will not open is a worse answer than a table
+ * with room for everybody.
+ */
+export function seatLimit(wanted: unknown, ceiling: number = MAX_SEATS): number {
+  const top = Math.min(ceiling, MAX_SEATS);
+  if (typeof wanted !== "number" || !Number.isInteger(wanted)) {
+    return top;
+  }
+  return Math.min(top, Math.max(MIN_TABLE_SEATS, wanted));
+}
 /** The longest a name may be, so one player cannot fill the rail. */
 export const MAX_NAME = 20;

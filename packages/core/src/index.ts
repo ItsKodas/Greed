@@ -5,7 +5,14 @@
  * rules and its own state and borrows the rest: who is sitting down, who is
  * host, who dropped out, who is only watching.
  */
-export { MAX_NAME, MAX_SEATS, MIN_SEATS, TableError } from "./types.js";
+export {
+  MAX_NAME,
+  MAX_SEATS,
+  MIN_SEATS,
+  MIN_TABLE_SEATS,
+  seatLimit,
+  TableError,
+} from "./types.js";
 export type { BotSkill, Seat, SeatIdentity, TableStatus } from "./types.js";
 export { Seating } from "./seating.js";
 export { Catalogue } from "./catalogue.js";

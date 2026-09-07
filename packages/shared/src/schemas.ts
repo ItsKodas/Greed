@@ -30,6 +30,14 @@ export const createSchema = z.object({
   listed: z.boolean().optional(),
   /** A table played for play money, which anybody may sit at. */
   forFun: z.boolean().optional(),
+  /**
+   * How many seats the host wants at it.
+   *
+   * Bounded here as well as clamped on the way in: this is the only number in
+   * the payload a client picks freely, and a table with a thousand seats is a
+   * table nobody can render. Absent means as many as the game allows.
+   */
+  maxSeats: z.number().int().min(2).max(10).optional(),
 });
 
 export const setListedSchema = z.object({ listed: z.boolean() });

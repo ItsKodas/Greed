@@ -14,6 +14,7 @@ import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
+import { SeatCount } from "../table/SeatCount.js";
 import { useTablePeek } from "../table/useTablePeek.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
@@ -759,6 +760,8 @@ function Sit({
    * which is what they came for.
    */
   const [forFun, setForFun] = useState(guest);
+  // Six is a card table; the host may want a bigger or a smaller one.
+  const [maxSeats, setMaxSeats] = useState(6);
   /*
    * A signed-in player's name is the account's and the server will use it
    * whatever is sent here. A guest has none, so at a for-fun table they type
@@ -860,15 +863,17 @@ function Sit({
             ))}
           </div>
 
+          <SeatCount value={maxSeats} onChange={setMaxSeats} />
+
           <p className="panel__note">
-            You get a five-character code to share. Six seats, everybody playing the dealer rather
-            than each other.
+            You get a five-character code to share. Everybody plays the dealer rather than each
+            other.
           </p>
           <button
             type="button"
             className="btn btn--wide"
             disabled={table.busy || !named}
-            onClick={() => table.create(name, { game: "blackjack", forFun })}
+            onClick={() => table.create(name, { game: "blackjack", forFun, maxSeats })}
           >
             Open a table
           </button>

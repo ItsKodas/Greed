@@ -1,5 +1,5 @@
 import { DEFAULT_RULESET, RULESETS } from "@backroom/rules";
-import { TableError } from "@backroom/core";
+import { seatLimit, TableError } from "@backroom/core";
 import type { BotMove, Clock, GameAdapter } from "@backroom/core";
 import { comboGateKeyFor } from "./gatekey.js";
 import { decide, thinkingTime } from "./bot.js";
@@ -39,7 +39,7 @@ export function greedAdapter(
   create(code, made) {
     const wanted = typeof made?.["ruleset"] === "string" ? made["ruleset"] : undefined;
     const chosen = RULESETS.find((candidate) => candidate.name === wanted) ?? DEFAULT_RULESET;
-    return new Room(code, roll, chosen);
+    return new Room(code, roll, chosen, seatLimit(made?.["maxSeats"], GREED.maxSeats));
   },
 
   /**

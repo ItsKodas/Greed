@@ -64,6 +64,7 @@ export function Profile() {
           history={history}
           dailyDue={account.dailyDue}
           onDaily={account.claimDaily}
+          onSignOut={account.signOut}
         />
       )}
       {account.dailyMessage !== null ? (
@@ -78,11 +79,13 @@ function Signed({
   history,
   dailyDue,
   onDaily,
+  onSignOut,
 }: {
   profile: NonNullable<ReturnType<typeof useAccount>["profile"]>;
   history: PlayedGame[];
   dailyDue: boolean;
   onDaily: () => void;
+  onSignOut: () => void;
 }) {
   const { games, wins, chipsWon } = profile.stats;
   const rate = games === 0 ? 0 : Math.round((wins / games) * 100);
@@ -122,6 +125,12 @@ function Signed({
           )}
         </div>
         <Redeem onRedeemed={() => window.location.reload()} />
+        {/* The way out, kept with everything else about being you rather than
+            sitting in the bar beside the volume. Signing out is rare, and it
+            is not a thing to have within a slip of the mouse while playing. */}
+        <button type="button" className="btn btn--ghost btn--wide profile__out" onClick={onSignOut}>
+          Sign out
+        </button>
       </div>
 
       <div className="profile__figures">

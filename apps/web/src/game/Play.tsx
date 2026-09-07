@@ -14,6 +14,7 @@ import type { Account } from "./useAccount.js";
 import { useAccount } from "./useAccount.js";
 import type { RoomActions } from "./useRoom.js";
 import { useRoom } from "./useRoom.js";
+import { SeatCount } from "../table/SeatCount.js";
 import { useSound } from "./useSound.js";
 
 export function Play() {
@@ -197,6 +198,8 @@ function Join({
   const [typed, setTyped] = useState("");
   const [code, setCode] = useState(invited);
   const [ruleset, setRuleset] = useState(RULESETS[0]?.name ?? "Farkle");
+  // Six at a table of dice, which the host may make bigger or smaller.
+  const [maxSeats, setMaxSeats] = useState(6);
 
   // Someone signed in already has a name, and the server will seat them under
   // it whatever this sends — so asking for one would be a question with no
@@ -326,15 +329,16 @@ function Join({
             ))}
           </div>
 
+          <SeatCount value={maxSeats} onChange={setMaxSeats} />
+
           <p className="panel__note">
-            You get a five-character code to share. Up to eight players, or start alone to
-            practise.
+            You get a five-character code to share, or start alone to practise.
           </p>
           <button
             type="button"
             className="btn btn--ghost btn--wide"
             disabled={!ready}
-            onClick={() => actions.create(name, ruleset)}
+            onClick={() => actions.create(name, ruleset, maxSeats)}
           >
             Open a table
           </button>

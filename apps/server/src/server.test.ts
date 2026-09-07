@@ -742,7 +742,9 @@ describe("tables anybody can walk up to", () => {
       game: "greed",
       host: "Ada",
       seats: 1,
-      maxSeats: 8,
+      // The table's own limit, not the game's ceiling: a host who wanted a
+      // smaller table should be advertising the table they actually opened.
+      maxSeats: 10,
       status: "lobby",
     });
   });

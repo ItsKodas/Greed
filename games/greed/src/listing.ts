@@ -7,6 +7,6 @@ export const GREED: GameListing = {
   blurb: "Six dice. Bank it or lose it.",
   shape: "table",
   minSeats: 1,
-  maxSeats: 8,
+  maxSeats: 10,
   open: true,
 };

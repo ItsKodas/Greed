@@ -66,7 +66,7 @@ function writeSeat(seat: StoredSeat | null): void {
 }
 
 export interface RoomActions {
-  create: (name: string, ruleset: string) => void;
+  create: (name: string, ruleset: string, maxSeats?: number) => void;
   join: (name: string, code: string) => void;
   /** Watch a table without taking a seat at it. */
   watch: (code: string) => void;
@@ -232,13 +232,13 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const create = useCallback((name: string, ruleset: string) => {
+  const create = useCallback((name: string, ruleset: string, maxSeats?: number) => {
     const socket = socketRef.current;
     if (socket === null) {
       return;
     }
     setBusy(true);
-    socket.emit("lobby:create", { name, ruleset }, (result) => {
+    socket.emit("lobby:create", { name, ruleset, maxSeats }, (result) => {
       setBusy(false);
       if (result.ok) {
         setSeatId(result.seatId);
