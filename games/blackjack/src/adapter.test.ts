@@ -27,6 +27,35 @@ function ledger(balances: Record<string, number> = {}) {
 
 const identity = (userId: string) => ({ userId, avatar: null, accentColor: null });
 
+describe("a bot at the felt", () => {
+  it("does not bet once last call has gone out", () => {
+    const game = blackjackAdapter();
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+    table.addBot("bot", "Cassie", "normal");
+
+    // While the window is open there is a bet waiting to be made.
+    expect(game.botMove?.(table)).not.toBeNull();
+
+    table.deadline = Date.now() + 2000;
+    expect(game.botMove?.(table)).toBeNull();
+  });
+
+  it("holds its chips when it thinks right through last call", () => {
+    const game = blackjackAdapter();
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+    const bot = table.addBot("bot", "Cassie", "normal");
+    const move = game.botMove?.(table);
+
+    // Offered while the window was open, played after it shut.
+    table.deadline = Date.now() + 2000;
+    move?.play();
+
+    expect(bot.hands[0]?.bet).toBe(0);
+  });
+});
+
 describe("what blackjack does with chips", () => {
   it("takes a stake as it is placed, not at the deal", async () => {
     const game = blackjackAdapter();
@@ -53,6 +82,37 @@ describe("what blackjack does with chips", () => {
 
     await game.act(table, "a", { type: "bet", amount: 500 }, deps);
     expect(balances["u1"]).toBe(9500);
+  });
+
+  it("takes nothing for a bet that arrives after last call", async () => {
+    const game = blackjackAdapter();
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+    const { deps, balances, moves } = ledger({ u1: 10_000 });
+    await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
+    // The deal a moment away, rather than half a minute of waiting.
+    table.deadline = Date.now() + 2000;
+
+    await expect(
+      game.act(table, "a", { type: "bet", amount: 1500 }, deps),
+    ).rejects.toThrow(/last call/i);
+
+    // Refused by the table before the account was ever asked.
+    expect(balances["u1"]).toBe(9000);
+    expect(moves).toEqual(["take u1 1000"]);
+  });
+
+  it("gives back a stake pulled off the felt after last call", async () => {
+    const game = blackjackAdapter();
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+    const { deps, balances } = ledger({ u1: 10_000 });
+    await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
+    table.deadline = Date.now() + 2000;
+
+    await game.act(table, "a", { type: "bet", amount: 0 }, deps);
+
+    expect(balances["u1"]).toBe(10_000);
   });
 
   it("refuses a bet that cannot be covered, and leaves the seat alone", async () => {

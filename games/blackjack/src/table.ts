@@ -134,6 +134,19 @@ const DEALER_STANDS = 17;
  * an evening without the table needing a host to keep it going.
  */
 export const BETTING_MS = 30_000;
+/**
+ * How long before the deal the felt stops taking chips.
+ *
+ * Only additions stop. A stake can come off right up to the last second,
+ * because a misclick you cannot undo is worse than a hand you sat out.
+ *
+ * The rule is for the players first — a stake that lands as the cards come out
+ * is one nobody at the table had a chance to see — and it also drains the
+ * moment where a bet and the deal race each other: chips are taken after the
+ * table has accepted a bet, and a deal landing in between would put a seat in
+ * a hand it had not paid for.
+ */
+export const LAST_CALL_MS = 5_000;
 /** Long enough to read what happened before the felt is cleared. */
 export const SETTLE_MS = 6_000;
 /** How long one player may think before the table plays their hand for them. */
@@ -200,6 +213,15 @@ export class Table {
    */
   bettingMs = BETTING_MS;
   settleMs = SETTLE_MS;
+  /**
+   * How much of the betting window takes no more chips.
+   *
+   * A field for the same reason as the other two, and with one rule the others
+   * do not have: it has to be shorter than the window it closes, or the felt
+   * is shut from the moment it opens. Zero is a table with no last call at
+   * all, which is what a test hurrying the window round wants.
+   */
+  lastCallMs = LAST_CALL_MS;
   private turnIndex = -1;
   private readonly seating = new Seating();
   private readonly shoe: Shoe;
@@ -223,6 +245,21 @@ export class Table {
 
   get isEmpty(): boolean {
     return this.seating.isEmpty;
+  }
+
+  /**
+   * Whether the felt has stopped taking chips.
+   *
+   * False outside the betting phase, where there is nothing to add to anyway.
+   * Worked out from the clock rather than stored, because nothing happens at
+   * the table when last call arrives — no deal, no event, nothing to hang a
+   * flag off. It is simply true from then on.
+   */
+  get lastCall(): boolean {
+    if (this.phase !== "betting" || this.deadline === null) {
+      return false;
+    }
+    return this.deadline - Date.now() <= this.lastCallMs;
   }
 
   /** Everyone actually in the hand being played. */
@@ -343,6 +380,10 @@ export class Table {
      */
     // Betting happens before any split, so there is exactly one hand to stake.
     const hand = seat.hands[0] as PlayerHand;
+    // Last call: chips may still come off the felt, but nothing more goes on.
+    if (amount > hand.bet && this.lastCall) {
+      throw new TableError("Last call — you can only take chips back now.");
+    }
     if (this.forFun) {
       const available = seat.purse + hand.bet;
       if (amount > available) {

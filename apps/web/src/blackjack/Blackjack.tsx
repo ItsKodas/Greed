@@ -1,4 +1,4 @@
-import { value } from "@backroom/game-blackjack";
+import { LAST_CALL_MS, value } from "@backroom/game-blackjack";
 import type { TableView } from "@backroom/game-blackjack";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -420,18 +420,35 @@ function Betting({
     table.act({ type: "bet", amount });
   };
 
+  /*
+   * The clock is read here rather than handed to Countdown, because the same
+   * number has two jobs on this panel: it is what the line says, and it is
+   * what the chips are locked by. Two clocks would eventually disagree by a
+   * tick, and a chip that refuses itself a second before the line says so is
+   * the table lying about its own rule.
+   */
+  const left = useCountdown(deadline);
+  const lastCall = left !== null && left <= LAST_CALL_MS / 1000;
+
   return (
     <>
       <p className="panel__label">Your bet</p>
-      <Countdown endsAt={deadline} verb="Cards out in" />
+      {left === null ? null : (
+        <p className={`bj__clock${lastCall ? " bj__clock--last" : ""}`}>
+          <ClockIcon />
+          <span>
+            {lastCall ? "Last call" : "Cards out in"} {left}s
+          </span>
+        </p>
+      )}
       <div className="bj__chips">
         {CHIPS.map((amount) => (
           <button
             key={amount}
             type="button"
             className="bj__chip"
-            disabled={mine + amount > max}
-            title={`Add ${fmt(amount)}`}
+            disabled={lastCall || mine + amount > max}
+            title={lastCall ? "Too late to add to a stake" : `Add ${fmt(amount)}`}
             onClick={() => stake(mine + amount)}
           >
             <Chip amount={amount} />
@@ -513,7 +530,8 @@ function Betting({
       ) : (
         <p className="panel__note">
           The table deals itself. Anything on the felt when the clock runs out
-          is in the hand.
+          is in the hand — and the last few seconds take nothing more, though
+          you can still pull your chips off.
         </p>
       )}
     </>

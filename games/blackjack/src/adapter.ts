@@ -21,6 +21,8 @@ export function blackjackAdapter(
     bettingMs?: number;
     /** How long a finished hand stays up to be read. */
     settleMs?: number;
+    /** How much of the betting window takes no more chips. */
+    lastCallMs?: number;
     /** How long one player may think before the table plays their hand. */
     turnMs?: number;
   } = {},
@@ -42,6 +44,9 @@ export function blackjackAdapter(
       }
       if (options.settleMs !== undefined) {
         table.settleMs = options.settleMs;
+      }
+      if (options.lastCallMs !== undefined) {
+        table.lastCallMs = options.lastCallMs;
       }
       return table;
     },
@@ -219,6 +224,12 @@ export function blackjackAdapter(
      */
     botMove(table): BotMove | null {
       if (table.phase === "betting") {
+        // Last call binds a bot too. Nothing to offer once the felt has
+        // stopped taking chips, which is also what ends this loop: a bot that
+        // never bets is asked again, and after last call the answer is none.
+        if (table.lastCall) {
+          return null;
+        }
         const waiting = table.seats.find(
           (seat) => seat.isBot && !seat.waiting && (seat.hands[0]?.bet ?? 0) === 0,
         );
@@ -230,7 +241,12 @@ export function blackjackAdapter(
           seatId: waiting.id,
           delayMs: thinkingTime(skill),
           play() {
-            table.bet(waiting.id, betFor(skill));
+            // It may have thought right through last call, and the table would
+            // refuse the bet — which here would be a throw with nobody to hear
+            // it, because there is no player behind this move.
+            if (!table.lastCall) {
+              table.bet(waiting.id, betFor(skill));
+            }
           },
         };
       }

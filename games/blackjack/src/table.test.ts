@@ -101,6 +101,63 @@ describe("taking a stake", () => {
   });
 });
 
+describe("last call", () => {
+  /** A table with the deal a moment away, rather than half a minute. */
+  function closing(): Table {
+    const table = new Table("TEST1");
+    seatTwo(table);
+    table.bet("a", 500);
+    // Inside the last five seconds, without a test waiting twenty-five of them.
+    table.deadline = Date.now() + 2000;
+    return table;
+  }
+
+  it("stops taking chips in the last seconds before the deal", () => {
+    const table = closing();
+
+    expect(() => table.bet("a", 1000)).toThrow(TableError);
+    expect(() => table.bet("a", 1000)).toThrow(/last call/i);
+    // And the felt is where it was: a refused bet is not a bet.
+    expect(table.seats[0]?.hands[0]?.bet).toBe(500);
+  });
+
+  it("lets you take your chips back right up to the deal", () => {
+    const table = closing();
+
+    table.bet("a", 0);
+
+    expect(table.seats[0]?.hands[0]?.bet).toBe(0);
+    expect(table.lastEvent).toMatch(/took their chips back/i);
+  });
+
+  it("lets you leave less on the felt, which is the same direction", () => {
+    const table = closing();
+
+    table.bet("a", 200);
+
+    expect(table.seats[0]?.hands[0]?.bet).toBe(200);
+  });
+
+  it("has not gone out while the window is still open", () => {
+    const table = new Table("TEST1");
+    seatTwo(table);
+
+    expect(table.lastCall).toBe(false);
+    table.bet("a", 1000);
+    expect(table.seats[0]?.hands[0]?.bet).toBe(1000);
+  });
+
+  it("is not a thing between hands, when there is nothing to add to", () => {
+    const table = stacked("5", "6", "7", "8");
+    seatTwo(table);
+    table.bet("a", 500);
+    table.closeBetting();
+
+    // Playing, with no deadline at all: last call is a fact about the window.
+    expect(table.lastCall).toBe(false);
+  });
+});
+
 describe("the dealer's hole card", () => {
   it("is not in the view while the hand is being played", () => {
     // Ada 10, dealer 9, Ada 7, dealer K — so the dealer's second card is a king.

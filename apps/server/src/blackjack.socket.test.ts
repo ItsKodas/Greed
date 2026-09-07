@@ -66,7 +66,7 @@ async function startRoom(
    * actions they are trying to take; the one test that is about the loop
    * turns it right down.
    */
-  timings: { bettingMs?: number; settleMs?: number; turnMs?: number } = {},
+  timings: { bettingMs?: number; settleMs?: number; turnMs?: number; lastCallMs?: number } = {},
   // A long window for bets so the table does not deal underneath a test that
   // is still setting itself up, and almost no wait between rounds so one that
   // needs several hands is not sitting through six seconds of each.
@@ -102,6 +102,7 @@ async function startRoom(
     bettingMs,
     settleMs,
     ...(timings.turnMs === undefined ? {} : { turnMs: timings.turnMs }),
+    ...(timings.lastCallMs === undefined ? {} : { lastCallMs: timings.lastCallMs }),
     identify: () => {
       const id = ids[seen] ?? null;
       seen += 1;
@@ -377,7 +378,10 @@ describe("blackjack over the wire", () => {
      * window opens for bets, closes itself, the hand is played, and the felt
      * is cleared for the next one — all on the table's clock.
      */
-    const { port } = await startRoom(["Ada"], { bettingMs: 150, settleMs: 120 });
+    // No last call at this table: five seconds of one would shut a window
+    // that is only open for a fraction of one, and this test is about the
+    // loop coming round rather than about what the felt takes.
+    const { port } = await startRoom(["Ada"], { bettingMs: 150, settleMs: 120, lastCallMs: 0 });
     const host = await client(port);
     await open_(host, "Ada");
     await stateWhere(host, (view) => view.seats.length === 1);
@@ -462,6 +466,29 @@ describe("blackjack over the wire", () => {
     expect(botHands.every((hand) => hand.cards.length >= 2)).toBe(true);
     // A bot never bust while standing pat: it took its own decisions.
     expect(over.turnSeatId).toBeNull();
+  });
+
+  it("stops taking chips once last call has gone out", async () => {
+    /*
+     * A window that is last call from the moment it opens, which is the only
+     * way to test the rule without a test that sits through twenty-five
+     * seconds of a real one.
+     */
+    const { port } = await startRoom(["Ada"], { bettingMs: 30_000, lastCallMs: 30_000 });
+    const host = await client(port);
+    await open_(host, "Ada");
+    await stateWhere(host, (view) => view.seats.length === 1);
+
+    const told = host.seen.length;
+
+    const refused = new Promise<string>((resolve) => host.once("room:error", resolve));
+    await act(host, { type: "bet", amount: 500 });
+
+    expect(await refused).toMatch(/last call/i);
+    // Nothing on the felt, and nothing said about it: a refused bet is not an
+    // event, so the table never told anybody anything happened.
+    expect(host.seen).toHaveLength(told);
+    expect(host.latest?.seats[0]?.bet).toBe(0);
   });
 
   it("will not take a verb from another game", async () => {

@@ -72,6 +72,11 @@ export interface BackRoomServerOptions {
   bettingMs?: number;
   settleMs?: number;
   turnMs?: number;
+  /**
+   * How much of that window takes no more chips. Only meaningful shorter than
+   * the window itself, so a test hurrying a table has to turn this down too.
+   */
+  lastCallMs?: number;
   /** How long a dropped player keeps their seat. */
   reconnectGraceMs?: number;
   /** How long an abandoned table survives. */
@@ -168,6 +173,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     bettingMs,
     settleMs,
     turnMs,
+    lastCallMs,
     reconnectGraceMs = 90_000,
     emptyRoomTtlMs = 5 * 60 * 1000,
     clientOrigin = "http://localhost:5173",
@@ -453,6 +459,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         ...(bettingMs === undefined ? {} : { bettingMs }),
         ...(settleMs === undefined ? {} : { settleMs }),
         ...(turnMs === undefined ? {} : { turnMs }),
+        ...(lastCallMs === undefined ? {} : { lastCallMs }),
       }) as GameAdapter<PlayTable>,
     ],
   ]);

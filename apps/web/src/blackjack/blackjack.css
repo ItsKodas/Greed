@@ -371,3 +371,12 @@
   height: 16px;
   flex: none;
 }
+
+/* Last call. Gold rather than neon, because this is a line about chips and
+   not about the table being alive, and the chips above it have just gone
+   grey — the colour has to move somewhere the eye is already going. */
+.bj__clock--last {
+  color: var(--gr-color-chip);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
