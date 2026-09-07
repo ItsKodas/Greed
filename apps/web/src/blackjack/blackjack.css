@@ -189,39 +189,48 @@
 }
 
 /*
- * A chip, not a button: round, edged, and stacked rather than chosen from.
- * Gold only on the rim and the number, so it reads as money without becoming
- * the brightest thing on the page.
+ * The chip is drawn, not styled — see Chip.tsx. What is left here is only how
+ * it behaves under a pointer, so the button itself is nothing but a hit area
+ * with no box of its own to show through the round shape inside it.
  */
 .bj__chip {
-  aspect-ratio: 1;
   padding: 0;
+  border: none;
+  background: none;
   border-radius: 50%;
-  border: 2px dashed color-mix(in srgb, var(--gr-color-chip) 60%, transparent);
-  background: radial-gradient(circle at 50% 34%, var(--gr-color-smoke-lit), var(--gr-color-shadow));
-  color: var(--gr-color-chip-hi);
-  font-family: var(--gr-font-data);
-  font-variant-numeric: tabular-nums;
-  font-size: var(--gr-text-xs);
+  line-height: 0;
   cursor: pointer;
-  box-shadow: var(--gr-lift-low);
+  transition:
+    transform 0.1s ease,
+    filter 0.1s ease;
 }
 
+.bj__chip .chip {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.5));
+}
+
+/* Picked up. */
 .bj__chip:hover:not(:disabled) {
-  border-color: var(--gr-color-chip);
-  color: #fff;
-  transform: translateY(-1px);
+  transform: translateY(-3px);
+}
+
+.bj__chip:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .bj__chip:focus-visible {
   outline: 2px solid var(--gr-color-neon-hi);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
+/* More than the stake allows: still a chip, just not one you can reach. */
 .bj__chip:disabled {
-  opacity: 0.3;
+  opacity: 0.25;
   cursor: not-allowed;
-  box-shadow: none;
+  filter: grayscale(0.7);
 }
 
 .bj__stake {

@@ -13,6 +13,7 @@ import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
+import { Chip } from "./Chip.js";
 import { useCardSound } from "./useCardSound.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
@@ -378,9 +379,10 @@ function Betting({
             type="button"
             className="bj__chip"
             disabled={mine + amount > max}
+            title={`Add ${fmt(amount)}`}
             onClick={() => stake(mine + amount)}
           >
-            {fmt(amount)}
+            <Chip amount={amount} />
           </button>
         ))}
       </div>
