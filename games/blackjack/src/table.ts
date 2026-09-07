@@ -14,6 +14,15 @@ export interface Seat extends TableSeat {
   outcome: Outcome | null;
   /** Chips handed back when the hand settled — stake included. */
   returned: number;
+  /**
+   * Play money, at a table playing for none.
+   *
+   * Only ever touched at a for-fun table, where it is the whole economy: it
+   * is made up when the seat sits down, it never reaches an account, and it
+   * dies with the table. At a table playing for real chips it stays at zero
+   * and the economy is asked instead.
+   */
+  purse: number;
 }
 
 export type Outcome = "blackjack" | "won" | "push" | "lost" | "bust";
@@ -37,6 +46,8 @@ export interface SeatView {
   done: boolean;
   outcome: Outcome | null;
   returned: number;
+  /** Play money at a for-fun table, and zero everywhere else. */
+  purse: number;
 }
 
 export interface TableView {
@@ -58,10 +69,19 @@ export interface TableView {
   };
   minBet: number;
   maxBet: number;
+  /** True when nothing at this table is played for real chips. */
+  forFun: boolean;
 }
 
 const MIN_BET = 100;
 const MAX_BET = 10_000;
+/**
+ * What a seat is handed at a for-fun table, and topped back up to when it runs
+ * dry. There is nothing to protect here — the point of play money is that
+ * losing it costs nothing — so running out ends the fun rather than teaching
+ * anybody a lesson.
+ */
+const FUN_PURSE = 5_000;
 /** The dealer takes cards to here and stops, soft or hard. */
 const DEALER_STANDS = 17;
 
@@ -75,6 +95,15 @@ const DEALER_STANDS = 17;
  */
 export class Table {
   readonly code: string;
+  /**
+   * Whether this table plays for play money.
+   *
+   * Fixed when the table is opened. It cannot be changed afterwards, because
+   * the two are not the same game with a different label on it: one can be
+   * sat at by anybody and pays nothing, and the other takes chips out of a
+   * real account.
+   */
+  readonly forFun: boolean;
   status: TableStatus = "lobby";
   phase: Phase = "betting";
   lastEvent: string | null = null;
@@ -83,8 +112,9 @@ export class Table {
   private readonly seating = new Seating();
   private readonly shoe: Shoe;
 
-  constructor(code: string, random: () => number = Math.random) {
+  constructor(code: string, random: () => number = Math.random, forFun = false) {
     this.code = code;
+    this.forFun = forFun;
     this.shoe = new Shoe(random);
   }
 
@@ -108,10 +138,16 @@ export class Table {
   // ------------------------------------------------------------- the table
 
   join(id: string, name: string, identity: SeatIdentity | null = null): Seat {
-    // Always true here, unlike Greed: there is no friendly blackjack, because
-    // a hand without a stake has nothing to decide.
-    const seat = this.seating.join(id, name, this.status, identity, true) as Seat;
+    /*
+     * A hand with nothing staked has nothing to decide, so a blackjack table
+     * always plays for something — but it need not be somebody's real chips.
+     * At a for-fun table the stake is play money the table invents, which is
+     * a stake for the purposes of the game and no reason to ask who anybody
+     * is.
+     */
+    const seat = this.seating.join(id, name, this.status, identity, !this.forFun) as Seat;
     this.clear(seat);
+    seat.purse = this.forFun ? FUN_PURSE : 0;
     this.lastEvent = `${seat.name} sat down`;
     return seat;
   }
@@ -119,6 +155,8 @@ export class Table {
   addBot(id: string, name: string, skill: BotSkill): Seat {
     const seat = this.seating.addBot(id, name, skill) as Seat;
     this.clear(seat);
+    // A bot has no account either way, so its money is always made up.
+    seat.purse = FUN_PURSE;
     return seat;
   }
 
@@ -155,6 +193,7 @@ export class Table {
     this.seating.remove(seatId);
   }
 
+  /** Resets the hand. Never the purse: that outlives every hand at the table. */
   private clear(seat: Seat): void {
     seat.bet = 0;
     seat.cards = [];
@@ -195,6 +234,19 @@ export class Table {
     if (!Number.isInteger(amount) || (!withdrawn && (amount < MIN_BET || amount > MAX_BET))) {
       throw new TableError(`Bets are between ${MIN_BET} and ${MAX_BET}.`);
     }
+    /*
+     * At a for-fun table the purse is the only thing stopping a bet, because
+     * there is no account to ask. Whatever is already staked counts as
+     * available: changing a bet is not spending twice.
+     */
+    if (this.forFun) {
+      const available = seat.purse + seat.bet;
+      if (amount > available) {
+        throw new TableError("You do not have that many chips.");
+      }
+      seat.purse = available - amount;
+    }
+
     seat.bet = amount;
     this.lastEvent = withdrawn
       ? `${seat.name} took their chips back`
@@ -292,6 +344,12 @@ export class Table {
       throw new TableError("You can only double on your first two cards.");
     }
     const extra = seat.bet;
+    if (this.forFun) {
+      if (seat.purse < extra) {
+        throw new TableError("You cannot cover a double.");
+      }
+      seat.purse -= extra;
+    }
     seat.bet += extra;
     seat.cards.push(this.shoe.draw());
     seat.done = true;
@@ -388,6 +446,17 @@ export class Table {
       seat.returned = seat.bet * 2;
     }
 
+    /*
+     * Play money is paid here rather than by the adapter, because there is
+     * nobody to ask: the economy never hears about a for-fun table, so the
+     * table is the only thing that can hand anything back.
+     */
+    if (this.forFun) {
+      for (const seat of this.playing) {
+        seat.purse += seat.returned;
+      }
+    }
+
     this.phase = "settled";
     this.status = "over";
     this.lastEvent = dealer.bust ? `Dealer bust on ${dealer.total}` : `Dealer has ${dealer.total}`;
@@ -403,6 +472,15 @@ export class Table {
     }
     for (const seat of this.seats) {
       this.clear(seat);
+      /*
+       * Topped back up rather than shown the door. There is nothing to protect
+       * at a table playing for nothing — the point of play money is that
+       * losing it costs nothing — so running out should end a hand, not the
+       * evening.
+       */
+      if (this.forFun && seat.purse < MIN_BET) {
+        seat.purse = FUN_PURSE;
+      }
     }
     this.seating.dealInWaiting();
     this.dealer = [];
@@ -437,6 +515,7 @@ export class Table {
       turnSeatId: current?.id ?? null,
       minBet: MIN_BET,
       maxBet: MAX_BET,
+      forFun: this.forFun,
       dealer: {
         cards: shown,
         total: value(shown).total,
@@ -460,6 +539,7 @@ export class Table {
           done: seat.done,
           outcome: seat.outcome,
           returned: seat.returned,
+          purse: seat.purse,
         };
       }),
     };

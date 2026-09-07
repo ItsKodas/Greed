@@ -100,6 +100,21 @@
   color: var(--gr-color-chip);
 }
 
+/*
+ * Play money, at a table playing for none.
+ *
+ * Deliberately not gold. Gold is this building's promise that a figure is
+ * your money, and this figure is not — it is invented at the table, never
+ * reaches an account, and dies when the table does.
+ */
+.bj__purse {
+  margin-left: auto;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-faint);
+}
+
 .bj__result {
   font-size: var(--gr-text-sm);
   color: var(--gr-color-ink-dim);

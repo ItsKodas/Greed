@@ -855,7 +855,12 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           return;
         }
         const code = makeCode();
-        const table = game.create(code, { ruleset: parsed.data.ruleset });
+        // Handed along without being read: what a game does with these, or
+        // whether it does anything at all, is the game's own business.
+        const table = game.create(code, {
+          ruleset: parsed.data.ruleset,
+          forFun: parsed.data.forFun,
+        });
         rooms.set(code, { game, table, listed: parsed.data.listed ?? true });
         table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code, seatId: socket.id });

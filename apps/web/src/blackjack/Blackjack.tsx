@@ -139,6 +139,12 @@ function Felt({
                 {seat.id === seatId ? " (you)" : ""}
               </span>
               {seat.bet > 0 ? <span className="bj__bet">{fmt(seat.bet)}</span> : null}
+              {/* Play money lives on the table and nowhere else, so the table
+                  is the only place it can be shown. Real chips are in the bar
+                  already and would only be a second, disagreeing copy. */}
+              {state.forFun && seat.bet === 0 ? (
+                <span className="bj__purse">{fmt(seat.purse)}</span>
+              ) : null}
             </header>
             <Hand cards={seat.cards} />
             <footer className={`bj__result${outcomeTone(seat.outcome)}`}>
@@ -400,12 +406,21 @@ function Sit({
 }) {
   const [code, setCode] = useState(invited);
   const ready = code.length === CODE_LENGTH && !table.busy;
+  const guest = account.profile === null;
+  const [typed, setTyped] = useState("");
   /*
-   * The server ignores this and uses the name on the account, which is the
-   * only name a blackjack seat can have. It is sent because the protocol asks
-   * for one, not because it decides anything.
+   * A guest has no chips to stake, so their table is the play-money one. A
+   * signed-in player is offered the choice and starts on the real thing,
+   * which is what they came for.
    */
-  const name = account.profile?.name ?? "";
+  const [forFun, setForFun] = useState(guest);
+  /*
+   * A signed-in player's name is the account's and the server will use it
+   * whatever is sent here. A guest has none, so at a for-fun table they type
+   * one — which is the only reason this field exists at all.
+   */
+  const name = account.profile?.name ?? typed.trim();
+  const named = name.length > 0;
 
   return (
     <div className="join">
@@ -413,14 +428,25 @@ function Sit({
         Beat the dealer to twenty-one without going past it. Blackjack pays three to two, the
         dealer stands on seventeen.
       </p>
-      {account.loading ? null : account.profile === null ? (
+      {account.loading || !guest ? null : (
+        <label className="field">
+          <span className="field__label">Your name</span>
+          <input
+            className="field__input"
+            value={typed}
+            maxLength={20}
+            placeholder="Ada"
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        </label>
+      )}
+
+      {account.loading || !guest ? null : (
         <p className="join__warn">
-          {/* Not a limitation worth hiding: a hand with nothing staked has
-              nothing to decide, so there is no friendly blackjack to offer. */}
-          Every hand is played for chips, so you will need to sign in before you can sit down. You
-          can still watch a table.
+          Playing for fun deals you five thousand chips that live at the table and nowhere else.
+          Sign in to play for real ones.
         </p>
-      ) : null}
+      )}
       <div className="join__split">
         <div className="panel">
           <p className="panel__label">Join a table</p>
@@ -432,10 +458,12 @@ function Sit({
             aria-label="Table code"
             onChange={(event) => setCode(event.target.value.toUpperCase())}
           />
+          {/* Not gated on signing in: whether a guest may sit depends on the
+              table, which only the server knows. It refuses in words. */}
           <button
             type="button"
             className="btn btn--wide"
-            disabled={!ready || account.profile === null}
+            disabled={!ready || !named}
             onClick={() => table.join(name, code)}
           >
             Take a seat
@@ -451,6 +479,32 @@ function Sit({
         </div>
         <div className="panel">
           <p className="panel__label">Open your own</p>
+
+          <div className="variants" role="radiogroup" aria-label="What the table plays for">
+            {[false, true].map((option) => (
+              <button
+                key={String(option)}
+                type="button"
+                role="radio"
+                aria-checked={forFun === option}
+                // A guest has nothing real to stake, so the choice is not
+                // offered rather than offered and refused.
+                disabled={!option && guest}
+                className={`variant${forFun === option ? " variant--on" : ""}`}
+                onClick={() => setForFun(option)}
+              >
+                <span className="variant__name">{option ? "For fun" : "For chips"}</span>
+                <span className="variant__note">
+                  {option
+                    ? "Play money that lives at the table. Anybody can sit down."
+                    : guest
+                      ? "Sign in to play for real chips."
+                      : "Real chips, from your balance."}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <p className="panel__note">
             You get a five-character code to share. Six seats, everybody playing the dealer rather
             than each other.
@@ -458,8 +512,8 @@ function Sit({
           <button
             type="button"
             className="btn btn--wide"
-            disabled={table.busy || account.profile === null}
-            onClick={() => table.create(name, { game: "blackjack" })}
+            disabled={table.busy || !named}
+            onClick={() => table.create(name, { game: "blackjack", forFun })}
           >
             Open a table
           </button>
@@ -469,8 +523,8 @@ function Sit({
       <PublicTables
         game="blackjack"
         busy={table.busy}
-        canSit={account.profile !== null}
-        whyNotSit="Every hand is played for chips, so you will need to sign in."
+        canSit={named}
+        whyNotSit="Put in a name first."
         onJoin={(open) => table.join(name, open)}
         onWatch={(open) => table.watch(open)}
       />

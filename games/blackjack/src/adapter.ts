@@ -20,8 +20,11 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
   return {
     listing: BLACKJACK,
 
-    create(code) {
-      return new Table(code, random);
+    create(code, made) {
+      // Fixed at the table rather than changeable later: a table anybody may
+      // sit at and a table that spends real chips are not the same game with
+      // a different label.
+      return new Table(code, random, made?.["forFun"] === true);
     },
 
     async act(table, seatId, action, deps) {
@@ -37,6 +40,13 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           const already = seat.bet;
           // Validated by the table first, so a refusal costs nobody anything.
           table.bet(seatId, amount);
+          /*
+           * Play money never leaves the table, so there is nothing here to do
+           * and nobody to ask — which is exactly what lets a guest sit down.
+           */
+          if (table.forFun) {
+            return;
+          }
           if (seat.userId === null) {
             throw new TableError("Sign in to play for chips.");
           }
@@ -63,6 +73,11 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           table.stand(seatId);
           return;
         case "double": {
+          if (table.forFun) {
+            // The table keeps the purse; doubling against it is its own affair.
+            table.double(seatId);
+            return;
+          }
           if (seat.userId === null) {
             throw new TableError("Sign in to play for chips.");
           }
@@ -169,6 +184,16 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
      * ever gives. A loss is simply nothing coming back.
      */
     async settle(table, deps) {
+      /*
+       * Nothing to settle at a table playing for nothing. The purse was paid
+       * by the table itself, and a hand that cost nobody anything belongs in
+       * no record: counting it would make a win rate mean two things at once,
+       * the same reason a friendly game of Greed goes unrecorded.
+       */
+      if (table.forFun) {
+        return;
+      }
+
       const played = table.seats.filter((seat) => !seat.waiting && seat.bet > 0);
 
       for (const seat of played) {

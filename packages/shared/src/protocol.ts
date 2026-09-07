@@ -118,7 +118,14 @@ export interface ClientToServer {
      * was. `listed` puts it on the public list, and is the default — a table
      * nobody can find is a table you have to organise before you can play at.
      */
-    payload: { name: string; game?: string; ruleset?: string; listed?: boolean },
+    payload: {
+      name: string;
+      game?: string;
+      ruleset?: string;
+      listed?: boolean;
+      /** Play money, so anybody may sit down. The game decides what it means. */
+      forFun?: boolean;
+    },
     ack: (result: Ack) => void,
   ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
