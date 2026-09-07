@@ -9,11 +9,11 @@ function pipFace(single: number, triple: number): FaceScores {
 }
 
 /**
- * The classic pip game. Ones and fives score alone; a triple of face N is worth
- * N x 100, except three 1s at 1,000.
+ * The ordinary pip game, under the name it has had longest. Ones and fives
+ * score alone; a triple of face N is worth N x 100, except three 1s at 1,000.
  */
 export const DEFAULT_RULESET: Ruleset = Object.freeze({
-  name: "Classic",
+  name: "Farkle",
   skin: "pips",
 
   targetScore: 10_000,
@@ -66,7 +66,9 @@ export const MINIMAL_RULESET: Ruleset = Object.freeze({
  * docs/reference/letter-dice-edition.md.
  */
 export const LETTER_RULESET: Ruleset = Object.freeze({
-  name: "Letter dice",
+  // The retail edition's own name, which is where this game got the one over
+  // the door — so inside the room it is the letter dice that are called Greed.
+  name: "Greed",
   skin: "letters",
 
   targetScore: 5_000,

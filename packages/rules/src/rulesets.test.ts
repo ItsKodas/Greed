@@ -3,7 +3,7 @@ import { DEFAULT_RULESET, LETTER_RULESET, MINIMAL_RULESET, RULESETS } from "./ru
 
 describe("DEFAULT_RULESET", () => {
   it("is the classic pip game", () => {
-    expect(DEFAULT_RULESET.name).toBe("Classic");
+    expect(DEFAULT_RULESET.name).toBe("Farkle");
     expect(DEFAULT_RULESET.skin).toBe("pips");
     expect(DEFAULT_RULESET.targetScore).toBe(10_000);
     expect(DEFAULT_RULESET.entryThreshold).toBe(500);
@@ -108,7 +108,7 @@ describe("LETTER_RULESET", () => {
 
 describe("RULESETS", () => {
   it("offers the classic game first, then the letter edition", () => {
-    expect(RULESETS.map((rules) => rules.name)).toEqual(["Classic", "Letter dice"]);
+    expect(RULESETS.map((rules) => rules.name)).toEqual(["Farkle", "Greed"]);
   });
 
   it("gives every offered ruleset a distinct name", () => {

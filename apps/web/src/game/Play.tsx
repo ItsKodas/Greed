@@ -194,7 +194,7 @@ function Join({
 }) {
   const [typed, setTyped] = useState("");
   const [code, setCode] = useState(invited);
-  const [ruleset, setRuleset] = useState(RULESETS[0]?.name ?? "Classic");
+  const [ruleset, setRuleset] = useState(RULESETS[0]?.name ?? "Farkle");
 
   // Someone signed in already has a name, and the server will seat them under
   // it whatever this sends — so asking for one would be a question with no

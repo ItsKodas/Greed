@@ -60,7 +60,7 @@ export interface FarklePenalty {
 export type DiceSkin = "pips" | "letters";
 
 export interface Ruleset {
-  /** Shown in the lobby, e.g. "Classic" or "Letter dice". */
+  /** Shown in the lobby, e.g. "Farkle" or "Greed". */
   readonly name: string;
   readonly skin: DiceSkin;
 
