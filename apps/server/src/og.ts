@@ -32,9 +32,10 @@ export interface CardSpec {
 
 const INK = "#f2f6fb";
 const INK_DIM = "#8b97a8";
-const NEON_HI = "#7ba9ff";
 const CHIP = "#e0b048";
 const CLAY = "#171b22";
+/** How big the sign hangs on a link card. Small: a card is about a table. */
+const SIGN_SCALE = 0.62;
 
 /**
  * Text on its way into an SVG document.
@@ -92,6 +93,39 @@ function chip(cx: number, cy: number, r: number, taken: boolean): string {
     "</g>",
     `<circle cx="${cx}" cy="${cy}" r="${(r * 0.35).toFixed(2)}" fill="${colour}"/>`,
   ].join("");
+}
+
+/**
+ * The sign over the door, as it hangs on the wall.
+ *
+ * The same shape the building wears: "The" small and hung above, "Back Room"
+ * carrying the weight, the whole piece a couple of degrees off square the way
+ * a hand-bent sign sits on its hook. It was set in plain letterspaced capitals
+ * here, which said the right words in somebody else's voice.
+ *
+ * The glow is the tube, drawn the way the page draws it: the same words
+ * underneath in blue and blurred, twice, with the burning white core on top. A
+ * filter rather than a text-shadow, because that is what an SVG has.
+ */
+function sign(x: number, y: number, scale: number): string {
+  const words = (fill: string, filter: string) => `
+    <g fill="${fill}"${filter}>
+      <text x="${x + 34 * scale}" y="${y - 30 * scale}" font-family="Dancing Script" font-weight="700" font-size="${30 * scale}">The</text>
+      <text x="${x}" y="${y}" font-family="Dancing Script" font-weight="700" font-size="${64 * scale}">Back Room</text>
+    </g>`;
+
+  /*
+   * The wide wash twice over. One pass of it is a halo you have to look for;
+   * a tube on a dark wall throws more light than that, and a blur spreads
+   * whatever it is given thinly enough that stacking is how you get it back.
+   */
+  return `<g transform="rotate(-2.4 ${x} ${y})">
+    ${words("#2e7bff", ' filter="url(#tube-wide)"')}
+    ${words("#2e7bff", ' filter="url(#tube-wide)"')}
+    ${words("#7ba9ff", ' filter="url(#tube-near)"')}
+    ${words("#7ba9ff", ' filter="url(#tube-near)"')}
+    ${words("#ffffff", "")}
+  </g>`;
 }
 
 /**
@@ -189,6 +223,13 @@ export function cardSvg(spec: CardSpec): string {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${OG_WIDTH}" height="${OG_HEIGHT}" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}">
   <defs>
+    <!-- The wash a tube throws on the wall, and the light inside the glass. -->
+    <filter id="tube-wide" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="${9 * SIGN_SCALE}"/>
+    </filter>
+    <filter id="tube-near" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="${3 * SIGN_SCALE}"/>
+    </filter>
     <radialGradient id="sign" cx="18%" cy="6%" r="78%">
       <stop offset="0%" stop-color="#2e7bff" stop-opacity="0.28"/>
       <stop offset="100%" stop-color="#2e7bff" stop-opacity="0"/>
@@ -204,11 +245,18 @@ export function cardSvg(spec: CardSpec): string {
   ${motif(spec.game?.id ?? null)}
   <rect x="0" y="0" width="${OG_WIDTH}" height="6" fill="#2e7bff" opacity="0.6"/>
 
-  <!-- The sign over the door, kept small: a card is about a table, not a brand. -->
-  <text x="72" y="106" font-family="Bevan" font-size="27" letter-spacing="7" fill="${NEON_HI}">THE BACK ROOM</text>
-
-  <!-- What is being played. The one thing anybody reads at thumbnail size. -->
-  <text x="72" y="288" font-family="Bevan" font-size="88" fill="${INK}">${esc(fit(title, 88, 780, 0.62))}</text>
+  ${
+    /*
+     * On a card about a game, the sign hangs small over the door and the game
+     * is the headline. On the room's own card there is no game, so the sign is
+     * the headline — setting it small above the same words again in a slab
+     * face was the building introducing itself twice.
+     */
+    spec.game === null
+      ? sign(76, 300, 1.5)
+      : `${sign(74, 110, SIGN_SCALE)}
+  <text x="72" y="288" font-family="Bevan" font-size="88" fill="${INK}">${esc(fit(title, 88, 780, 0.62))}</text>`
+  }
   ${
     line === null
       ? ""
@@ -246,6 +294,7 @@ export function cardSvg(spec: CardSpec): string {
  * a card anybody designed.
  */
 const FONT_FILES = [
+  "DancingScript.ttf",
   "Bevan-Regular.ttf",
   "IBMPlexSans-Regular.ttf",
   "IBMPlexSans-SemiBold.ttf",

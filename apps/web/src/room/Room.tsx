@@ -90,8 +90,21 @@ function busyness(game: GameOnOffer): string {
 function TableTile({ game }: { game: GameOnOffer }) {
   const body = (
     <>
-      <span className="tile__mark">{game.name}</span>
-      <span className="tile__blurb">{game.blurb}</span>
+      {/*
+       * The same card a link to this game unfurls into.
+       *
+       * One drawing rather than two: the banner already carries the name, the
+       * blurb and the game's own furniture, and keeping a second version of
+       * all that in markup is how the two come to disagree. The alt text is
+       * what it says, so a tile still reads if the image never arrives.
+       */}
+      <img
+        className="tile__art"
+        src={`/og/${game.id}.png`}
+        alt={`${game.name} — ${game.blurb}`}
+        width={1200}
+        height={630}
+      />
       <span className="tile__foot">
         {/* The only lit thing on this page besides the sign, and it means
             people are in there right now. */}

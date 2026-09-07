@@ -1680,7 +1680,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-2);
-  padding: var(--gr-space-4);
+  padding: var(--gr-space-2);
+  overflow: hidden;
   border: var(--gr-edge-soft);
   border-radius: var(--gr-radius-sm);
   background:
@@ -1705,16 +1706,18 @@
   opacity: 0.55;
 }
 
-.tile__mark {
-  font-family: var(--gr-font-display);
-  font-size: var(--gr-text-xl);
-  line-height: 1;
-  color: var(--gr-color-ink);
-}
-
-.tile__blurb {
-  font-size: var(--gr-text-sm);
-  color: var(--gr-color-ink-dim);
+/*
+ * The link card, as the face of the tile.
+ *
+ * Full bleed to the tile's edges, which is why the tile carries no padding of
+ * its own any more — a banner with a margin around it reads as a picture of a
+ * card rather than as the card.
+ */
+.tile__art {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: calc(var(--gr-radius-sm) - 1px);
 }
 
 .tile__foot {
@@ -1986,13 +1989,20 @@
   font-size: var(--gr-text-xs);
 }
 
+/*
+ * Stacked, not side by side.
+ *
+ * A code is fourteen characters of monospace with letter-spacing on it, and
+ * the panel it lives in is a column in a sidebar. Beside a button there was
+ * never room for the last of them, so the field was cutting codes off exactly
+ * where somebody is checking they typed it right.
+ */
 .redeem {
-  display: flex;
+  display: grid;
   gap: var(--gr-space-2);
 }
 
 .redeem__input {
-  flex: 1;
   min-width: 0;
   font-family: var(--gr-font-data);
   letter-spacing: 0.08em;

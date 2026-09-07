@@ -19,6 +19,8 @@ export default defineConfig({
       "/api": "http://localhost:3001",
       "/auth": "http://localhost:3001",
       "/healthz": "http://localhost:3001",
+      // The link cards, which the tiles on the front page are made of.
+      "/og": "http://localhost:3001",
       "/socket.io": { target: "http://localhost:3001", ws: true },
     },
   },
