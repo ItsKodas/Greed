@@ -34,6 +34,16 @@ const identity = (userId: string) => ({ userId, avatar: null, accentColor: null 
 function dealt(player: [Rank, Rank], dealer: [Rank, Rank], rest: Rank[] = [], forFun = false) {
   const table = stacked([player[0], dealer[0], player[1], dealer[1], ...rest], forFun);
   table.join("a", "Ada", forFun ? null : identity("u1"));
+  /*
+   * Somebody else at the table, who never bets.
+   *
+   * A table playing for chips will not deal to one person, because chips are
+   * only won from real people. They stake nothing, so they are never dealt in
+   * and the arrangement above still reaches the hand it was arranged for.
+   */
+  if (!forFun) {
+    table.join("z", "Bo", identity("u-company"));
+  }
   table.bet("a", 500);
   table.deal();
   return table;

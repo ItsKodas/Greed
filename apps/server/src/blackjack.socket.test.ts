@@ -176,6 +176,25 @@ function stateWhere(socket: Client, ok: (state: TableView) => boolean, ms = 2500
   });
 }
 
+/**
+ * Opens a table for chips with somebody else already sitting at it.
+ *
+ * A table playing for chips will not deal to one person — chips are only won
+ * from real people — so a test about one player's hand still needs a second
+ * seat. The companion never bets, so they are never dealt in and nothing about
+ * the hand under test changes.
+ */
+async function openWithCompany(port: number, host: Client): Promise<string> {
+  await open_(host, "Ada");
+  const code = (await stateWhere(host, (view) => view.seats.length === 1)).code;
+  const company = await client(port);
+  await new Promise<void>((resolve) =>
+    company.emit("lobby:join", { name: "Bo", code }, () => resolve()),
+  );
+  await stateWhere(host, (view) => view.seats.length === 2);
+  return code;
+}
+
 function open_(socket: Client, name: string, forFun = false): Promise<Ack> {
   return new Promise((resolve) =>
     socket.emit("lobby:create", { name, game: "blackjack", forFun }, resolve),
@@ -267,9 +286,9 @@ describe("blackjack over the wire", () => {
   });
 
   it("keeps the hole card off the wire until the dealer plays", async () => {
-    const { port } = await startRoom(["Ada"]);
+    const { port } = await startRoom(["Ada", "Bo"]);
     const host = await client(port);
-    await open_(host, "Ada");
+    await openWithCompany(port, host);
 
     const dealt = await dealLive(host);
     // Not "sent and hidden by the browser" — the second card is not in the
@@ -281,10 +300,10 @@ describe("blackjack over the wire", () => {
   });
 
   it("settles the hand and pays what the outcome says it pays", async () => {
-    const { store, port, ids } = await startRoom(["Ada"]);
+    const { store, port, ids } = await startRoom(["Ada", "Bo"]);
     const ada = ids[0] as string;
     const host = await client(port);
-    await open_(host, "Ada");
+    await openWithCompany(port, host);
 
     await dealLive(host);
     // Both read after the deal, so whatever hands dealLive played out first
@@ -359,9 +378,9 @@ describe("blackjack over the wire", () => {
      * hand dealt three seconds into a thirty-second window sat there face up
      * for the remaining twenty-seven.
      */
-    const { port } = await startRoom(["Ada"], { bettingMs: 30_000, settleMs: 120 });
+    const { port } = await startRoom(["Ada", "Bo"], { bettingMs: 30_000, settleMs: 120 });
     const host = await client(port);
-    await open_(host, "Ada");
+    await openWithCompany(port, host);
 
     await dealLive(host);
     await act(host, { type: "stand" });
@@ -381,10 +400,9 @@ describe("blackjack over the wire", () => {
     // No last call at this table: five seconds of one would shut a window
     // that is only open for a fraction of one, and this test is about the
     // loop coming round rather than about what the felt takes.
-    const { port } = await startRoom(["Ada"], { bettingMs: 150, settleMs: 120, lastCallMs: 0 });
+    const { port } = await startRoom(["Ada", "Bo"], { bettingMs: 150, settleMs: 120, lastCallMs: 0 });
     const host = await client(port);
-    await open_(host, "Ada");
-    await stateWhere(host, (view) => view.seats.length === 1);
+    await openWithCompany(port, host);
 
     // A window that closes with nothing on the felt just opens another.
     const idle = await stateWhere(host, (view) => (view.deadline ?? 0) > 0, 3000);
@@ -416,9 +434,9 @@ describe("blackjack over the wire", () => {
      * everybody else at it is waiting on the same one. Standing rather than
      * folding: silence should cost a turn, not a stake.
      */
-    const { port } = await startRoom(["Ada"], { bettingMs: 30_000, turnMs: 150 });
+    const { port } = await startRoom(["Ada", "Bo"], { bettingMs: 30_000, turnMs: 150 });
     const host = await client(port);
-    await open_(host, "Ada");
+    await openWithCompany(port, host);
     await dealLive(host);
 
     const over = await stateWhere(host, (view) => view.phase === "settled", 3000);
@@ -429,7 +447,9 @@ describe("blackjack over the wire", () => {
     const { store, port, ids } = await startRoom(["Ada"]);
     const ada = ids[0] as string;
     const host = await client(port);
-    await open_(host, "Ada");
+    // Bots only ever sit at a table playing for nothing: chips are won
+    // from real people, and a bot has no account to win them from.
+    await open_(host, "Ada", true);
 
     host.emit("lobby:addBot", { skill: "hard" });
     // It stakes itself without being asked: a bot at a card table has to put
@@ -511,15 +531,14 @@ describe("what a stake does when the hand is over", () => {
      * empty — a stake that quietly repeats is chips leaving an account every
      * thirty seconds for a hand its owner never agreed to play.
      */
-    const { port } = await startRoom(["Ada"], {
+    const { port } = await startRoom(["Ada", "Bo"], {
       bettingMs: 200,
       settleMs: 80,
       turnMs: 200,
       lastCallMs: 0,
     });
     const host = await client(port);
-    await open_(host, "Ada");
-    await stateWhere(host, (view) => view.seats.length === 1);
+    await openWithCompany(port, host);
 
     await act(host, { type: "bet", amount: 500 });
     // A natural settles the hand where it stands, so waiting for a settled
@@ -576,5 +595,48 @@ describe("what a link can find out before anybody sits down", () => {
     const response = await fetch(`http://localhost:${port}/api/table/ZZZZZ`);
 
     expect(response.status).toBe(404);
+  });
+});
+
+describe("chips are only won from real people", () => {
+  it("refuses a bot at a table playing for chips", async () => {
+    /*
+     * Enforced on the server, not merely left out of the browser. A client is
+     * something a player can replace; this is not.
+     */
+    const { port } = await startRoom(["Ada"]);
+    const host = await client(port);
+    await open_(host, "Ada");
+    await stateWhere(host, (view) => view.seats.length === 1);
+
+    const refused = new Promise<string>((resolve) => host.once("room:error", resolve));
+    host.emit("lobby:addBot", { skill: "hard" });
+
+    expect(await refused).toMatch(/playing for fun/i);
+    // And no seat was taken while it was being turned down.
+    expect(host.latest?.seats).toHaveLength(1);
+  });
+
+  it("holds a chips table at one player rather than dealing to them alone", async () => {
+    const { port } = await startRoom(["Ada", "Bo"], { bettingMs: 150, lastCallMs: 0 });
+    const host = await client(port);
+    await open_(host, "Ada");
+    await stateWhere(host, (view) => view.seats.length === 1);
+
+    await act(host, { type: "bet", amount: 500 });
+    const waiting = await stateWhere(host, (view) => view.waitingForPlayers, 3000);
+
+    // Held, not refused: the stake stays on the felt, because it already left
+    // the account when it was placed.
+    expect(waiting.phase).toBe("betting");
+    expect(waiting.seats[0]?.bet).toBe(500);
+
+    // And the moment somebody else sits down, the table gets on with it.
+    const company = await client(port);
+    await new Promise<void>((resolve) =>
+      company.emit("lobby:join", { name: "Bo", code: waiting.code }, () => resolve()),
+    );
+    const dealt = await stateWhere(host, (view) => view.phase !== "betting", 4000);
+    expect(dealt.seats[0]?.hands[0]?.cards.length).toBeGreaterThanOrEqual(2);
   });
 });

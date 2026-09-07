@@ -113,6 +113,13 @@ export interface TableView {
    */
   bettingMs: number;
   /**
+   * True while the table is holding because there is nobody to play against.
+   *
+   * A stake already placed stays on the felt through this: the table is
+   * waiting, not refusing, and the chips were taken when they were put down.
+   */
+  waitingForPlayers: boolean;
+  /**
    * When whatever the table is waiting on runs out, or null while a hand is
    * being played — the betting window closing, or a finished hand clearing.
    *
@@ -130,6 +137,15 @@ const MAX_BET = 10_000;
  * anybody a lesson.
  */
 const FUN_PURSE = 5_000;
+/**
+ * How many have to be at a table before it will deal for chips.
+ *
+ * Chips are only won from real people, so a table paying them out waits until
+ * there are real people at it. A for-fun table has no such rule: there is
+ * nothing to win there, which is the entire point of it.
+ */
+export const MIN_FOR_CHIPS = 2;
+
 /** The dealer takes cards to here and stops, soft or hard. */
 const DEALER_STANDS = 17;
 
@@ -294,6 +310,18 @@ export class Table {
     this.bettingMs = ms;
   }
 
+  /**
+   * Whether this table is allowed to deal at all.
+   *
+   * A table playing for chips needs company. It does not refuse the bet — the
+   * felt stays exactly as it is and the window opens again — because the chips
+   * were taken when they were placed, and clearing the felt to wait would be
+   * the table keeping them.
+   */
+  get canDeal(): boolean {
+    return this.forFun || this.seats.length >= MIN_FOR_CHIPS;
+  }
+
   /** Everyone actually in the hand being played. */
   private get playing(): Seat[] {
     return this.seats.filter((seat) => !seat.waiting && staked(seat) > 0);
@@ -317,6 +345,17 @@ export class Table {
   }
 
   addBot(id: string, name: string, skill: BotSkill): Seat {
+    /*
+     * Bots play for nothing, and only for nothing.
+     *
+     * Chips are only ever won from real people. A bot has no account to charge
+     * and none to pay, so a hand won against one at a table paying real chips
+     * is chips out of thin air — which is the same reason Greed refuses a bot
+     * once there is a buy-in on its table.
+     */
+    if (!this.forFun) {
+      throw new TableError("Bots only sit at tables playing for fun.");
+    }
     const seat = this.seating.addBot(id, name, skill) as Seat;
     this.clear(seat);
     // A bot has no account either way, so its money is always made up.
@@ -441,6 +480,9 @@ export class Table {
     if (this.phase !== "betting") {
       throw new TableError("That hand is already going.");
     }
+    if (!this.canDeal) {
+      throw new TableError("A table playing for chips needs somebody to play it with.");
+    }
     if (this.seats.length < MIN_SEATS) {
       throw new TableError("Somebody has to be at the table.");
     }
@@ -493,6 +535,17 @@ export class Table {
    */
   closeBetting(): void {
     if (this.phase !== "betting") {
+      return;
+    }
+    /*
+     * Nobody to play against, so the clock goes round again with everything
+     * left where it is. Deliberately not beginBetting: that clears the felt,
+     * and a stake was taken from an account when it was placed — clearing it
+     * here would be the table quietly pocketing it.
+     */
+    if (!this.canDeal) {
+      this.deadline = Date.now() + this.bettingMs;
+      this.lastEvent = "Waiting for another player";
       return;
     }
     if (this.playing.length === 0) {
@@ -836,6 +889,7 @@ export class Table {
       forFun: this.forFun,
       deadline: this.deadline,
       bettingMs: this.bettingMs,
+      waitingForPlayers: !this.canDeal,
       dealer: {
         cards: shown,
         total: value(shown).total,

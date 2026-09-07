@@ -168,6 +168,7 @@ function Felt({
         </span>
       </section>
 
+      <div className="bj__floor">
       <div className="bj__seats">
         {state.seats.map((seat) => (
           <article
@@ -252,11 +253,17 @@ function Felt({
             </div>
           </article>
         ))}
-        {state.watching > 0 ? (
-          <p className="bj__watchers">
-            {state.watching === 1 ? "1 person watching" : `${state.watching} people watching`}
-          </p>
-        ) : null}
+      </div>
+      {/* Outside the seat grid, not in it.
+          It used to be a grid child spanning every column, and an item that
+          spans "1 / -1" makes the grid resolve all of its columns — which
+          stopped auto-fit collapsing the empty ones, so a table with one
+          player at it showed that player plus two seats nobody could see. */}
+      {state.watching > 0 ? (
+        <p className="bj__watchers">
+          {state.watching === 1 ? "1 person watching" : `${state.watching} people watching`}
+        </p>
+      ) : null}
       </div>
 
       <aside className="bj__actions panel">
@@ -279,6 +286,7 @@ function Felt({
             deadline={state.deadline}
             windowMs={state.bettingMs}
             onStake={intent.place}
+            forFun={state.forFun}
           />
         ) : state.phase === "settled" ? (
           <>
@@ -512,6 +520,7 @@ function Betting({
   deadline,
   windowMs,
   onStake,
+  forFun,
 }: {
   table: Table;
   mine: number;
@@ -524,6 +533,8 @@ function Betting({
   windowMs: number;
   /** Tells the felt what was asked for, so it can show it before the reply. */
   onStake: (amount: number) => void;
+  /** True at a table playing for nothing, which is the only kind bots sit at. */
+  forFun: boolean;
 }) {
   const stake = (amount: number) => {
     // Sounded and shown on the press rather than on the state coming back: the
@@ -651,7 +662,10 @@ function Betting({
               ))}
             </div>
           </div>
-          {seats < 6 ? (
+          {/* Bots only ever sit at a table playing for nothing: chips are
+              only won from real people. The server refuses either way — this
+              just stops offering something that would be turned down. */}
+          {seats < 6 && forFun ? (
             <div className="bots">
               <span className="bots__label">Add a player</span>
               <div className="bots__row">

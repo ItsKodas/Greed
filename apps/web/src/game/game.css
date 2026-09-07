@@ -172,12 +172,35 @@
   height: 34px;
 }
 
+/* Pressable, because a code is only any use once it is somewhere else. */
 .nav__code {
+  padding: 2px 6px;
+  border: none;
+  border-radius: var(--gr-radius-sm);
+  background: none;
   font-family: var(--gr-font-data);
   font-size: var(--gr-text-base);
   letter-spacing: 0.24em;
   color: var(--gr-color-ink-lit);
   white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.nav__code:hover {
+  background: rgb(255 255 255 / 0.07);
+}
+
+.nav__code:active {
+  transform: translateY(1px);
+}
+
+/* Taken. Gold for a moment, then back to being a code. */
+.nav__code--took {
+  color: var(--gr-color-chip);
+  letter-spacing: 0.08em;
 }
 
 .nav__leave {
@@ -2104,4 +2127,27 @@
 .gate__in:hover {
   background: #4752c4;
   border-color: #4752c4;
+}
+
+/*
+ * The way out of this screen, and the only other thing on it.
+ *
+ * It was inheriting the page's link colour, which is a blue meant for a link
+ * in a paragraph on a lighter ground — on this panel it read as barely there,
+ * which is the wrong weight for the one alternative being offered.
+ */
+.gate .panel__note {
+  color: var(--gr-color-ink-dim);
+}
+
+.gate .panel__note a {
+  color: var(--gr-color-ink-lit);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--gr-color-neon);
+  text-decoration-thickness: 2px;
+}
+
+.gate .panel__note a:hover {
+  color: var(--gr-color-neon-hi);
 }

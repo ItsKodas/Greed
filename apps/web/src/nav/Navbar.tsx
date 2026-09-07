@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
 import { Sign } from "../game/Sign.js";
 import type { Account } from "../game/useAccount.js";
+import { CopyCode } from "./CopyCode.js";
 import { Sound } from "./Sound.js";
 
 /** The table you are sitting at, when you are sitting at one. */
@@ -56,9 +57,7 @@ export function Navbar({ game, table, account, connected }: NavbarProps) {
           the bar, and it says "Leave" rather than only drawing an arrow. */}
       {table !== undefined ? (
         <span className="nav__table">
-          <span className="nav__code" title="This table's code">
-            {table.code}
-          </span>
+          <CopyCode code={table.code} />
           <LeaveButton table={table} />
         </span>
       ) : null}

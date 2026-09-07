@@ -27,11 +27,24 @@ function ledger(balances: Record<string, number> = {}) {
 
 const identity = (userId: string) => ({ userId, avatar: null, accentColor: null });
 
+/**
+ * Somebody else at the table, who never bets.
+ *
+ * A table playing for chips will not deal to one person — chips are only won
+ * from real people. This seats a second one so these tests can be about what
+ * they are about. They never stake anything, so they are never dealt in and
+ * every arranged shoe below still reaches the hand it was arranged for.
+ */
+function seatCompany(table: { join: (id: string, name: string, who: unknown) => unknown }): void {
+  table.join("z", "Bo", identity("u-company"));
+}
+
 describe("who may change the window", () => {
   it("lets the host, because it is everybody's time", async () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps } = ledger({ u1: 10_000 });
 
     await game.act(table, "a", { type: "window", ms: 60_000 }, deps);
@@ -43,6 +56,7 @@ describe("who may change the window", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     table.join("b", "Bo", identity("u2"));
     const { deps } = ledger({ u1: 10_000, u2: 10_000 });
 
@@ -54,9 +68,12 @@ describe("who may change the window", () => {
 });
 
 describe("a bot at the felt", () => {
+  // Bots only ever sit at a table playing for nothing, so every test here does.
+  const funTable = () => blackjackAdapter().create("FUN01", { forFun: true });
+
   it("does not bet once last call has gone out", () => {
     const game = blackjackAdapter();
-    const table = game.create("TEST1");
+    const table = funTable();
     table.join("a", "Ada", identity("u1"));
     table.addBot("bot", "Cassie", "normal");
 
@@ -69,7 +86,7 @@ describe("a bot at the felt", () => {
 
   it("holds its chips when it thinks right through last call", () => {
     const game = blackjackAdapter();
-    const table = game.create("TEST1");
+    const table = funTable();
     table.join("a", "Ada", identity("u1"));
     const bot = table.addBot("bot", "Cassie", "normal");
     const move = game.botMove?.(table);
@@ -87,6 +104,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances, moves } = ledger({ u1: 10_000 });
 
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
@@ -99,6 +117,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances } = ledger({ u1: 10_000 });
 
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
@@ -114,6 +133,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances, moves } = ledger({ u1: 10_000 });
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
     // The deal a moment away, rather than half a minute of waiting.
@@ -132,6 +152,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances } = ledger({ u1: 10_000 });
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
     table.deadline = Date.now() + 2000;
@@ -145,6 +166,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances } = ledger({ u1: 300 });
 
     await expect(
@@ -158,6 +180,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances } = ledger({ u1: 10_000 });
 
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
@@ -173,6 +196,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, balances } = ledger({ u1: 1000 });
 
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
@@ -189,6 +213,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps, moves } = ledger({ u1: 10_000 });
 
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
@@ -214,6 +239,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter({ settleMs: 60 });
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
 
     const moves: string[] = [];
     let counted: number | null = null;
@@ -280,6 +306,7 @@ describe("what blackjack does with chips", () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");
     table.join("a", "Ada", identity("u1"));
+    seatCompany(table);
     const { deps } = ledger({ u1: 10_000 });
     await expect(game.act(table, "a", { type: "roll" }, deps)).rejects.toThrow(/not something/i);
   });

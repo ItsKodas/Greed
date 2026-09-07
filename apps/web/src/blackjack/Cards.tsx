@@ -1,6 +1,6 @@
 import type { Card as CardData, Rank, Suit } from "@backroom/game-blackjack";
 import type { PointerEvent } from "react";
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   CARD_H,
   CARD_R,
@@ -91,7 +91,7 @@ function Index({ rank, suit }: { rank: Rank; suit: Suit }) {
 export function Card({
   card,
   deal = 0,
-  turned = false,
+  enter = "deal",
 }: {
   card: CardData;
   /**
@@ -102,8 +102,15 @@ export function Card({
    * thing the rest of this is here to avoid.
    */
   deal?: number;
-  /** Turned over rather than dealt in — the hole card, and only that. */
-  turned?: boolean;
+  /**
+   * How this card comes into the world.
+   *
+   * `deal` flies it out of the shoe. `turn` is the dealer's hole card being
+   * squashed through the middle. `unfold` is the second half of a card that
+   * was already on the felt face down and is now being turned over — the back
+   * folded away, and this opens out in its place.
+   */
+  enter?: "deal" | "turn" | "unfold";
 }) {
   const red = isRed(card.suit);
   const pips = pipsFor(card.rank);
@@ -112,7 +119,7 @@ export function Card({
 
   return (
     <svg
-      className={`bj-card${red ? " bj-card--red" : ""} ${turned ? "bj-card--turning" : "bj-card--dealing"}`}
+      className={`bj-card${red ? " bj-card--red" : ""} bj-card--${enter}`}
       viewBox={`0 0 ${CARD_W} ${CARD_H}`}
       role="img"
       aria-label={`${card.rank} of ${card.suit}`}
@@ -187,18 +194,26 @@ export function Card({
  * The weave takes its colours from the page rather than from here, so a game
  * with its own theme deals its own deck without a second drawing of one.
  */
-export function FaceDown({ arriving = false }: { arriving?: boolean }) {
+export function FaceDown({
+  deal = 0,
+  folding = false,
+}: {
+  deal?: number;
+  /** Being turned over: the back folds away and a face opens in its place. */
+  folding?: boolean;
+}) {
   // A pattern needs an id unique to the document, and a felt can hold several
   // face-down cards at once.
   const weave = useId();
 
   return (
     <svg
-      className={`bj-card bj-card--down${arriving ? " bj-card--arriving" : " bj-card--dealing"}`}
+      className={`bj-card bj-card--down bj-card--${folding ? "fold" : "deal"}`}
       viewBox={`0 0 ${CARD_W} ${CARD_H}`}
       role="img"
       aria-label="face down"
       {...tilt}
+      style={deal > 0 ? { animationDelay: `${deal * 90}ms` } : undefined}
     >
       <defs>
         {/* Eight units, which is a compromise the small size wins: finer and
@@ -238,6 +253,69 @@ export function FaceDown({ arriving = false }: { arriving?: boolean }) {
   );
 }
 
+/**
+ * How long the back is in the air before it can be turned over.
+ *
+ * A card that arrives while its own back is still flying in should land
+ * first — folding it mid-flight is two motions fighting over one card, which
+ * is the thing this whole arrangement exists to stop.
+ */
+const DEAL_MS = 380;
+/** Half a turn: the back folding away, then the face opening out. */
+const FOLD_MS = 120;
+
+/**
+ * One place in a hand, which may not have a card in it yet.
+ *
+ * This is the whole answer to a move made over a real connection. Asking for a
+ * card used to put a back on the felt and then, when the reply came, throw
+ * that away and fly a different card in from the shoe — two arrivals for one
+ * card, which reads as a glitch rather than as a deal.
+ *
+ * Now it is one card the whole way through: the back flies out of the shoe on
+ * the press, waits however long the table takes, and turns over in place when
+ * the answer lands. The element changes underneath, but the motion does not.
+ */
+function Slot({ card, deal }: { card: CardData | undefined; deal: number }) {
+  // What is showing, which lags the real card by half a turn while it flips.
+  const [face, setFace] = useState<CardData | undefined>(card);
+  const [folding, setFolding] = useState(false);
+  /*
+   * How the face arrives when it does.
+   *
+   * A slot that had a card from the start is dealing one out of the shoe. A
+   * slot that stood there as a back is opening out of a fold, and flying it in
+   * from the shoe a second time is exactly the double arrival this is here to
+   * remove.
+   */
+  const [enter, setEnter] = useState<"deal" | "unfold">("deal");
+  // When this slot appeared, so a card can wait for its own back to land.
+  const born = useRef(Date.now());
+
+  useEffect(() => {
+    if (card === undefined || face !== undefined) {
+      return;
+    }
+    const landed = Math.max(0, DEAL_MS - (Date.now() - born.current));
+    const fold = window.setTimeout(() => setFolding(true), landed);
+    // The face opens out exactly as the back finishes folding away.
+    const turn = window.setTimeout(() => {
+      setEnter("unfold");
+      setFace(card);
+      setFolding(false);
+    }, landed + FOLD_MS);
+    return () => {
+      window.clearTimeout(fold);
+      window.clearTimeout(turn);
+    };
+  }, [card, face]);
+
+  if (face === undefined) {
+    return <FaceDown deal={deal} folding={folding} />;
+  }
+  return <Card card={face} deal={deal} enter={enter} />;
+}
+
 export function Hand({
   cards,
   hidden,
@@ -249,9 +327,10 @@ export function Hand({
   /**
    * A card this player has asked for and the table has not sent yet.
    *
-   * Shown face down, because that is the honest version: a card is on its way
-   * and nobody knows what it is. It is the only thing on the felt that is not
-   * the table's word, and it is replaced the moment the table speaks.
+   * It takes a place in the hand of its own, face down — the honest version,
+   * because a card is on its way and nobody yet knows what it is. When the
+   * table answers, that same card turns over. It is the only thing on the felt
+   * that is not the table's word, and it stops being so the moment it speaks.
    */
   arriving?: boolean;
   /** From this card on, the hand is being turned over rather than dealt. */
@@ -267,26 +346,37 @@ export function Hand({
    * index is in the corner either way, so an overlapped card still says what
    * it is.
    */
-  const tight = cards.length + (hidden === true ? 1 : 0) > 3;
+  /*
+   * One place per card, plus one for a card that has been asked for.
+   *
+   * The asked-for place is a place in the hand rather than something tacked on
+   * the end, which is what lets the back that lands in it become the card that
+   * fills it — the same slot the whole way through, so there is one arrival
+   * and not two.
+   */
+  const places = cards.length + (arriving ? 1 : 0);
+  const tight = places + (hidden === true ? 1 : 0) > 3;
+
   return (
     <span className={`bj-hand${tight ? " bj-hand--tight" : ""}`}>
-      {cards.map((card, index) => (
+      {Array.from({ length: places }, (_, index) => {
         /*
          * Position is the identity here. A hand only ever grows at its end,
          * and a four-deck shoe deals the same card to the same hand often
          * enough that rank and suit are not unique — so keying by what the
          * card is would collide where keying by where it sits cannot.
          */
-        <Card
+        const card = cards[index];
+        // The dealer's hand is turned over rather than dealt, and never has a
+        // card on the way, so it goes straight to a face.
+        if (turnedFrom !== undefined && index >= turnedFrom && card !== undefined) {
           // biome-ignore lint/suspicious/noArrayIndexKey: a hand is append-only
-          key={index}
-          card={card}
-          deal={index}
-          turned={turnedFrom !== undefined && index >= turnedFrom}
-        />
-      ))}
+          return <Card key={index} card={card} deal={index} enter="turn" />;
+        }
+        // biome-ignore lint/suspicious/noArrayIndexKey: a hand is append-only
+        return <Slot key={index} card={card} deal={index} />;
+      })}
       {hidden === true ? <FaceDown /> : null}
-      {arriving ? <FaceDown arriving /> : null}
     </span>
   );
 }

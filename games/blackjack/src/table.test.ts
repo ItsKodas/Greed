@@ -24,6 +24,19 @@ function stacked(...ranks: Rank[]): Table {
   return table;
 }
 
+/**
+ * One player, and somebody else at the table who never bets.
+ *
+ * A table playing for chips will not deal to one person — chips are only won
+ * from real people — so a test about one hand still needs a second seat. The
+ * companion stakes nothing, so they are never dealt in and every arranged shoe
+ * still reaches the hand it was arranged for.
+ */
+function seatOne(table: Table) {
+  table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+  table.join("z", "Bo", { userId: "u-company", avatar: null, accentColor: null });
+}
+
 function seatTwo(table: Table) {
   table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
   table.join("b", "Bo", { userId: "u2", avatar: null, accentColor: null });
@@ -37,7 +50,7 @@ describe("taking a stake", () => {
 
   it("keeps a bet inside the table limits", () => {
     const table = new Table("TEST1");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     expect(() => table.bet("a", 50)).toThrow(TableError);
     expect(() => table.bet("a", 50_000)).toThrow(TableError);
     table.bet("a", 500);
@@ -46,7 +59,7 @@ describe("taking a stake", () => {
 
   it("lets a stake be taken back off the felt before the deal", () => {
     const table = new Table("TEST1");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.bet("a", 0);
     expect(table.seats[0]?.hands[0]?.bet).toBe(0);
@@ -56,7 +69,7 @@ describe("taking a stake", () => {
 
   it("will not deal with nothing on the table", () => {
     const table = new Table("TEST1");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     expect(() => table.deal()).toThrow(/nobody has bet/i);
   });
 
@@ -148,6 +161,79 @@ describe("how long the felt stays open", () => {
   });
 });
 
+describe("chips are only won from real people", () => {
+  it("will not seat a bot at a table playing for chips", () => {
+    /*
+     * A bot has no account to charge and none to pay, so a hand won against
+     * one at a table paying real chips is chips out of thin air. Greed refuses
+     * the same thing once there is a buy-in on its table.
+     */
+    const table = new Table("TEST1");
+
+    expect(() => table.addBot("bot", "Cassie", "normal")).toThrow(TableError);
+    expect(() => table.addBot("bot", "Cassie", "normal")).toThrow(/playing for fun/i);
+    expect(table.seats).toHaveLength(0);
+  });
+
+  it("seats a bot happily at a table playing for nothing", () => {
+    // The whole reason bots exist: a for-fun table worth sitting at alone.
+    const table = new Table("FUN01", Math.random, true);
+
+    expect(table.addBot("bot", "Cassie", "normal").isBot).toBe(true);
+  });
+
+  it("will not deal for chips to one person, however much they bet", () => {
+    const table = new Table("TEST1");
+    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    table.bet("a", 500);
+
+    expect(table.canDeal).toBe(false);
+    expect(() => table.deal()).toThrow(/somebody to play it with/i);
+  });
+
+  it("holds the window open rather than pocketing what is on the felt", () => {
+    /*
+     * The stake was taken from an account when it was placed. Clearing the
+     * felt to wait would be the table keeping it, so the window simply opens
+     * again with everything where it was.
+     */
+    const table = new Table("TEST1");
+    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    table.bet("a", 500);
+
+    table.closeBetting();
+
+    expect(table.phase).toBe("betting");
+    expect(table.seats[0]?.hands[0]?.bet).toBe(500);
+    expect(table.lastEvent).toMatch(/waiting for another player/i);
+    expect(table.view().waitingForPlayers).toBe(true);
+  });
+
+  it("deals the moment somebody else sits down", () => {
+    const table = stacked("5", "6", "7", "8");
+    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    table.bet("a", 500);
+    table.closeBetting();
+    expect(table.phase).toBe("betting");
+
+    table.join("b", "Bo", { userId: "u2", avatar: null, accentColor: null });
+    table.closeBetting();
+
+    expect(table.phase).toBe("playing");
+    // And the stake that waited through it is the stake in the hand.
+    expect(table.seats[0]?.hands[0]?.bet).toBe(500);
+  });
+
+  it("never makes a for-fun table wait for company", () => {
+    // There is nothing to win at one, which is the entire point of it.
+    const table = new Table("FUN01", Math.random, true);
+    table.join("a", "Ada");
+
+    expect(table.canDeal).toBe(true);
+    expect(table.view().waitingForPlayers).toBe(false);
+  });
+});
+
 describe("last call", () => {
   /** A table with the deal a moment away, rather than half a minute. */
   function closing(): Table {
@@ -209,7 +295,7 @@ describe("the dealer's hole card", () => {
   it("is not in the view while the hand is being played", () => {
     // Ada 10, dealer 9, Ada 7, dealer K — so the dealer's second card is a king.
     const table = stacked("10", "9", "7", "K");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
 
@@ -227,7 +313,7 @@ describe("the dealer's hole card", () => {
 
   it("is face up once the dealer has played", () => {
     const table = stacked("10", "9", "7", "K");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
     table.stand("a");
@@ -256,7 +342,7 @@ describe("playing a hand", () => {
   it("ends a turn the moment a hand busts", () => {
     // Ada 10, dealer 6, Ada 9, dealer 5, then a king for Ada.
     const table = stacked("10", "6", "9", "5", "K");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
 
@@ -272,7 +358,7 @@ describe("playing a hand", () => {
      * argument about what came out of the shoe.
      */
     const table = stacked("10", "6", "9", "5", "K");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
     table.hit("a");
@@ -283,7 +369,7 @@ describe("playing a hand", () => {
 
   it("doubles for exactly one card, and only at the start", () => {
     const table = stacked("5", "6", "6", "5", "9");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
 
@@ -296,7 +382,7 @@ describe("playing a hand", () => {
 
   it("refuses a double once a card has been taken", () => {
     const table = stacked("5", "6", "6", "5", "2", "9");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
     table.hit("a");
@@ -308,7 +394,7 @@ describe("what a hand pays", () => {
   /** Plays one hand out and reports what came back. */
   function payout(ranks: Rank[], play: (table: Table) => void = (t) => t.stand("a")) {
     const table = stacked(...ranks);
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 1000);
     table.deal();
     if (table.phase === "playing") {
@@ -368,7 +454,7 @@ describe("what a hand pays", () => {
   it("beats a plain twenty-one with a blackjack, and says which is which", () => {
     // Ada 7 7 7 the long way; dealer A K on two.
     const table = stacked("7", "A", "7", "K", "7");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 1000);
     table.deal();
     table.hit("a");
@@ -378,7 +464,7 @@ describe("what a hand pays", () => {
   it("pays double what was doubled", () => {
     // Ada 5 6, doubles into a 9 for twenty; dealer 6 5 draws to nineteen.
     const table = stacked("5", "6", "6", "5", "9", "8");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 1000);
     table.deal();
     table.double("a");
@@ -411,7 +497,7 @@ describe("the next round", () => {
 
   it("deals in whoever arrived while the last hand was running", () => {
     const table = stacked("10", "9", "9", "K");
-    table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
+    seatOne(table);
     table.bet("a", 500);
     table.deal();
 
@@ -424,6 +510,8 @@ describe("the next round", () => {
     table.beginBetting();
     expect(table.seats.every((seat) => !seat.waiting)).toBe(true);
     table.bet("c", 500);
-    expect(table.seats[1]?.hands[0]?.bet).toBe(500);
+    // Found by who they are rather than where they sit: a seat's position is
+    // not a fact this test is about.
+    expect(table.seats.find((seat) => seat.id === "c")?.hands[0]?.bet).toBe(500);
   });
 });

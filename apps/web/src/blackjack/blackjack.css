@@ -57,8 +57,14 @@
 
 /* --------------------------------------------------------------- the seats */
 
-.bj__seats {
+/* The seats and what is said under them: one region of the felt. */
+.bj__floor {
   grid-area: seats;
+  display: grid;
+  gap: var(--gr-space-2);
+}
+
+.bj__seats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(232px, 1fr));
   gap: var(--gr-space-3);
@@ -206,7 +212,6 @@
 }
 
 .bj__watchers {
-  grid-column: 1 / -1;
   margin: 0;
   font-size: var(--gr-text-xs);
   color: var(--gr-color-ink-dim);
@@ -629,30 +634,52 @@
   }
 }
 
-/* A card asked for and not yet sent. It breathes rather than settles, because
-   it has not landed — the moment it does, a real card replaces it. */
-@keyframes bj-await {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translateY(0);
+/*
+ * A card being turned over where it lies, in two halves.
+ *
+ * The back folds away and the face opens out in its place, and the swap
+ * happens at the moment neither is showing anything. Two animations rather
+ * than one because the element genuinely changes between them — what makes it
+ * read as a single card is that the motion does not stop.
+ *
+ * The fold holds its end state: the back has to stay closed for the frame
+ * between the two, or it snaps back to full width and flashes.
+ */
+@keyframes bj-fold {
+  0% {
+    transform: scaleX(1);
   }
-  50% {
-    opacity: 0.78;
-    transform: translateY(-3px);
+  100% {
+    transform: scaleX(0.05);
+    filter: brightness(1.35);
   }
 }
 
-.bj-card--dealing {
+@keyframes bj-unfold {
+  0% {
+    transform: scaleX(0.05);
+    filter: brightness(1.35);
+  }
+  100% {
+    transform: scaleX(1);
+    filter: brightness(1);
+  }
+}
+
+.bj-card--deal {
   animation: bj-deal 380ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
 }
 
-.bj-card--turning {
+.bj-card--turn {
   animation: bj-turn 320ms cubic-bezier(0.3, 0.8, 0.3, 1) backwards;
 }
 
-.bj-card--arriving {
-  animation: bj-await 900ms ease-in-out infinite;
+.bj-card--fold {
+  animation: bj-fold 120ms ease-in forwards;
+}
+
+.bj-card--unfold {
+  animation: bj-unfold 120ms ease-out backwards;
 }
 
 /* ---- the stake */
@@ -786,9 +813,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bj-card--dealing,
-  .bj-card--turning,
-  .bj-card--arriving,
+  .bj-card--deal,
+  .bj-card--turn,
+  .bj-card--fold,
+  .bj-card--unfold,
   .bj__stake--dropped,
   .bj__count--ticked .bj__count-total,
   .bj__count--bad .bj__count-total,
@@ -797,9 +825,7 @@
   .bj__result {
     animation: none;
   }
-  .bj-card--arriving {
-    opacity: 0.6;
-  }
+
 }
 
 /* ---- picking a card up */
