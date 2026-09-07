@@ -26,7 +26,11 @@ export const createSchema = z.object({
   /** Which game. Absent means Greed, so links made before there were two still work. */
   game: z.string().max(24).optional(),
   ruleset: z.string().max(40).optional(),
+  /** Absent means listed: a table nobody can find is one you have to arrange. */
+  listed: z.boolean().optional(),
 });
+
+export const setListedSchema = z.object({ listed: z.boolean() });
 
 export const joinSchema = z.object({ name, code });
 

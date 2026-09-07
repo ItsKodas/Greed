@@ -82,11 +82,15 @@ export interface RoomActions {
   say: (text: string) => void;
   setRules: (changes: Partial<HouseRules>) => void;
   setBuyIn: (amount: number) => void;
+  /** Whether the table shows up on the public list. The host's call. */
+  setListed: (listed: boolean) => void;
   leave: () => void;
 }
 
 export interface RoomHook {
   room: RoomView | null;
+  /** Whether this table shows up on the public list. */
+  listed: boolean;
   /**
    * Which dice this player has picked up, when that is ahead of the server.
    * Null once the server has caught up and its own answer should be shown.
@@ -106,6 +110,8 @@ export function useRoom(): RoomHook {
   const navigate = useNavigate();
   const socketRef = useRef<GameSocket | null>(null);
   const [room, setRoom] = useState<RoomView | null>(null);
+  /** Whether the table is on the public list. Not part of the game's view. */
+  const [listed, setListedHere] = useState(true);
   const [seatId, setSeatId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -173,6 +179,9 @@ export function useRoom(): RoomHook {
       if (raw.game !== "greed") {
         return;
       }
+      // Whether the table is on the public list is the room's fact about it
+      // rather than part of the game's view, so it is unpacked separately.
+      setListedHere(raw.listed);
       const state = raw as unknown as RoomView;
       setRoom(state);
       setPendingRoll((waiting) => {
@@ -288,6 +297,10 @@ export function useRoom(): RoomHook {
     (amount: number) => socketRef.current?.emit("lobby:setBuyIn", { amount }),
     [],
   );
+  const setListed = useCallback(
+    (listed: boolean) => socketRef.current?.emit("lobby:setListed", { listed }),
+    [],
+  );
   const start = useCallback(() => socketRef.current?.emit("game:action", { type: "start" }), []);
 
   const playAgain = useCallback(() => {
@@ -351,6 +364,7 @@ export function useRoom(): RoomHook {
 
   return {
     room,
+    listed,
     heldLocally,
     pendingRoll,
     chat,
@@ -366,6 +380,7 @@ export function useRoom(): RoomHook {
       removeSeat,
       setRules,
       setBuyIn,
+      setListed,
       say,
       start,
       playAgain,

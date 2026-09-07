@@ -534,6 +534,82 @@
   }
 }
 
+/* -------------------------------------------------------- tables on offer
+ *
+ * A list rather than a grid of cards. Somebody scanning this is comparing one
+ * column at a time — how full, how busy — and a grid makes that a hunt.
+ */
+
+.open-tables {
+  padding-top: var(--gr-space-2);
+}
+
+.open-tables__count {
+  margin-left: var(--gr-space-2);
+  font-family: var(--gr-font-data);
+  color: var(--gr-color-ink-faint);
+}
+
+.open-tables__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--gr-space-2);
+}
+
+.open-table {
+  display: grid;
+  grid-template-columns: minmax(0, 7em) minmax(0, 1fr) minmax(0, auto) minmax(0, 5.5em) auto auto;
+  align-items: center;
+  gap: var(--gr-space-3);
+  padding: var(--gr-space-2) var(--gr-space-3);
+  border: var(--gr-edge-soft);
+  border-left: 3px solid var(--gr-color-neon-dim);
+  border-radius: var(--gr-radius-sm);
+  background: rgb(0 0 0 / 0.24);
+}
+
+.open-table__code {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-base);
+  letter-spacing: 0.16em;
+  color: var(--gr-color-ink-lit);
+}
+
+.open-table__host,
+.open-table__seats {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.open-table__state {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  white-space: nowrap;
+}
+
+/* Lit means it is happening now, the same promise as everywhere else. */
+.open-table__state--live {
+  color: var(--gr-color-neon-hi);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
+}
+
+@media (max-width: 640px) {
+  .open-table {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  /* The host and the state go, not the seats: whether there is room is the
+     one thing worth keeping when there is no width for all of it. */
+  .open-table__host,
+  .open-table__state {
+    display: none;
+  }
+}
+
 /* ---------------------------------------------------------------- join */
 
 .join {

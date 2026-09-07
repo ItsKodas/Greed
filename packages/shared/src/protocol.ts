@@ -61,8 +61,21 @@ export interface TurnView {
   endsAt: number | null;
 }
 
-/** Any game's view of a table, tagged with the game that made it. */
-export type TableState = { game: string } & Record<string, unknown>;
+/**
+ * What the server adds to every table state, whatever the game.
+ *
+ * Both of these are the building's business rather than any game's: which
+ * game is being played, and whether the table is on the public list. A game
+ * knows neither, which is why they are added around its view instead of asked
+ * of it.
+ */
+export interface TableEnvelope {
+  game: string;
+  listed: boolean;
+}
+
+/** Any game's view of a table, wrapped in what the room knows about it. */
+export type TableState = TableEnvelope & Record<string, unknown>;
 
 export interface RoomView {
   code: string;
@@ -85,10 +98,27 @@ export type Ack =
   | { ok: true; code: string; seatId: string }
   | { ok: false; error: string };
 
+/** A public table, as the room advertises it to somebody looking for one. */
+export interface TableOnOffer {
+  code: string;
+  game: string;
+  /** Who opened it. */
+  host: string;
+  seats: number;
+  maxSeats: number;
+  /** How many are stood watching. */
+  watching: number;
+  status: RoomStatus;
+}
+
 export interface ClientToServer {
   "lobby:create": (
-    /** `game` names which table to open; left out, it is Greed, as it always was. */
-    payload: { name: string; game?: string; ruleset?: string },
+    /**
+     * `game` names which table to open; left out, it is Greed, as it always
+     * was. `listed` puts it on the public list, and is the default — a table
+     * nobody can find is a table you have to organise before you can play at.
+     */
+    payload: { name: string; game?: string; ruleset?: string; listed?: boolean },
     ack: (result: Ack) => void,
   ) => void;
   "lobby:join": (payload: { name: string; code: string }, ack: (result: Ack) => void) => void;
@@ -99,6 +129,8 @@ export interface ClientToServer {
   "lobby:addBot": (payload: { skill: BotSkill }) => void;
   "lobby:setRules": (payload: Partial<HouseRules>) => void;
   "lobby:setBuyIn": (payload: { amount: number }) => void;
+  /** Whether the table appears on the public list. The host's call. */
+  "lobby:setListed": (payload: { listed: boolean }) => void;
   "lobby:removeSeat": (payload: { seatId: string }) => void;
   /**
    * Anything a player does at a table, whatever the game.

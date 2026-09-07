@@ -8,6 +8,7 @@ import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
+import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
@@ -168,6 +169,7 @@ function Felt({
             max={state.maxBet}
             isHost={isHost}
             seats={state.seats.length}
+            listed={table.listed}
           />
         ) : state.phase === "settled" ? (
           <>
@@ -289,6 +291,7 @@ function Betting({
   max,
   isHost,
   seats,
+  listed,
 }: {
   table: Table;
   mine: number;
@@ -296,6 +299,7 @@ function Betting({
   max: number;
   isHost: boolean;
   seats: number;
+  listed: boolean;
 }) {
   const stake = (amount: number) => {
     // Sounded on the press rather than on the state coming back: the whole
@@ -340,6 +344,26 @@ function Betting({
           >
             Deal
           </button>
+          {/* Public by default: a table nobody can find is one you have to
+              arrange before you can play at it. The code still works either
+              way — private only means it is not advertised. */}
+          <div className="bots">
+            <span className="bots__label">Who can find it</span>
+            <div className="bots__row">
+              {[true, false].map((option) => (
+                <button
+                  key={String(option)}
+                  type="button"
+                  role="radio"
+                  aria-checked={listed === option}
+                  className={`btn btn--small${listed === option ? "" : " btn--ghost"}`}
+                  onClick={() => table.setListed(option)}
+                >
+                  {option ? "Public" : "Private"}
+                </button>
+              ))}
+            </div>
+          </div>
           {seats < 6 ? (
             <div className="bots">
               <span className="bots__label">Add a player</span>
@@ -441,6 +465,15 @@ function Sit({
           </button>
         </div>
       </div>
+
+      <PublicTables
+        game="blackjack"
+        busy={table.busy}
+        canSit={account.profile !== null}
+        whyNotSit="Every hand is played for chips, so you will need to sign in."
+        onJoin={(open) => table.join(name, open)}
+        onWatch={(open) => table.watch(open)}
+      />
     </div>
   );
 }

@@ -65,6 +65,8 @@ function writeSeat(game: string, seat: StoredSeat | null): void {
 export interface TableSocketHook<TView> {
   /** The table as this seat sees it, or null before one is open. */
   state: TView | null;
+  /** Whether this table shows up on the public list. */
+  listed: boolean;
   seatId: string | null;
   error: string | null;
   connected: boolean;
@@ -75,6 +77,8 @@ export interface TableSocketHook<TView> {
   say: (text: string) => void;
   /** Seats a bot. Refused by the server for a game that has none. */
   addBot: (skill: BotSkill) => void;
+  /** Whether the table is on the public list. The host's call. */
+  setListed: (listed: boolean) => void;
   create: (name: string, options?: CreateOptions) => void;
   join: (name: string, code: string) => void;
   watch: (code: string) => void;
@@ -96,6 +100,8 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [chat, setChat] = useState<ChatMessage[]>([]);
+  /** The room's fact about the table rather than part of the game's view. */
+  const [listed, setListedHere] = useState(true);
 
   useEffect(() => {
     // No transports named on purpose: naming one makes it the only one tried,
@@ -122,6 +128,7 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
       if (raw.game !== game) {
         return;
       }
+      setListedHere(raw.listed);
       setState(raw as unknown as TView);
     });
     socket.on("room:error", (message: string) => setError(message));
@@ -215,6 +222,10 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
     socketRef.current?.emit("lobby:addBot", { skill });
   }, []);
 
+  const setListed = useCallback((next: boolean) => {
+    socketRef.current?.emit("lobby:setListed", { listed: next });
+  }, []);
+
   const say = useCallback((text: string) => {
     const trimmed = text.trim();
     if (trimmed.length === 0) {
@@ -225,12 +236,14 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
 
   return {
     state,
+    listed,
     seatId,
     error,
     connected,
     busy,
     chat,
     addBot,
+    setListed,
     create,
     join,
     watch,

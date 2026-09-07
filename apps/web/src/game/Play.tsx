@@ -1,5 +1,6 @@
 import { RULESETS } from "@backroom/rules";
 import { Navbar } from "../nav/Navbar.js";
+import { PublicTables } from "../table/PublicTables.js";
 import { SeatAvatar } from "./Avatar.js";
 import "@backroom/game-greed/theme.css";
 import type { ChatMessage, RoomView } from "@backroom/shared";
@@ -24,7 +25,7 @@ export function Play() {
   const looksLikeCode =
     raw.length === CODE_LENGTH && [...raw].every((letter) => CODE_ALPHABET.includes(letter));
   const urlCode = looksLikeCode ? raw : "";
-  const { room, heldLocally, pendingRoll, chat, seatId, error, connected, busy, actions } =
+  const { room, listed, heldLocally, pendingRoll, chat, seatId, error, connected, busy, actions } =
     useRoom();
   const account = useAccount();
   useSound(room, seatId);
@@ -96,7 +97,14 @@ export function Play() {
           account={account}
         />
       ) : room.status === "lobby" ? (
-        <Lobby room={room} seatId={seatId} actions={actions} chat={chat} account={account} />
+        <Lobby
+          room={room}
+          listed={listed}
+          seatId={seatId}
+          actions={actions}
+          chat={chat}
+          account={account}
+        />
       ) : (
         <>
           <Table
@@ -331,6 +339,15 @@ function Join({
         </div>
       </div>
 
+      <PublicTables
+        game="greed"
+        busy={busy || !connected}
+        canSit={ready}
+        whyNotSit={askName ? "Put in a name first." : "Waiting for the server…"}
+        onJoin={(open) => actions.join(name, open)}
+        onWatch={(open) => actions.watch(open)}
+      />
+
       {!connected ? <p className="join__warn">Waiting for the server…</p> : null}
     </div>
   );
@@ -399,14 +416,60 @@ function legacyCopy(text: string): boolean {
   }
 }
 
+/**
+ * Who can find this table.
+ *
+ * Public by default, because a table nobody can find is one you have to
+ * arrange before you can play at — and the whole point of a room is walking
+ * into it. The code still works either way; private only means the table is
+ * not advertised.
+ */
+function Listing({
+  listed,
+  editable,
+  onSet,
+}: {
+  listed: boolean;
+  editable: boolean;
+  onSet: (listed: boolean) => void;
+}) {
+  return (
+    <section className="rules" aria-label="Who can find this table">
+      <p className="panel__label">Who can find it</p>
+      <div className="rules__choices" role="radiogroup" aria-label="Who can find this table">
+        {[true, false].map((option) => (
+          <button
+            key={String(option)}
+            type="button"
+            role="radio"
+            aria-checked={listed === option}
+            disabled={!editable}
+            className={`rules__choice${listed === option ? " rules__choice--on" : ""}`}
+            onClick={() => onSet(option)}
+          >
+            {option ? "Public" : "Private"}
+          </button>
+        ))}
+      </div>
+      <p className="rules__note">
+        {listed
+          ? "Anyone can see this table and sit down."
+          : "Only people you send the code to."}
+      </p>
+    </section>
+  );
+}
+
 function Lobby({
   room,
+  listed,
   seatId,
   actions,
   chat,
   account,
 }: {
   room: RoomView;
+  listed: boolean;
   seatId: string | null;
   actions: RoomActions;
   chat: ChatMessage[];
@@ -496,6 +559,11 @@ function Lobby({
             signedIn={account.profile !== null}
             chips={account.profile?.chips ?? 0}
             onSet={actions.setBuyIn}
+          />
+          <Listing
+            listed={listed}
+            editable={you?.isHost === true}
+            onSet={actions.setListed}
           />
         </div>
         <Chat log={chat} seatId={seatId} onSay={actions.say} />

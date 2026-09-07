@@ -11,6 +11,8 @@ export {
   type Phase,
   type RoomStatus,
   type RoomView,
+  type TableEnvelope,
+  type TableOnOffer,
   type TableState,
   type SeatView,
   type ServerToClient,

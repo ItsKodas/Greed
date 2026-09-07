@@ -709,6 +709,149 @@ describe("watching a table", () => {
   });
 });
 
+describe("tables anybody can walk up to", () => {
+  /** Opens a table, saying whether it should be advertised. */
+  function open_(socket: Client, name: string, listed?: boolean): Promise<Ack> {
+    return new Promise((resolve) =>
+      socket.emit("lobby:create", { name, ...(listed === undefined ? {} : { listed }) }, resolve),
+    );
+  }
+
+  async function listed(query = ""): Promise<Array<Record<string, unknown>>> {
+    const port = (server as BackRoomServer).http.address() as AddressInfo;
+    const body = (await (
+      await fetch(`http://localhost:${port.port}/api/tables${query}`)
+    ).json()) as { tables: Array<Record<string, unknown>> };
+    return body.tables;
+  }
+
+  it("advertises a new table without being asked", async () => {
+    const host = await client();
+    const ack = await open_(host, "Ada");
+    expect(ack.ok).toBe(true);
+    await stateWhere(host, (room) => room.seats.length === 1);
+
+    const tables = await listed();
+    expect(tables).toHaveLength(1);
+    expect(tables[0]).toMatchObject({
+      game: "greed",
+      host: "Ada",
+      seats: 1,
+      maxSeats: 8,
+      status: "lobby",
+    });
+  });
+
+  it("keeps a private table off the list, code and all", async () => {
+    const host = await client();
+    const ack = await open_(host, "Ada", false);
+    expect(ack.ok).toBe(true);
+    await stateWhere(host, (room) => room.seats.length === 1);
+
+    expect(await listed()).toEqual([]);
+    // Still perfectly playable — private is about being found, not about being
+    // reachable, so the code somebody was given still works.
+    const guest = await client();
+    const joined = await join(guest, "Bram", ack.ok ? ack.code : "");
+    expect(joined.ok).toBe(true);
+  });
+
+  it("lets the host change their mind, both ways", async () => {
+    const host = await client();
+    await open_(host, "Ada");
+    await stateWhere(host, (room) => room.seats.length === 1);
+
+    host.emit("lobby:setListed", { listed: false });
+    await expect.poll(async () => (await listed()).length).toBe(0);
+
+    host.emit("lobby:setListed", { listed: true });
+    await expect.poll(async () => (await listed()).length).toBe(1);
+  });
+
+  it("is the host's call and nobody else's", async () => {
+    const host = await client();
+    const ack = await open_(host, "Ada");
+    const guest = await client();
+    await join(guest, "Bram", ack.ok ? ack.code : "");
+
+    const refused = nextError(guest);
+    guest.emit("lobby:setListed", { listed: false });
+    expect(await refused).toMatch(/host/i);
+    // And it did not happen anyway.
+    expect(await listed()).toHaveLength(1);
+  });
+
+  it("shows only the game that was asked for", async () => {
+    const host = await client();
+    await open_(host, "Ada");
+    await stateWhere(host, (room) => room.seats.length === 1);
+
+    expect(await listed("?game=greed")).toHaveLength(1);
+    expect(await listed("?game=blackjack")).toEqual([]);
+    expect(await listed("?game=nonsense")).toEqual([]);
+  });
+
+  it("gives away nothing about the play", async () => {
+    /*
+     * The whole reason a table's state is built per seat is that it is not
+     * something to hand to people who have no seat at it. This list is read by
+     * anybody, signed in or not, so it must never grow a field that carries
+     * the game — a hand of cards least of all.
+     */
+    const host = await client();
+    await open_(host, "Ada");
+    await stateWhere(host, (room) => room.seats.length === 1);
+
+    const [table] = await listed();
+    expect(Object.keys(table ?? {}).sort()).toEqual([
+      "code",
+      "game",
+      "host",
+      "maxSeats",
+      "seats",
+      "status",
+      "watching",
+    ]);
+  });
+
+  it("stops advertising a table everybody walked away from", async () => {
+    /*
+     * Closing the tab, not pressing Leave — the way most tables are actually
+     * abandoned, and the way that leaves a seat behind rather than giving it
+     * up. It works because "empty" means every seat disconnected rather than
+     * no seats at all, so the sweep run when the socket drops already counts
+     * the table as gone and books its removal.
+     *
+     * Pinned because a public list is what makes it matter. A table that
+     * outlives everybody at it used to be invisible unless you had its code;
+     * now it would sit on the front page inviting people into an empty room.
+     */
+    const host = await client();
+    await open_(host, "Ada");
+    await stateWhere(host, (room) => room.seats.length === 1);
+    expect(await listed()).toHaveLength(1);
+
+    host.close();
+
+    await expect.poll(async () => (await listed()).length, { timeout: 4000 }).toBe(0);
+    expect((server as BackRoomServer).rooms.size).toBe(0);
+  });
+
+  it("puts the emptiest tables first", async () => {
+    const busy = await client();
+    const busyAck = await open_(busy, "Ada");
+    const second = await client();
+    await join(second, "Bram", busyAck.ok ? busyAck.code : "");
+
+    const quiet = await client();
+    await open_(quiet, "Cleo");
+    await stateWhere(quiet, (room) => room.seats.length === 1);
+
+    const tables = await listed();
+    expect(tables.map((table) => table["seats"])).toEqual([1, 2]);
+  });
+});
+
 describe("what the room offers", () => {
   it("lists every game, and says which can be opened", async () => {
     await start();

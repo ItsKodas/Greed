@@ -11,7 +11,7 @@ import { BLACKJACK, blackjackAdapter } from "@backroom/game-blackjack";
 import { GREED, RoomError, greedAdapter } from "@backroom/game-greed";
 import type { Die } from "@backroom/rules";
 
-import type { Ack, ClientToServer, ServerToClient } from "@backroom/shared";
+import type { Ack, ClientToServer, ServerToClient, TableOnOffer } from "@backroom/shared";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 // From the subpath, not the barrel: the client imports the barrel, and pulling
 // zod in through it would ship a validation library to every browser.
@@ -24,6 +24,7 @@ import {
   mintCodeSchema,
   removeSeatSchema,
   resumeSchema,
+  setListedSchema,
   setBuyInSchema,
   setRulesSchema,
   watchSchema,
@@ -110,6 +111,14 @@ interface SocketIdentity {
 interface Seated {
   game: GameAdapter<PlayTable>;
   table: PlayTable;
+  /**
+   * Whether it appears on the public list.
+   *
+   * Kept here rather than on the table because it is not about play. A game
+   * decides what a hand is worth; the building decides who can find the room
+   * it is being played in, and no game has an opinion on that.
+   */
+  listed: boolean;
 }
 
 export interface BackRoomServer {
@@ -307,6 +316,43 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         };
       }),
     });
+  });
+
+  /**
+   * The tables anybody may walk up to.
+   *
+   * Only what a stranger is allowed to know before they sit down: which game,
+   * which code, who opened it and how full it is. Nothing about the play — a
+   * hand in progress is not a thing to advertise, and a table's state is built
+   * per seat precisely so that it is not handed out to people who have no
+   * seat at it.
+   */
+  app.get("/api/tables", (request, response) => {
+    const wanted = typeof request.query["game"] === "string" ? request.query["game"] : null;
+    const tables: TableOnOffer[] = [];
+
+    for (const seated of rooms.values()) {
+      const id = seated.game.listing.id;
+      if (!seated.listed || (wanted !== null && id !== wanted)) {
+        continue;
+      }
+      const seats = seated.table.seats;
+      const host = seats.find((seat) => seat.id === seated.table.hostId);
+      tables.push({
+        code: seated.table.code,
+        game: id,
+        host: host?.name ?? "nobody",
+        seats: seats.length,
+        maxSeats: seated.game.listing.maxSeats,
+        watching: seatsWatching(seated.table),
+        status: seated.table.status,
+      });
+    }
+
+    // Emptiest first: somebody looking for a table wants one they can join,
+    // and a table with room is more use than a full one however busy it looks.
+    tables.sort((left, right) => left.seats - right.seats);
+    response.json({ tables });
   });
 
   /**
@@ -568,8 +614,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       io.to(socketId).emit("room:state", {
         // Tagged, so a client can tell what it is looking at without being
         // told separately — and so a stale socket cannot render one game's
-        // state through another's components.
+        // state through another's components. `listed` rides along for the
+        // same reason: it is the room's fact about the table, not the game's.
         game: seated.game.listing.id,
+        listed: seated.listed,
         ...(seated.table.view(seat) as Record<string, unknown>),
       });
     }
@@ -808,7 +856,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         }
         const code = makeCode();
         const table = game.create(code, { ruleset: parsed.data.ruleset });
-        rooms.set(code, { game, table });
+        rooms.set(code, { game, table, listed: parsed.data.listed ?? true });
         table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
         sockets.set(socket.id, { code, seatId: socket.id });
         void socket.join(code);
@@ -949,6 +997,17 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           throw new RoomError("This game has no rules to change.");
         }
         table.updateRules(parsed.data);
+      });
+    });
+
+    socket.on("lobby:setListed", (payload) => {
+      const parsed = setListedSchema.safeParse(payload);
+      if (!parsed.success) {
+        return;
+      }
+      guard(socket.id, (seated, seatId) => {
+        requireHost(seated.table, seatId, "change who can find this table");
+        seated.listed = parsed.data.listed;
       });
     });
 
