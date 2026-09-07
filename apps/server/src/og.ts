@@ -35,7 +35,15 @@ export interface CardSpec {
   host: string | null;
   /** The table's code, which is also how anybody gets to it. */
   code: string | null;
-  seats: number;
+  /**
+   * Who is sitting, in order, as a picture each or nothing.
+   *
+   * A face rather than a chip wherever there is one: the point of a link to a
+   * table is who is already at it. What arrives here is a data URI, because
+   * the rasterizer cannot fetch anything and would not be given the chance to
+   * if it could.
+   */
+  players: readonly (string | null)[];
   maxSeats: number;
   /** The line under the title: a game's blurb, or what a table is doing. */
   note: string | null;
@@ -83,6 +91,13 @@ export function fit(text: string, size: number, room: number, em = 0.54): string
 function around(cx: number, cy: number, r: number, degrees: number): [number, number] {
   const radians = ((degrees - 90) * Math.PI) / 180;
   return [cx + r * Math.cos(radians), cy + r * Math.sin(radians)];
+}
+
+/** One seat as somebody's face, cut to a circle and ringed in gold. */
+function face(cx: number, cy: number, r: number, picture: string, id: string): string {
+  return `<clipPath id="${id}"><circle cx="${cx}" cy="${cy}" r="${r - 2}"/></clipPath>
+    <image href="${picture}" x="${cx - r + 2}" y="${cy - r + 2}" width="${(r - 2) * 2}" height="${(r - 2) * 2}" clip-path="url(#${id})" preserveAspectRatio="xMidYMid slice"/>
+    <circle cx="${cx}" cy="${cy}" r="${r - 1}" fill="none" stroke="${CHIP}" stroke-width="2.5"/>`;
 }
 
 /** One seat as a chip: gold for taken, a dark ring for one going spare. */
@@ -266,10 +281,17 @@ export function cardSvg(spec: CardSpec): string {
   // Seats mean something at a table and nothing on a banner for a whole game.
   const atTable = spec.game !== null && spec.code !== null;
 
+  const taken = spec.players.length;
   const seats: string[] = [];
   if (atTable) {
     for (let index = 0; index < spec.maxSeats; index += 1) {
-      seats.push(chip(94 + index * 52, 486, 20, index < spec.seats));
+      const x = 94 + index * 52;
+      const picture = spec.players[index];
+      seats.push(
+        picture === undefined || picture === null
+          ? chip(x, 486, 20, index < taken)
+          : face(x, 486, 20, picture, `seat${index}`),
+      );
     }
   }
 
@@ -331,7 +353,7 @@ export function cardSvg(spec: CardSpec): string {
   ${seats.join("")}
   ${
     atTable
-      ? `<text x="${94 + spec.maxSeats * 52 + 8}" y="496" font-family="IBM Plex Sans" font-size="28" fill="${INK_DIM}">${spec.seats} of ${spec.maxSeats} seats</text>`
+      ? `<text x="${94 + spec.maxSeats * 52 + 8}" y="496" font-family="IBM Plex Sans" font-size="28" fill="${INK_DIM}">${taken} of ${spec.maxSeats} seats</text>`
       : ""
   }
   ${
@@ -415,5 +437,72 @@ export class Cards {
     }
     this.drawn.set(key, made);
     return made;
+  }
+}
+
+/**
+ * Players' pictures, fetched once and kept.
+ *
+ * The rasterizer cannot fetch anything, so a face has to arrive as bytes. That
+ * means this server makes a request to an address it read out of its own
+ * store, which is the shape of every server-side request forgery there has
+ * ever been — so it will only ever talk to Discord's picture host, and
+ * anything else is not cleaned up or followed, it is simply not fetched.
+ *
+ * A failure is not an error. A card with a chip where a face would have been
+ * is a card; a card that never renders because somebody's avatar host was slow
+ * is not.
+ */
+const PICTURE_HOST = "https://cdn.discordapp.com/";
+/** Bigger than any avatar Discord serves at the size we ask for. */
+const MOST_BYTES = 512 * 1024;
+
+export class Avatars {
+  private readonly held = new Map<string, string | null>();
+  private readonly most: number;
+
+  constructor(most = 256) {
+    this.most = most;
+  }
+
+  /** One picture as a data URI, or null if there isn't one to be had. */
+  async data(url: string | null): Promise<string | null> {
+    if (url === null || !url.startsWith(PICTURE_HOST)) {
+      return null;
+    }
+    const had = this.held.get(url);
+    if (had !== undefined) {
+      return had;
+    }
+
+    let picture: string | null = null;
+    try {
+      const answer = await fetch(url, { signal: AbortSignal.timeout(2500) });
+      const type = answer.headers.get("content-type") ?? "";
+      if (answer.ok && type.startsWith("image/")) {
+        const bytes = Buffer.from(await answer.arrayBuffer());
+        if (bytes.byteLength <= MOST_BYTES) {
+          picture = `data:${type};base64,${bytes.toString("base64")}`;
+        }
+      }
+    } catch {
+      // Slow, refused, or gone. The seat gets a chip.
+    }
+
+    // Remembered either way, so a picture that is not coming is not asked for
+    // again on every unfurl of every link to that table.
+    if (this.held.size >= this.most) {
+      const oldest = this.held.keys().next();
+      if (!oldest.done) {
+        this.held.delete(oldest.value);
+      }
+    }
+    this.held.set(url, picture);
+    return picture;
+  }
+
+  /** Every seat's picture, in order, fetched together. */
+  async all(urls: readonly (string | null)[]): Promise<(string | null)[]> {
+    return Promise.all(urls.map((url) => this.data(url)));
   }
 }

@@ -40,7 +40,7 @@ import { mountAuth, readAuthConfig } from "./auth.js";
 import { friendlyRedirect } from "./domains.js";
 import { inject, pageFor } from "./meta.js";
 import type { CardSpec } from "./og.js";
-import { Cards } from "./og.js";
+import { Avatars, Cards } from "./og.js";
 
 /**
  * What the room offers.
@@ -213,6 +213,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   const clientDist = join(here, "../../web/dist");
   /** Draws the picture a link unfurls into, and keeps the last few. */
   const cards = new Cards(join(here, "../assets/fonts"));
+  /** Players' faces, so a link to a table shows who is already at it. */
+  const avatars = new Avatars();
   /**
    * Which table each socket is at, and as whom. A null seat is someone
    * watching: at the table, in the room, sent every state, holding nothing.
@@ -454,7 +456,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       game: { id: listing.id, name: listing.name, theme: listing.theme, mark: listing.mark },
       host: host?.name ?? null,
       code,
-      seats: seated.table.seats.length,
+      // In seating order, so the faces on the card are the faces at the table.
+      players: seated.table.seats.map((seat) => seat.avatar),
       maxSeats: seated.table.maxSeats,
       note: seated.table.status === "lobby" ? "Open — pull up a chair" : "Hand in play",
     };
@@ -470,7 +473,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       game: { id: listing.id, name: listing.name, theme: listing.theme, mark: listing.mark },
       host: null,
       code: null,
-      seats: 0,
+      players: [],
       maxSeats: listing.maxSeats,
       note: listing.blurb,
     };
@@ -481,13 +484,20 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     game: null,
     host: null,
     code: null,
-    seats: 0,
+    players: [],
     maxSeats: 0,
     note: "Played for chips and nothing else",
   };
 
-  function sendCard(response: express.Response, spec: CardSpec): void {
-    const png = cards.png(spec);
+  async function sendCard(response: express.Response, spec: CardSpec): Promise<void> {
+    /*
+     * The faces first. They come from Discord, which is a network round trip
+     * this server makes on somebody else's behalf — so it is bounded, cached,
+     * and allowed to fail: a seat whose picture did not arrive is drawn as a
+     * chip, which is what every seat looked like a moment ago anyway.
+     */
+    const spread = { ...spec, players: await avatars.all(spec.players) };
+    const png = cards.png(spread);
     response.type("image/png");
     /*
      * Long enough that a link pasted in a busy channel is drawn once, short
@@ -506,13 +516,13 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       .toUpperCase();
     // A table that has closed still gets a picture, because the link to it is
     // already out there — just the room's own rather than a table's.
-    sendCard(response, tableCard(code) ?? SITE_CARD);
+    void sendCard(response, tableCard(code) ?? SITE_CARD);
   });
 
   /** The card for a game, or for the room. */
   app.get("/og/:name", (request, response) => {
     const name = String(request.params["name"] ?? "").replace(/\.png$/i, "");
-    sendCard(response, gameCard(name) ?? SITE_CARD);
+    void sendCard(response, gameCard(name) ?? SITE_CARD);
   });
 
   app.get("/robots.txt", (request, response) => {
@@ -566,7 +576,12 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       const card = tableCard(code);
       return card === null
         ? null
-        : { game: card.game?.name ?? "table", host: card.host, seats: card.seats, maxSeats: card.maxSeats };
+        : {
+            game: card.game?.name ?? "table",
+            host: card.host,
+            seats: card.players.length,
+            maxSeats: card.maxSeats,
+          };
     },
   };
 

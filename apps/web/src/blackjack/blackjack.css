@@ -500,9 +500,50 @@
 }
 
 @media (max-width: 720px) {
+  /*
+   * The controls come before the seats on a phone.
+   *
+   * On a desk the panel sits beside the felt and is always in view; stacked,
+   * it lands under however many seats there happen to be, so betting meant
+   * scrolling past everybody at the table and back up again every round. The
+   * dealer is what you are playing against, what you do about it is next, and
+   * who else is here is below that.
+   */
   .bj {
     grid-template-columns: 1fr;
-    grid-template-areas: "dealer" "seats" "side";
+    grid-template-areas: "dealer" "side" "seats";
+  }
+
+  /*
+   * The dealer's row was the widest thing in the building.
+   *
+   * A label that will not wrap, two cards drawn larger than anybody else's and
+   * padding for a desk came to more than a phone is wide — and one row that
+   * will not fit takes the whole page sideways with it. It wraps now, on
+   * smaller cards, in less room.
+   */
+  .bj__dealer {
+    flex-wrap: wrap;
+    gap: var(--gr-space-3);
+    padding: var(--gr-space-3);
+  }
+
+  .bj__dealer .bj-card {
+    --bj-card-w: 52px;
+  }
+
+  /* Cards first, then what they come to, rather than a column of one each. */
+  .bj__whose {
+    flex-basis: 100%;
+  }
+
+  .bj__seats {
+    grid-template-columns: 1fr;
+  }
+
+  /* A thumb, not a mouse. */
+  .bj__chip {
+    width: 56px;
   }
 }
 

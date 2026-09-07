@@ -2,15 +2,19 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { CardSpec } from "./og.js";
-import { Cards, cardSvg, fit } from "./og.js";
+import { Avatars, Cards, cardSvg, fit } from "./og.js";
 
 const FONTS = join(dirname(fileURLToPath(import.meta.url)), "../assets/fonts");
 
 const table: CardSpec = {
-  game: { id: "blackjack", name: "Blackjack" },
+  game: {
+    id: "blackjack",
+    name: "Blackjack",
+    theme: { wall: "#0b1712", felt: "#17402e", accent: "#2e7bff", accentHi: "#7ba9ff" },
+  },
   host: "Ada",
   code: "6PMKG",
-  seats: 3,
+  players: [null, null, null],
   maxSeats: 6,
   note: "Open — pull up a chair",
 };
@@ -60,7 +64,12 @@ describe("the card a link unfurls into", () => {
   it("gives each game its own furniture", () => {
     // The picture should say which game before anybody reads a word of it.
     expect(cardSvg(table)).toContain("IBM Plex Sans");
-    expect(cardSvg({ ...table, game: { id: "greed", name: "Greed" } })).toContain("rx=\"20\"");
+    const greed = {
+      id: "greed",
+      name: "Greed",
+      theme: { wall: "#241811", felt: "#16241c", accent: "#c08a2e", accentHi: "#e8c168" },
+    };
+    expect(cardSvg({ ...table, game: greed })).toContain('rx="20"');
     expect(cardSvg({ ...table, game: null, code: null })).not.toContain("rx=\"20\"");
   });
 });
@@ -99,17 +108,74 @@ describe("drawing it for real", () => {
     // The same buffer, not merely an equal one: a link in a busy channel is
     // fetched by every client that renders the embed.
     expect(cards.png(table)).toBe(cards.png(table));
-    expect(cards.png({ ...table, seats: 4 })).not.toBe(cards.png(table));
+    expect(cards.png({ ...table, players: [null, null, null, null] })).not.toBe(cards.png(table));
   });
 
   it("does not grow without limit", () => {
     const cards = new Cards(FONTS, 4);
     const first = cards.png(table);
     for (let seats = 0; seats <= 5; seats += 1) {
-      cards.png({ ...table, seats });
+      cards.png({ ...table, players: Array.from({ length: seats }, () => null) });
     }
 
     // Pushed out by the ones after it, and drawn again rather than kept.
     expect(cards.png(table)).not.toBe(first);
+  });
+});
+
+describe("the faces at a table", () => {
+  it("draws a seat as somebody's picture when there is one", () => {
+    const picture = "data:image/png;base64,iVBORw0KGgo=";
+    const svg = cardSvg({ ...table, players: [picture, null] });
+
+    expect(svg).toContain(`href="${picture}"`);
+    // Cut to a circle rather than laid over one: a square face in a row of
+    // round chips is the one thing that would look like a mistake.
+    expect(svg).toContain("clip-path");
+    // The seat that has nobody's picture is still a chip.
+    expect(svg).toContain("#e0b048");
+  });
+
+  it("falls back to a chip for a seat with no picture", () => {
+    const svg = cardSvg({ ...table, players: [null, null] });
+
+    expect(svg).not.toContain("<image");
+  });
+
+  it("counts the seats that are taken, not the pictures that arrived", () => {
+    const svg = cardSvg({ ...table, players: [null, null, null] });
+
+    expect(svg).toContain("3 of 6 seats");
+  });
+});
+
+describe("fetching a face", () => {
+  it("will not fetch from anywhere but the picture host", async () => {
+    /*
+     * The address comes out of this server's own store, which is the shape of
+     * every server-side request forgery there has been. Anything that is not
+     * Discord's CDN is not cleaned up or followed — it is not fetched.
+     */
+    const avatars = new Avatars();
+    let asked = 0;
+    const real = globalThis.fetch;
+    globalThis.fetch = (...args: Parameters<typeof fetch>) => {
+      asked += 1;
+      return real(...args);
+    };
+    try {
+      for (const url of [
+        "http://localhost:3001/api/room",
+        "https://evil.example/x.png",
+        "https://cdn.discordapp.com.evil.example/x.png",
+        "file:///etc/passwd",
+        null,
+      ]) {
+        expect(await avatars.data(url)).toBeNull();
+      }
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(asked).toBe(0);
   });
 });
