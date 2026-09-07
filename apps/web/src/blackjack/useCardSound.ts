@@ -2,9 +2,17 @@ import type { TableView } from "@backroom/game-blackjack";
 import { useEffect, useRef } from "react";
 import { play, preload, unlock } from "../game/audio.js";
 
-/** How many cards are on the table, dealer included. */
+/** How many cards are on the table, across every hand and the dealer's. */
 function cardsOut(view: TableView): number {
-  return view.seats.reduce((total, seat) => total + seat.cards.length, view.dealer.cards.length);
+  return view.seats.reduce(
+    (total, seat) => total + seat.hands.reduce((cards, hand) => cards + hand.cards.length, 0),
+    view.dealer.cards.length,
+  );
+}
+
+/** Everything a seat got back, across however many hands it played. */
+function paid(seat: TableView["seats"][number]): number {
+  return seat.hands.reduce((total, hand) => total + hand.returned, 0);
 }
 
 /**
@@ -64,7 +72,9 @@ export function useCardSound(view: TableView | null, seatId: string | null): voi
       const me = view.seats.find((seat) => seat.id === seatId);
       // Only on the way in. A loss is silence, which is both quieter to sit
       // through and truer to what a table sounds like when you have lost.
-      if (me !== undefined && me.returned > me.bet) {
+      // Up on the deal as a whole: a split that wins one and loses the other
+      // by more is not a payout, whatever the winning hand says on its own.
+      if (me !== undefined && paid(me) > me.bet) {
         window.setTimeout(() => play("payout"), 380);
       }
     }

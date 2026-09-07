@@ -88,9 +88,10 @@ describe("sitting down at a table playing for nothing", () => {
     }
 
     const seat = view(table).seats[0];
-    expect(seat?.outcome).not.toBeNull();
+    const hand = seat?.hands[0];
+    expect(hand?.outcome).not.toBeNull();
     // Staked out of the purse, paid back into it: the table is the only bank.
-    expect(seat?.purse).toBe(start - 500 + (seat?.returned ?? 0));
+    expect(seat?.purse).toBe(start - 500 + (hand?.returned ?? 0));
   });
 
   it("tops a dry purse back up rather than ending the evening", () => {

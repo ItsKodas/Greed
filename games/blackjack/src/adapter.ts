@@ -37,7 +37,8 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
       switch (move.type) {
         case "bet": {
           const amount = Number(move.amount);
-          const already = seat.bet;
+          // Betting happens before any split, so there is one hand to stake.
+          const already = seat.hands[0]?.bet ?? 0;
           // Validated by the table first, so a refusal costs nobody anything.
           table.bet(seatId, amount);
           /*
@@ -83,7 +84,7 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           }
           // Asked for before it happens: doubling into chips you do not have
           // would leave a hand staked at more than was ever taken.
-          const extra = seat.bet;
+          const extra = seat.hands[seat.active]?.bet ?? 0;
           if (!(await deps.take(seat.userId, extra))) {
             throw new TableError("You cannot cover a double.");
           }
@@ -91,6 +92,32 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
             table.double(seatId);
           } catch (error) {
             await deps.give(seat.userId, extra);
+            throw error;
+          }
+          return;
+        }
+        case "split": {
+          if (table.forFun) {
+            // The table keeps the purse; splitting against it is its own affair.
+            table.split(seatId);
+            return;
+          }
+          if (seat.userId === null) {
+            throw new TableError("Sign in to play for chips.");
+          }
+          /*
+           * The second hand costs the same as the first, and is asked for
+           * before the cards move for the same reason a double is: a split
+           * paid for afterwards is two hands staked on one hand's chips.
+           */
+          const stake = seat.hands[seat.active]?.bet ?? 0;
+          if (!(await deps.take(seat.userId, stake))) {
+            throw new TableError("You cannot cover a split.");
+          }
+          try {
+            table.split(seatId);
+          } catch (error) {
+            await deps.give(seat.userId, stake);
             throw error;
           }
           return;
@@ -119,7 +146,7 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
     botMove(table): BotMove | null {
       if (table.phase === "betting") {
         const waiting = table.seats.find(
-          (seat) => seat.isBot && !seat.waiting && seat.bet === 0,
+          (seat) => seat.isBot && !seat.waiting && (seat.hands[0]?.bet ?? 0) === 0,
         );
         if (waiting === undefined) {
           return null;
@@ -156,10 +183,17 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
         seatId: seat.id,
         delayMs: thinkingTime(skill),
         play() {
+          // Whichever of its hands is in front of it. A bot that split reads
+          // the second hand the same way it read the first.
+          const hand = table.currentHand();
+          if (hand === null) {
+            return;
+          }
           const move = decide({
-            cards: seat.cards,
+            cards: hand.cards,
             upcard,
-            canDouble: seat.cards.length === 2,
+            canDouble: hand.cards.length === 2,
+            canSplit: hand.cards.length === 2 && !hand.fromSplit,
             skill,
           });
           if (move === "hit") {
@@ -170,6 +204,10 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
             // No chips are taken: a bot has none. What it costs is recorded on
             // the seat all the same, so the hand it plays is the real one.
             table.double(seat.id);
+            return;
+          }
+          if (move === "split") {
+            table.split(seat.id);
             return;
           }
           table.stand(seat.id);
@@ -194,29 +232,47 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
         return;
       }
 
-      const played = table.seats.filter((seat) => !seat.waiting && seat.bet > 0);
+      const staked = (seat: { hands: Array<{ bet: number }> }) =>
+        seat.hands.reduce((total, hand) => total + hand.bet, 0);
+      const paid = (seat: { hands: Array<{ returned: number }> }) =>
+        seat.hands.reduce((total, hand) => total + hand.returned, 0);
+
+      const played = table.seats.filter((seat) => !seat.waiting && staked(seat) > 0);
 
       for (const seat of played) {
         if (seat.userId === null) {
           continue;
         }
-        if (seat.returned > 0) {
-          await deps.give(seat.userId, seat.returned);
+        /*
+         * The seat's whole account for the hand, not one of its hands.
+         *
+         * A split can win on one and lose on the other, and paying or counting
+         * those separately would make one deal look like two games — the win
+         * rate would drift every time somebody split, which is exactly the
+         * kind of quiet wrongness a stats page never admits to.
+         */
+        const back = paid(seat);
+        const out = staked(seat);
+        if (back > 0) {
+          await deps.give(seat.userId, back);
         }
-        const won = seat.outcome === "won" || seat.outcome === "blackjack";
+        const outcomes = seat.hands.map((hand) => hand.outcome);
+        const won = back > out;
         await deps.record(seat.userId, {
           shared: {
             games: 1,
             wins: won ? 1 : 0,
-            chipsWon: seat.returned - seat.bet,
+            chipsWon: back - out,
           },
           game: BLACKJACK.id,
           add: {
-            blackjacks: seat.outcome === "blackjack" ? 1 : 0,
-            busts: seat.outcome === "bust" ? 1 : 0,
-            pushes: seat.outcome === "push" ? 1 : 0,
+            blackjacks: outcomes.filter((outcome) => outcome === "blackjack").length,
+            busts: outcomes.filter((outcome) => outcome === "bust").length,
+            // A split that pushes both hands is one push, not two: this counts
+            // hands where the outcome was a push, which is what it says.
+            pushes: outcomes.filter((outcome) => outcome === "push").length,
           },
-          max: { biggestWin: Math.max(0, seat.returned - seat.bet) },
+          max: { biggestWin: Math.max(0, back - out) },
         });
       }
 
@@ -226,19 +282,23 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
         // A hand has no single stake and no pot to divide; the totals are what
         // the history can honestly say about it.
         buyIn: 0,
-        pot: played.reduce((total, seat) => total + seat.bet, 0),
+        pot: played.reduce((total, seat) => total + staked(seat), 0),
         players: played.map((seat) => ({
           userId: seat.userId,
           name: seat.name,
-          // No score in blackjack, so what the hand was worth stands in.
-          score: value(seat.cards).total,
+          // No score in blackjack, so what the hand was worth stands in. After
+          // a split there are two, and the better of them is the fairer answer
+          // to "how did that go" than whichever happened to be dealt first.
+          score: Math.max(...seat.hands.map((hand) => value(hand.cards).total)),
           isBot: seat.isBot,
           // The stake was taken as it was placed, so this is the whole story
           // of the hand: what came back, less what went out.
-          net: seat.returned - seat.bet,
+          net: paid(seat) - staked(seat),
         })),
+        // Up on the deal, however many hands it took. One hand winning while
+        // the other loses more is not a win, and should not be recorded as one.
         winnerIds: played
-          .filter((seat) => seat.outcome === "won" || seat.outcome === "blackjack")
+          .filter((seat) => paid(seat) > staked(seat))
           .map((seat) => seat.userId ?? seat.id),
         endedAt: Date.now(),
       });

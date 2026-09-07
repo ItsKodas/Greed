@@ -213,7 +213,7 @@ describe("blackjack over the wire", () => {
     // payload at all, which is the entire reason a view is built per seat.
     expect(dealt.dealer.cards).toHaveLength(1);
     expect(dealt.dealer.hidden).toBe(true);
-    expect(dealt.seats[0]?.cards).toHaveLength(2);
+    expect(dealt.seats[0]?.hands[0]?.cards).toHaveLength(2);
     expect(dealt.turnSeatId).toBe(dealt.seats[0]?.id);
   });
 
@@ -233,15 +233,15 @@ describe("blackjack over the wire", () => {
     const over = await stateWhere(host, (view) => view.phase === "settled");
 
     const seat = over.seats[0];
-    expect(seat?.outcome).not.toBeNull();
+    // Across every hand, since a deal can end as more than one of them.
+    const back = (seat?.hands ?? []).reduce((total, hand) => total + hand.returned, 0);
+    expect((seat?.hands ?? []).every((hand) => hand.outcome !== null)).toBe(true);
     // The whole hand is now face up: nothing is being held back after it ends.
     expect(over.dealer.hidden).toBe(false);
     expect(over.dealer.cards.length).toBeGreaterThanOrEqual(2);
 
     // Settling is asynchronous, so wait for the chips rather than assume them.
-    await expect
-      .poll(async () => (await store.get(ada))?.chips)
-      .toBe(staked + (seat?.returned ?? 0));
+    await expect.poll(async () => (await store.get(ada))?.chips).toBe(staked + back);
 
     const record = await store.get(ada);
     expect(record?.stats.games).toBe(played + 1);
@@ -258,7 +258,7 @@ describe("blackjack over the wire", () => {
     await act(host, { type: "nextHand" });
     const again = await stateWhere(host, (view) => view.phase === "betting");
     expect(again.seats[0]?.bet).toBe(0);
-    expect(again.seats[0]?.cards).toHaveLength(0);
+    expect(again.seats[0]?.hands[0]?.cards).toHaveLength(0);
     expect(again.dealer.cards).toHaveLength(0);
   });
 
@@ -291,9 +291,11 @@ describe("blackjack over the wire", () => {
     }
 
     const over = await stateWhere(host, (view) => view.phase === "settled", 8000);
-    const bot = over.seats[1];
-    expect(bot?.outcome).not.toBeNull();
-    expect(bot?.cards.length).toBeGreaterThanOrEqual(2);
+    // Every hand it played, because a hard bot may have split into two.
+    const botHands = over.seats[1]?.hands ?? [];
+    expect(botHands.length).toBeGreaterThanOrEqual(1);
+    expect(botHands.every((hand) => hand.outcome !== null)).toBe(true);
+    expect(botHands.every((hand) => hand.cards.length >= 2)).toBe(true);
     // A bot never bust while standing pat: it took its own decisions.
     expect(over.turnSeatId).toBeNull();
   });

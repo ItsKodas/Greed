@@ -65,7 +65,7 @@ describe("what blackjack does with chips", () => {
       game.act(table, "a", { type: "bet", amount: 1000 }, deps),
     ).rejects.toThrow(/cannot cover/i);
     expect(balances["u1"]).toBe(300);
-    expect(table.seats[0]?.bet).toBe(0);
+    expect(table.seats[0]?.hands[0]?.bet).toBe(0);
   });
 
   it("takes the extra for a double before dealing the card", async () => {
@@ -76,10 +76,10 @@ describe("what blackjack does with chips", () => {
 
     await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
     await game.act(table, "a", { type: "deal" }, deps);
-    if (table.phase === "playing" && table.seats[0]?.cards.length === 2) {
+    if (table.phase === "playing" && table.seats[0]?.hands[0]?.cards.length === 2) {
       await game.act(table, "a", { type: "double" }, deps);
       expect(balances["u1"]).toBe(8000);
-      expect(table.seats[0]?.bet).toBe(2000);
+      expect(table.seats[0]?.hands[0]?.bet).toBe(2000);
     }
   });
 
@@ -95,7 +95,7 @@ describe("what blackjack does with chips", () => {
     if (table.phase === "playing") {
       await expect(game.act(table, "a", { type: "double" }, deps)).rejects.toThrow(/cannot cover/i);
       // The hand is untouched: no third card, and the stake is what it was.
-      expect(table.seats[0]?.bet).toBe(1000);
+      expect(table.seats[0]?.hands[0]?.bet).toBe(1000);
     }
   });
 

@@ -1,3 +1,4 @@
+import { value } from "@backroom/game-blackjack";
 import type { TableView } from "@backroom/game-blackjack";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
@@ -102,6 +103,9 @@ function Felt({
   seatId: string | null;
 }) {
   const me = state.seats.find((seat) => seat.id === seatId) ?? null;
+  // The hand you are actually being asked about, which after a split is one of
+  // two — every control below acts on this one and not on the seat.
+  const myHand = me?.hands[me.active];
   const myTurn = state.turnSeatId === seatId && seatId !== null;
   const isHost = state.hostId === seatId && seatId !== null;
 
@@ -146,10 +150,32 @@ function Felt({
                 <span className="bj__purse">{fmt(seat.purse)}</span>
               ) : null}
             </header>
-            <Hand cards={seat.cards} />
-            <footer className={`bj__result${outcomeTone(seat.outcome)}`}>
-              {seatLine(seat, state.phase)}
-            </footer>
+            {/* One block per hand. Usually one; two after a split, and then
+                the live one is marked, because "your turn" is no longer enough
+                to say which cards you are being asked about. */}
+            <div className="bj__hands">
+              {seat.hands.map((hand, index) => (
+                <div
+                  // Position is the identity: hands are appended and never
+                  // reordered, and two split hands can hold the same cards.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: hands are append-only
+                  key={index}
+                  className={`bj__hand${
+                    seat.hands.length > 1 && state.turnSeatId === seat.id && seat.active === index
+                      ? " bj__hand--live"
+                      : ""
+                  }`}
+                >
+                  <Hand cards={hand.cards} />
+                  <footer className={`bj__result${outcomeTone(hand.outcome)}`}>
+                    {handLine(seat, hand, state.phase)}
+                    {seat.hands.length > 1 && hand.bet > 0 ? (
+                      <span className="bj__stake-small">{fmt(hand.bet)}</span>
+                    ) : null}
+                  </footer>
+                </div>
+              ))}
+            </div>
           </article>
         ))}
         {state.watching > 0 ? (
@@ -217,10 +243,18 @@ function Felt({
               className="btn btn--ghost btn--wide"
               // First two cards only: that is the rule, and also the only point
               // at which doubling is a decision.
-              disabled={!myTurn || (me?.cards.length ?? 0) !== 2}
+              disabled={!myTurn || (myHand?.cards.length ?? 0) !== 2}
               onClick={() => table.act({ type: "double" })}
             >
-              Double for {fmt(me?.bet ?? 0)}
+              Double for {fmt(myHand?.bet ?? 0)}
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--wide"
+              disabled={!myTurn || myHand === undefined || !splittable(myHand)}
+              onClick={() => table.act({ type: "split" })}
+            >
+              Split for {fmt(myHand?.bet ?? 0)}
             </button>
           </>
         )}
@@ -229,37 +263,54 @@ function Felt({
   );
 }
 
-/** What a seat's own line says, which depends on how far the hand has got. */
-function seatLine(seat: TableView["seats"][number], phase: TableView["phase"]): string {
+/** What one hand's line says, which depends on how far it has got. */
+function handLine(
+  seat: TableView["seats"][number],
+  hand: TableView["seats"][number]["hands"][number],
+  phase: TableView["phase"],
+): string {
   if (seat.waiting) {
     return "In on the next hand";
   }
   if (!seat.connected) {
     return "Dropped out";
   }
-  if (seat.cards.length === 0) {
+  if (hand.cards.length === 0) {
     if (phase !== "betting") {
       return "Sitting this one out";
     }
-    return seat.bet > 0 ? "Ready" : "Yet to bet";
+    return hand.bet > 0 ? "Ready" : "Yet to bet";
   }
-  switch (seat.outcome) {
+  switch (hand.outcome) {
     case "blackjack":
-      return `Blackjack — ${fmt(seat.returned)}`;
+      return `Blackjack — ${fmt(hand.returned)}`;
     case "won":
-      return `Won ${fmt(seat.returned - seat.bet)}`;
+      return `Won ${fmt(hand.returned - hand.bet)}`;
     case "push":
-      return `Push on ${seat.total}`;
+      return `Push on ${hand.total}`;
     case "lost":
-      return `Lost on ${seat.total}`;
+      return `Lost on ${hand.total}`;
     case "bust":
-      return `Bust on ${seat.total}`;
+      return `Bust on ${hand.total}`;
     default:
-      return seat.soft ? `Soft ${seat.total}` : String(seat.total);
+      return hand.soft ? `Soft ${hand.total}` : String(hand.total);
   }
 }
 
-function outcomeTone(outcome: TableView["seats"][number]["outcome"]): string {
+/** Whether a hand is two cards of the same value, and so may still be split. */
+function splittable(hand: TableView["seats"][number]["hands"][number]): boolean {
+  const [first, second] = hand.cards;
+  if (hand.fromSplit || first === undefined || second === undefined || hand.cards.length !== 2) {
+    return false;
+  }
+  // By value, not by rank: a king and a queen are a pair, which is the rule
+  // the table plays by and so the rule the button has to agree with.
+  return value([first]).total === value([second]).total;
+}
+
+function outcomeTone(
+  outcome: TableView["seats"][number]["hands"][number]["outcome"],
+): string {
   if (outcome === "won" || outcome === "blackjack") {
     return " bj__result--good";
   }
@@ -273,7 +324,10 @@ function settledLine(me: TableView["seats"][number] | null): string {
   if (me === null || me.bet === 0) {
     return "You sat that one out.";
   }
-  const net = me.returned - me.bet;
+  // Across every hand. A split that wins one and loses the other is one deal
+  // with one answer, and reporting the halves separately would be two.
+  const back = me.hands.reduce((total, hand) => total + hand.returned, 0);
+  const net = back - me.bet;
   if (net > 0) {
     return `You are up ${fmt(net)}.`;
   }

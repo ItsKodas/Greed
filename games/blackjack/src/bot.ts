@@ -2,7 +2,7 @@ import type { BotSkill } from "@backroom/core";
 import type { Card, Rank } from "./cards.js";
 import { value } from "./hand.js";
 
-export type Move = "hit" | "stand" | "double";
+export type Move = "hit" | "stand" | "double" | "split";
 
 /**
  * What a bot does with a hand.
@@ -37,9 +37,28 @@ export function decide(options: {
   upcard: number;
   /** Whether doubling is still allowed — first two cards only. */
   canDouble: boolean;
+  /** Whether this hand is a pair that may still be split. */
+  canSplit?: boolean;
   skill: BotSkill;
 }): Move {
   const { cards, upcard, skill } = options;
+
+  /*
+   * Pairs first, because splitting is a decision about the hand you hold
+   * rather than the total it makes: sixteen made of two eights is the worst
+   * hand at the table, and two hands of eight are two ordinary ones.
+   *
+   * Graded the way doubling is. An easy bot never splits, because it has never
+   * heard of it. A normal bot splits aces and eights — the two every player
+   * knows, and most of the value there is in splitting at all. A hard bot
+   * plays the whole chart.
+   */
+  if (options.canSplit === true && skill !== "easy" && cards.length === 2) {
+    const pair = pairValue(cards);
+    if (pair !== null && shouldSplit(pair, upcard, skill)) {
+      return "split";
+    }
+  }
   const { total, soft } = value(cards);
   // Doubling is a decision only a hard bot makes, and only when it is legal.
   const canDouble = options.canDouble && skill === "hard";
@@ -94,6 +113,49 @@ export function decide(options: {
     return canDouble && upcard >= 3 && upcard <= 6 ? "double" : "hit";
   }
   return "hit";
+}
+
+/** The value both cards share, or null when they are not a pair at all. */
+function pairValue(cards: readonly Card[]): number | null {
+  const [first, second] = cards;
+  if (first === undefined || second === undefined) {
+    return null;
+  }
+  const left = value([first]).total;
+  const right = value([second]).total;
+  return left === right ? left : null;
+}
+
+/**
+ * Whether a pair is worth splitting against what the dealer is showing.
+ *
+ * The ordinary chart. Aces and eights always; tens, fives and fours never —
+ * twenty and eleven are good hands already, and two fours are worse apart than
+ * together. Everything in between depends on whether the dealer looks weak.
+ */
+function shouldSplit(pair: number, upcard: number, skill: BotSkill): boolean {
+  if (pair === 11 || pair === 8) {
+    return true;
+  }
+  if (skill !== "hard") {
+    return false;
+  }
+  if (pair === 10 || pair === 5 || pair === 4) {
+    return false;
+  }
+  if (pair === 9) {
+    // Not against a seven: eighteen already beats the seventeen the dealer is
+    // likeliest to make, and splitting would give that up twice over.
+    return (upcard >= 2 && upcard <= 6) || upcard === 8 || upcard === 9;
+  }
+  if (pair === 7) {
+    return upcard >= 2 && upcard <= 7;
+  }
+  if (pair === 6) {
+    return upcard >= 2 && upcard <= 6;
+  }
+  // Twos and threes: worth splitting while the dealer still has to draw.
+  return upcard >= 2 && upcard <= 7;
 }
 
 /** What a bot puts on the felt, which is the same every hand. */

@@ -4,8 +4,14 @@ import { Shoe } from "./cards.js";
 import type { Card } from "./cards.js";
 import { isBlackjack, value } from "./hand.js";
 
-/** What a seat is at a blackjack table: a stake, a hand, and how it ended. */
-export interface Seat extends TableSeat {
+/**
+ * One hand: a stake, some cards, and how it ended.
+ *
+ * A seat usually has exactly one. Splitting gives it two, each with its own
+ * stake and its own fate, which is the whole reason this is a thing of its own
+ * rather than fields on the seat.
+ */
+export interface PlayerHand {
   /** Chips staked on this hand. Zero until they bet. */
   bet: number;
   cards: Card[];
@@ -14,6 +20,23 @@ export interface Seat extends TableSeat {
   outcome: Outcome | null;
   /** Chips handed back when the hand settled — stake included. */
   returned: number;
+  /**
+   * Made by splitting a pair.
+   *
+   * Two rules hang off this. Such a hand cannot be split again, which keeps a
+   * seat to at most two hands and the felt to a width somebody can read. And
+   * twenty-one on it is twenty-one rather than a blackjack, which is the rule
+   * everywhere: a blackjack is dealt, not assembled.
+   */
+  fromSplit: boolean;
+}
+
+/** What a seat is at a blackjack table: a purse, and the hands it is playing. */
+export interface Seat extends TableSeat {
+  /** One, or two after a split. Never empty. */
+  hands: PlayerHand[];
+  /** Which of them is being played, while it is this seat's turn. */
+  active: number;
   /**
    * Play money, at a table playing for none.
    *
@@ -29,6 +52,19 @@ export type Outcome = "blackjack" | "won" | "push" | "lost" | "bust";
 
 export type Phase = "betting" | "playing" | "dealer" | "settled";
 
+/** One of a seat's hands, as anybody at the table may see it. */
+export interface HandView {
+  bet: number;
+  cards: Card[];
+  total: number;
+  soft: boolean;
+  bust: boolean;
+  done: boolean;
+  outcome: Outcome | null;
+  returned: number;
+  fromSplit: boolean;
+}
+
 /** What one seat may see of another. */
 export interface SeatView {
   id: string;
@@ -38,14 +74,11 @@ export interface SeatView {
   isBot: boolean;
   avatar: string | null;
   accentColor: number | null;
+  hands: HandView[];
+  /** Which hand is in play, for whoever's turn it is. */
+  active: number;
+  /** Everything staked across every hand, which is what the seat has at risk. */
   bet: number;
-  cards: Card[];
-  total: number;
-  soft: boolean;
-  bust: boolean;
-  done: boolean;
-  outcome: Outcome | null;
-  returned: number;
   /** Play money at a for-fun table, and zero everywhere else. */
   purse: number;
 }
@@ -84,6 +117,26 @@ const MAX_BET = 10_000;
 const FUN_PURSE = 5_000;
 /** The dealer takes cards to here and stops, soft or hard. */
 const DEALER_STANDS = 17;
+
+function emptyHand(fromSplit = false): PlayerHand {
+  return { bet: 0, cards: [], done: false, outcome: null, returned: 0, fromSplit };
+}
+
+/** Everything a seat has on the felt, across however many hands it is playing. */
+function staked(seat: Seat): number {
+  return seat.hands.reduce((total, hand) => total + hand.bet, 0);
+}
+
+/**
+ * What a single card is worth for the purposes of pairing.
+ *
+ * Value rather than rank, which is the ordinary rule: a king and a queen are a
+ * pair to split because they are both ten, even though they are not the same
+ * card.
+ */
+function pips(card: Card): number {
+  return value([card]).total;
+}
 
 /**
  * A blackjack table.
@@ -132,7 +185,7 @@ export class Table {
 
   /** Everyone actually in the hand being played. */
   private get playing(): Seat[] {
-    return this.seats.filter((seat) => !seat.waiting && seat.bet > 0);
+    return this.seats.filter((seat) => !seat.waiting && staked(seat) > 0);
   }
 
   // ------------------------------------------------------------- the table
@@ -177,7 +230,11 @@ export class Table {
     // A hand does not wait for somebody who has gone.
     if (this.phase === "playing" && this.currentSeat()?.id === seatId) {
       const going = this.currentSeat() as Seat;
-      going.done = true;
+      // Every hand of theirs, not only the one in front of them: a table does
+      // not wait on somebody who has gone, and it does not wait twice either.
+      for (const hand of going.hands) {
+        hand.done = true;
+      }
       this.advance();
     }
   }
@@ -193,13 +250,16 @@ export class Table {
     this.seating.remove(seatId);
   }
 
-  /** Resets the hand. Never the purse: that outlives every hand at the table. */
+  /**
+   * Back to one empty hand.
+   *
+   * Never the purse: that outlives every hand at the table. And always exactly
+   * one hand, so a seat is never without one — a split lasts a hand, not a
+   * night.
+   */
   private clear(seat: Seat): void {
-    seat.bet = 0;
-    seat.cards = [];
-    seat.done = false;
-    seat.outcome = null;
-    seat.returned = 0;
+    seat.hands = [emptyHand()];
+    seat.active = 0;
   }
 
   // -------------------------------------------------------------- the hand
@@ -239,15 +299,17 @@ export class Table {
      * there is no account to ask. Whatever is already staked counts as
      * available: changing a bet is not spending twice.
      */
+    // Betting happens before any split, so there is exactly one hand to stake.
+    const hand = seat.hands[0] as PlayerHand;
     if (this.forFun) {
-      const available = seat.purse + seat.bet;
+      const available = seat.purse + hand.bet;
       if (amount > available) {
         throw new TableError("You do not have that many chips.");
       }
       seat.purse = available - amount;
     }
 
-    seat.bet = amount;
+    hand.bet = amount;
     this.lastEvent = withdrawn
       ? `${seat.name} took their chips back`
       : `${seat.name} bet ${amount.toLocaleString("en-US")}`;
@@ -273,24 +335,25 @@ export class Table {
     this.status = "playing";
     this.dealer = [];
     for (const seat of inHand) {
-      seat.cards = [];
-      seat.done = false;
-      seat.outcome = null;
-      seat.returned = 0;
+      // The stake survives the reset; everything about the last hand does not.
+      const stake = staked(seat);
+      seat.hands = [{ ...emptyHand(), bet: stake }];
+      seat.active = 0;
     }
 
     // Two rounds, the way a dealer deals: everybody one, then everybody a second.
     for (let round = 0; round < 2; round += 1) {
       for (const seat of inHand) {
-        seat.cards.push(this.shoe.draw());
+        (seat.hands[0] as PlayerHand).cards.push(this.shoe.draw());
       }
       this.dealer.push(this.shoe.draw());
     }
 
     // A blackjack is over before it begins.
     for (const seat of inHand) {
-      if (isBlackjack(seat.cards)) {
-        seat.done = true;
+      const hand = seat.hands[0] as PlayerHand;
+      if (isBlackjack(hand.cards)) {
+        hand.done = true;
       }
     }
 
@@ -307,28 +370,91 @@ export class Table {
     return this.playing[this.turnIndex] ?? null;
   }
 
+  /** The hand actually being played, which after a split is one of two. */
+  currentHand(): PlayerHand | null {
+    const seat = this.currentSeat();
+    return seat?.hands[seat.active] ?? null;
+  }
+
   hit(seatId: string): void {
-    const seat = this.requireTurn(seatId);
-    seat.cards.push(this.shoe.draw());
-    const worth = value(seat.cards);
+    const { seat, hand } = this.requireTurn(seatId);
+    hand.cards.push(this.shoe.draw());
+    const worth = value(hand.cards);
     if (worth.bust) {
-      seat.done = true;
-      seat.outcome = "bust";
+      hand.done = true;
+      hand.outcome = "bust";
       this.lastEvent = `${seat.name} bust on ${worth.total}`;
       this.advance();
       return;
     }
     if (worth.total === 21) {
       // Nothing left to decide at twenty-one.
-      seat.done = true;
+      hand.done = true;
       this.advance();
     }
   }
 
   stand(seatId: string): void {
-    const seat = this.requireTurn(seatId);
-    seat.done = true;
+    const { hand } = this.requireTurn(seatId);
+    hand.done = true;
     this.advance();
+  }
+
+  /**
+   * Splits a pair into two hands, each with its own stake.
+   *
+   * The house rules this settles on, all of them ordinary: a pair is two cards
+   * of the same *value*, so a king and a queen count; a hand made this way
+   * cannot be split again, which holds a seat to two hands and the felt to a
+   * width somebody can read; and split aces get one card each and are then
+   * done, because two live ace hands is the one thing every house forbids.
+   *
+   * Returns the extra chips owed, for the caller to take — the same shape as
+   * doubling, and for the same reason: the table knows what was staked, and
+   * whose chips they were is the economy's business.
+   */
+  split(seatId: string): number {
+    const { seat, hand } = this.requireTurn(seatId);
+    if (hand.cards.length !== 2) {
+      throw new TableError("You can only split your first two cards.");
+    }
+    if (hand.fromSplit) {
+      throw new TableError("A split hand cannot be split again.");
+    }
+    const [first, second] = hand.cards as [Card, Card];
+    if (pips(first) !== pips(second)) {
+      throw new TableError("Those two do not make a pair.");
+    }
+
+    const extra = hand.bet;
+    if (this.forFun) {
+      if (seat.purse < extra) {
+        throw new TableError("You cannot cover a split.");
+      }
+      seat.purse -= extra;
+    }
+
+    const made: PlayerHand = { ...emptyHand(true), bet: extra, cards: [second] };
+    hand.cards = [first];
+    hand.fromSplit = true;
+    hand.cards.push(this.shoe.draw());
+    made.cards.push(this.shoe.draw());
+    seat.hands.splice(seat.active + 1, 0, made);
+
+    if (pips(first) === 11) {
+      // One card each and no more: the rule that stops a split pair of aces
+      // from being the best hand in the game.
+      hand.done = true;
+      made.done = true;
+    }
+
+    this.lastEvent = `${seat.name} split`;
+    // The first of the two may already be finished — a split ace, or a
+    // twenty-one — so ask rather than assume there is still a decision here.
+    if (hand.done) {
+      this.advance();
+    }
+    return extra;
   }
 
   /**
@@ -339,49 +465,68 @@ export class Table {
    * chips owed, for the caller to take.
    */
   double(seatId: string): number {
-    const seat = this.requireTurn(seatId);
-    if (seat.cards.length !== 2) {
+    const { seat, hand } = this.requireTurn(seatId);
+    if (hand.cards.length !== 2) {
       throw new TableError("You can only double on your first two cards.");
     }
-    const extra = seat.bet;
+    const extra = hand.bet;
     if (this.forFun) {
       if (seat.purse < extra) {
         throw new TableError("You cannot cover a double.");
       }
       seat.purse -= extra;
     }
-    seat.bet += extra;
-    seat.cards.push(this.shoe.draw());
-    seat.done = true;
-    if (value(seat.cards).bust) {
-      seat.outcome = "bust";
+    hand.bet += extra;
+    hand.cards.push(this.shoe.draw());
+    hand.done = true;
+    if (value(hand.cards).bust) {
+      hand.outcome = "bust";
     }
     this.lastEvent = `${seat.name} doubled`;
     this.advance();
     return extra;
   }
 
-  private requireTurn(seatId: string): Seat {
+  private requireTurn(seatId: string): { seat: Seat; hand: PlayerHand } {
     const seat = this.currentSeat();
     if (seat === null || seat.id !== seatId) {
       throw new TableError("It is not your turn.");
     }
-    if (seat.done) {
+    const hand = seat.hands[seat.active];
+    if (hand === undefined || hand.done) {
       throw new TableError("You are done for this hand.");
     }
-    return seat;
+    return { seat, hand };
   }
 
-  /** On to the next player with a decision left, or to the dealer. */
+  /**
+   * On to the next hand with a decision left, or to the dealer.
+   *
+   * A seat's own hands first. A split is played out before the table moves on,
+   * which is both how it is dealt at a real table and the only order that lets
+   * somebody think about their second hand while the first is still in view.
+   */
   private advance(): void {
     const inHand = this.playing;
-    for (let next = this.turnIndex + 1; next < inHand.length; next += 1) {
-      const seat = inHand[next] as Seat;
-      if (!seat.done && seat.connected) {
-        this.turnIndex = next;
+    const seat = inHand[this.turnIndex];
+    if (seat !== undefined && seat.connected) {
+      const next = seat.hands.findIndex((hand, index) => index > seat.active && !hand.done);
+      if (next !== -1) {
+        seat.active = next;
         return;
       }
     }
+
+    for (let index = this.turnIndex + 1; index < inHand.length; index += 1) {
+      const other = inHand[index] as Seat;
+      const waiting = other.hands.findIndex((hand) => !hand.done);
+      if (other.connected && waiting !== -1) {
+        this.turnIndex = index;
+        other.active = waiting;
+        return;
+      }
+    }
+
     this.turnIndex = -1;
     this.playDealer();
   }
@@ -395,7 +540,9 @@ export class Table {
    */
   private playDealer(): void {
     this.phase = "dealer";
-    const contenders = this.playing.filter((seat) => seat.outcome !== "bust");
+    const contenders = this.playing.flatMap((seat) =>
+      seat.hands.filter((hand) => hand.outcome !== "bust"),
+    );
     if (contenders.length > 0) {
       while (value(this.dealer).total < DEALER_STANDS) {
         this.dealer.push(this.shoe.draw());
@@ -408,42 +555,46 @@ export class Table {
     const dealer = value(this.dealer);
     const dealerBlackjack = isBlackjack(this.dealer);
 
-    for (const seat of this.playing) {
-      const mine = value(seat.cards);
+    // Every hand on its own account: after a split one can win while the other
+    // loses, which is the entire point of splitting.
+    for (const hand of this.playing.flatMap((seat) => seat.hands)) {
+      const mine = value(hand.cards);
 
-      if (seat.outcome === "bust") {
+      if (hand.outcome === "bust") {
         // Already lost, and lost before the dealer drew: the house keeps it
         // whatever happens next, which is the whole edge.
-        seat.returned = 0;
+        hand.returned = 0;
         continue;
       }
 
-      if (isBlackjack(seat.cards)) {
+      // A blackjack is dealt, not assembled, so twenty-one on a split hand is
+      // twenty-one and pays like it.
+      if (!hand.fromSplit && isBlackjack(hand.cards)) {
         if (dealerBlackjack) {
-          seat.outcome = "push";
-          seat.returned = seat.bet;
+          hand.outcome = "push";
+          hand.returned = hand.bet;
         } else {
           // Three to two, with the stake back alongside it.
-          seat.outcome = "blackjack";
-          seat.returned = seat.bet + Math.floor(seat.bet * 1.5);
+          hand.outcome = "blackjack";
+          hand.returned = hand.bet + Math.floor(hand.bet * 1.5);
         }
         continue;
       }
 
       if (dealerBlackjack || (!dealer.bust && dealer.total > mine.total)) {
-        seat.outcome = "lost";
-        seat.returned = 0;
+        hand.outcome = "lost";
+        hand.returned = 0;
         continue;
       }
 
       if (!dealer.bust && dealer.total === mine.total) {
-        seat.outcome = "push";
-        seat.returned = seat.bet;
+        hand.outcome = "push";
+        hand.returned = hand.bet;
         continue;
       }
 
-      seat.outcome = "won";
-      seat.returned = seat.bet * 2;
+      hand.outcome = "won";
+      hand.returned = hand.bet * 2;
     }
 
     /*
@@ -453,7 +604,7 @@ export class Table {
      */
     if (this.forFun) {
       for (const seat of this.playing) {
-        seat.purse += seat.returned;
+        seat.purse += seat.hands.reduce((total, hand) => total + hand.returned, 0);
       }
     }
 
@@ -521,27 +672,32 @@ export class Table {
         total: value(shown).total,
         hidden: hidden && this.dealer.length > 1,
       },
-      seats: this.seats.map((seat) => {
-        const worth = value(seat.cards);
-        return {
-          id: seat.id,
-          name: seat.name,
-          connected: seat.connected,
-          waiting: seat.waiting,
-          isBot: seat.isBot,
-          avatar: seat.avatar,
-          accentColor: seat.accentColor,
-          bet: seat.bet,
-          cards: seat.cards,
-          total: worth.total,
-          soft: worth.soft,
-          bust: worth.bust,
-          done: seat.done,
-          outcome: seat.outcome,
-          returned: seat.returned,
-          purse: seat.purse,
-        };
-      }),
+      seats: this.seats.map((seat) => ({
+        id: seat.id,
+        name: seat.name,
+        connected: seat.connected,
+        waiting: seat.waiting,
+        isBot: seat.isBot,
+        avatar: seat.avatar,
+        accentColor: seat.accentColor,
+        active: seat.active,
+        bet: staked(seat),
+        purse: seat.purse,
+        hands: seat.hands.map((hand) => {
+          const worth = value(hand.cards);
+          return {
+            bet: hand.bet,
+            cards: hand.cards,
+            total: worth.total,
+            soft: worth.soft,
+            bust: worth.bust,
+            done: hand.done,
+            outcome: hand.outcome,
+            returned: hand.returned,
+            fromSplit: hand.fromSplit,
+          };
+        }),
+      })),
     };
   }
 }

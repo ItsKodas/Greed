@@ -41,7 +41,7 @@ describe("taking a stake", () => {
     expect(() => table.bet("a", 50)).toThrow(TableError);
     expect(() => table.bet("a", 50_000)).toThrow(TableError);
     table.bet("a", 500);
-    expect(table.seats[0]?.bet).toBe(500);
+    expect(table.seats[0]?.hands[0]?.bet).toBe(500);
   });
 
   it("lets a stake be taken back off the felt before the deal", () => {
@@ -49,7 +49,7 @@ describe("taking a stake", () => {
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
     table.bet("a", 0);
-    expect(table.seats[0]?.bet).toBe(0);
+    expect(table.seats[0]?.hands[0]?.bet).toBe(0);
     // And so there is nothing left to deal to.
     expect(() => table.deal("a")).toThrow(/nobody has bet/i);
   });
@@ -124,7 +124,7 @@ describe("playing a hand", () => {
     table.deal("a");
 
     table.hit("a");
-    expect(table.seats[0]?.outcome).toBe("bust");
+    expect(table.seats[0]?.hands[0]?.outcome).toBe("bust");
     expect(table.phase).toBe("settled");
   });
 
@@ -141,7 +141,7 @@ describe("playing a hand", () => {
     table.hit("a");
 
     expect(table.dealer).toHaveLength(2);
-    expect(table.seats[0]?.returned).toBe(0);
+    expect(table.seats[0]?.hands[0]?.returned).toBe(0);
   });
 
   it("doubles for exactly one card, and only at the start", () => {
@@ -152,9 +152,9 @@ describe("playing a hand", () => {
 
     const extra = table.double("a");
     expect(extra).toBe(500);
-    expect(table.seats[0]?.bet).toBe(1000);
-    expect(table.seats[0]?.cards).toHaveLength(3);
-    expect(table.seats[0]?.done).toBe(true);
+    expect(table.seats[0]?.hands[0]?.bet).toBe(1000);
+    expect(table.seats[0]?.hands[0]?.cards).toHaveLength(3);
+    expect(table.seats[0]?.hands[0]?.done).toBe(true);
   });
 
   it("refuses a double once a card has been taken", () => {
@@ -177,8 +177,9 @@ describe("what a hand pays", () => {
     if (table.phase === "playing") {
       play(table);
     }
-    const seat = table.seats[0];
-    return { outcome: seat?.outcome, returned: seat?.returned, bet: seat?.bet };
+    // The one hand this seat is playing. Splitting is covered on its own.
+    const hand = table.seats[0]?.hands[0];
+    return { outcome: hand?.outcome, returned: hand?.returned, bet: hand?.bet };
   }
 
   it("pays a blackjack three to two, with the stake back", () => {
@@ -234,7 +235,7 @@ describe("what a hand pays", () => {
     table.bet("a", 1000);
     table.deal("a");
     table.hit("a");
-    expect(table.seats[0]?.outcome).toBe("lost");
+    expect(table.seats[0]?.hands[0]?.outcome).toBe("lost");
   });
 
   it("pays double what was doubled", () => {
@@ -244,9 +245,9 @@ describe("what a hand pays", () => {
     table.bet("a", 1000);
     table.deal("a");
     table.double("a");
-    expect(table.seats[0]?.bet).toBe(2000);
-    expect(table.seats[0]?.outcome).toBe("won");
-    expect(table.seats[0]?.returned).toBe(4000);
+    expect(table.seats[0]?.hands[0]?.bet).toBe(2000);
+    expect(table.seats[0]?.hands[0]?.outcome).toBe("won");
+    expect(table.seats[0]?.hands[0]?.returned).toBe(4000);
   });
 });
 
@@ -263,7 +264,11 @@ describe("another hand", () => {
 
     expect(table.phase).toBe("betting");
     expect(table.seats).toHaveLength(2);
-    expect(table.seats.every((seat) => seat.bet === 0 && seat.cards.length === 0)).toBe(true);
+    expect(
+      table.seats.every(
+        (seat) => seat.hands.length === 1 && seat.hands[0]?.bet === 0 && seat.hands[0]?.cards.length === 0,
+      ),
+    ).toBe(true);
     expect(table.dealer).toHaveLength(0);
   });
 
@@ -282,6 +287,6 @@ describe("another hand", () => {
     table.nextHand("a");
     expect(table.seats.every((seat) => !seat.waiting)).toBe(true);
     table.bet("c", 500);
-    expect(table.seats[1]?.bet).toBe(500);
+    expect(table.seats[1]?.hands[0]?.bet).toBe(500);
   });
 });

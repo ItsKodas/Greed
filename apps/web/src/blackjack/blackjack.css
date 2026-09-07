@@ -115,6 +115,39 @@
   color: var(--gr-color-ink-faint);
 }
 
+/*
+ * A seat's hands, usually one.
+ *
+ * Stacked rather than side by side. Two hands beside each other halves the
+ * width the cards get, and a split is the moment you most want to read them —
+ * whereas height is the one thing a column of seats has spare.
+ */
+.bj__hands {
+  display: grid;
+  gap: var(--gr-space-2);
+}
+
+/*
+ * Which of the two you are being asked about.
+ *
+ * Only ever drawn when there is more than one: with a single hand the seat's
+ * own border already says whose turn it is, and saying it twice would make the
+ * ordinary case look like the exception.
+ */
+.bj__hand--live {
+  margin-left: calc(var(--gr-space-2) * -1);
+  padding-left: var(--gr-space-2);
+  border-left: 2px solid var(--gr-color-neon);
+}
+
+/* What this hand alone has on the felt, when the seat has more than one. */
+.bj__stake-small {
+  margin-left: var(--gr-space-2);
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+}
+
 .bj__result {
   font-size: var(--gr-text-sm);
   color: var(--gr-color-ink-dim);
