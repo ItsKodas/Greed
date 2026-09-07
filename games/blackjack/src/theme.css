@@ -41,6 +41,17 @@
    */
   --gr-color-felt: #17402e;
   --gr-color-felt-lit: #1e5039;
+
+  /*
+   * The air over the felt, which is green because the room is.
+   *
+   * The one thing here that is not the building's blue and is not the sign
+   * either. A card room is lit low over a green floor and the air above it
+   * takes that colour; leaving it as the tube's meant a green room seen
+   * through blue air, which is what it looked like.
+   */
+  --gr-color-air: #1e5039;
+  --gr-color-air-hi: #3f8a66;
   --gr-color-felt-deep: #0e2c1f;
 
   /* Cool ink again, but warmed a shade off blue so it sits on green. */

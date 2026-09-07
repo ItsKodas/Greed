@@ -34,6 +34,19 @@
   --gr-color-neon-deep: #0b3fd4;
 
   /*
+   * What the air in the room is lit by.
+   *
+   * The building's is the sign, because the building's one light source is the
+   * sign. A room with its own lamps says so — this is a material, like the
+   * felt and the walls, and not the accent that means "happening now".
+   *
+   * A reference rather than a copy, so a room that repaints the tube and says
+   * nothing about its air still gets air the colour of its own tube.
+   */
+  --gr-color-air: var(--gr-color-neon);
+  --gr-color-air-hi: var(--gr-color-neon-hi);
+
+  /*
    * The one warm colour in the building, and it is only ever money. A gold
    * number anywhere is chips, so a balance is findable without reading the
    * label beside it. Spend this on decoration and it stops meaning anything.

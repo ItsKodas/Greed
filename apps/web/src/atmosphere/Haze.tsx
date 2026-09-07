@@ -91,12 +91,19 @@ export function Haze() {
       seed();
     };
 
-    /** The room's colour, read from the cascade so a game change re-tints. */
+    /**
+     * What the air is lit by, read from the cascade so a game change re-tints.
+     *
+     * The room's own light rather than its sign. Those are the same thing in
+     * the building, where the sign is the only light there is, and different
+     * in a card room lit low over a green floor — which was being shown
+     * through blue air until this stopped asking the tube.
+     */
     const accent = () => {
       const styles = getComputedStyle(document.documentElement);
       return {
-        core: styles.getPropertyValue("--gr-color-neon-hi").trim() || "#7ba9ff",
-        deep: styles.getPropertyValue("--gr-color-neon").trim() || "#2e7bff",
+        core: styles.getPropertyValue("--gr-color-air-hi").trim() || "#7ba9ff",
+        deep: styles.getPropertyValue("--gr-color-air").trim() || "#2e7bff",
       };
     };
 
