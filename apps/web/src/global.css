@@ -9,9 +9,26 @@
   box-sizing: border-box;
 }
 
+/*
+ * The room you are standing in.
+ *
+ * Not one flat colour: the floor comes up from below and the light from the
+ * sign falls across one upper corner, which is what makes a page read as
+ * somewhere rather than as a dark rectangle. The same two washes the tiles on
+ * the front page are painted with, so walking into a room looks like the tile
+ * you walked in through.
+ *
+ * Fixed rather than scrolling, so a long page does not drag the floor up past
+ * the ceiling — and painted on the body itself, under the haze, which sits a
+ * layer above it.
+ */
 body {
   margin: 0;
-  background: var(--gr-color-night);
+  background:
+    radial-gradient(85% 62% at 50% 104%, var(--gr-color-felt) 0%, transparent 78%),
+    radial-gradient(62% 46% at 4% -6%, var(--gr-color-smoke-lit) 0%, transparent 76%),
+    var(--gr-color-night);
+  background-attachment: fixed;
   color: var(--gr-color-ink);
   font-family: var(--gr-font-ui);
   line-height: 1.55;
