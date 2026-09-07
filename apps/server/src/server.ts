@@ -54,9 +54,32 @@ import { Avatars, Cards } from "./og.js";
 const CATALOGUE = new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS);
 
 
+/**
+ * Where the reels get their randomness.
+ *
+ * Not Math.random. V8 implements that as xorshift128+, whose internal state
+ * can be recovered from a modest run of observed outputs — and this machine
+ * hands the player the whole grid after every spin, which is precisely the
+ * observation that attack needs. Predicting the reels here is worth real
+ * money: the jackpot is 40% of the bank, and the stake cap rises as the bank
+ * does, so somebody who knew when it was coming could bet the maximum into it.
+ *
+ * 2^32 divides the 32-stop strip exactly, so scaling a uniform 32-bit integer
+ * down to [0, 1) introduces no modulo bias.
+ */
+function secureRandom(): number {
+  return randomInt(0, 2 ** 32) / 2 ** 32;
+}
+
 export interface BackRoomServerOptions {
   /** Injected so tests can roll deterministically. */
   roll?: (count: number) => Die[];
+  /**
+   * Where the slot machine's reels come from. Injected for the same reason as
+   * `roll`: a jackpot is one spin in fifteen thousand, and a payout that rare
+   * cannot be tested against real randomness.
+   */
+  spinRandom?: () => number;
   /** How long the busting dice stay on screen before play moves on. */
   farklePauseMs?: number;
   /**
@@ -173,6 +196,7 @@ export const CLIENT_ROUTE = /^(?!\/(?:healthz|auth|api|og|socket\.io)\b).*/;
 export function createBackRoomServer(options: BackRoomServerOptions = {}): BackRoomServer {
   const {
     roll = defaultRoll,
+    spinRandom = secureRandom,
     farklePauseMs = 2200,
     bettingMs,
     settleMs,
@@ -1509,7 +1533,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         }
         await store.bankAdd(stake);
 
-        const grid = drawGrid(Math.random);
+        const grid = drawGrid(spinRandom);
         const { lines, fixed, jackpot } = evaluate(grid, stake);
         const won = fixed + (jackpot ? jackpotPay(await store.bank()) : 0);
 

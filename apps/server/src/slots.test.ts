@@ -54,7 +54,13 @@ interface Machine {
  * sign-in.
  */
 async function openMachine(
-  options: { bank?: number; chips?: number; signedIn?: boolean; discordId?: string } = {},
+  options: {
+    bank?: number;
+    chips?: number;
+    signedIn?: boolean;
+    discordId?: string;
+    spinRandom?: () => number;
+  } = {},
 ): Promise<Machine> {
   const store = new MemoryStore();
   const player = await store.upsertDiscordUser({
@@ -78,6 +84,7 @@ async function openMachine(
     serveClient: false,
     identify: () => as,
     identifyRequest: () => as,
+    ...(options.spinRandom === undefined ? {} : { spinRandom: options.spinRandom }),
   });
   await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
   const port = (server.http.address() as AddressInfo).port;
@@ -292,5 +299,95 @@ describe("stocking the bank", () => {
     const { base } = await openMachine({ bank: 1_000_000, discordId: "d-admin" });
     const response = await fetch(`${base}/api/admin/bank`);
     expect(await response.json()).toEqual({ bank: 1_000_000, maxStake: 771 });
+  });
+});
+
+describe("where the reels come from", () => {
+  it("does not take its randomness from Math.random", async () => {
+    /*
+     * V8 implements Math.random as xorshift128+, and this machine hands the
+     * player the whole grid after every spin — which is exactly the run of
+     * observations needed to recover that generator's state and predict what
+     * is coming. With the jackpot at 40% of the bank and the stake cap rising
+     * alongside it, knowing when it lands is worth real money.
+     *
+     * Pinning Math.random to a constant would freeze every reel if the machine
+     * were using it. The grids have to keep moving.
+     */
+    const real = Math.random;
+    Math.random = () => 0.5;
+    try {
+      const { client } = await openMachine({ bank: 500_000, chips: 100_000 });
+      const grids = new Set<string>();
+      for (let n = 0; n < 12; n += 1) {
+        const result = await spin(client, 1);
+        if (result.ok) {
+          grids.add(JSON.stringify(result.grid));
+        }
+      }
+      expect(grids.size).toBeGreaterThan(1);
+    } finally {
+      Math.random = real;
+    }
+  });
+});
+
+describe("the jackpot", () => {
+  /*
+   * Stops 29, 30 and 31 of the strip are the three sevens, so a reel that
+   * lands on 29 shows nothing else. Every reel landing there fills the grid
+   * with sevens and lights all nine paylines at once — one spin in 10^15,
+   * and the only arrangement that could make this machine mint chips.
+   */
+  const allSevens = () => 29 / 32;
+
+  it("pays a share of the bank the stake has just gone into", async () => {
+    const { client, store, userId } = await openMachine({
+      bank: 500_000,
+      chips: 100_000,
+      spinRandom: allSevens,
+    });
+    const chipsBefore = (await store.get(userId))?.chips ?? 0;
+
+    const result = await spin(client, 10);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.jackpot).toBe(true);
+    // 40% of 500,010 — the bank with the stake already in it.
+    expect(result.won).toBe(200_004);
+    expect((await store.get(userId))?.chips).toBe(chipsBefore - 10 + 200_004);
+    expect(await store.bank()).toBe(500_000 + 10 - 200_004);
+  });
+
+  it("pays once, not once per line", async () => {
+    /*
+     * Nine lines all read five sevens here. Paid per line this would be 360%
+     * of the bank, and the machine would owe chips that were never staked.
+     */
+    const { client, store } = await openMachine({
+      bank: 500_000,
+      chips: 100_000,
+      spinRandom: allSevens,
+    });
+    const result = await spin(client, 10);
+    expect(result.ok && result.won).toBe(200_004);
+    expect(await store.bank()).toBeGreaterThan(0);
+  });
+
+  it("still leaves the bank solvent at the largest stake the cap allows", async () => {
+    // The worst spin the machine can be asked for, actually played.
+    const bank = 500_000;
+    const { client, store } = await openMachine({
+      bank,
+      chips: 10_000_000,
+      spinRandom: allSevens,
+    });
+    // floor(500000 / 1296) — the most this bank can certainly cover.
+    const result = await spin(client, 385);
+    expect(result.ok).toBe(true);
+    expect(await store.bank()).toBeGreaterThanOrEqual(0);
   });
 });
