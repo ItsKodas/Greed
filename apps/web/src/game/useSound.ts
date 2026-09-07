@@ -18,6 +18,26 @@ export function isScoringStraight(dice: readonly number[], room: RoomView): bool
 }
 
 /**
+ * Whether anybody's score went up between two states — that is, whether
+ * somebody banked.
+ *
+ * Extracted because getting this wrong is silent. The first version asked
+ * whether the turn had moved to another seat, which is true almost always and
+ * false in exactly the cases nobody tests by hand: a table of one, or a table
+ * where everyone else is disconnected or waiting. `(0 + 1) % 1` is zero, so
+ * the turn came back to the same seat and the chips never sounded.
+ */
+export function someoneBanked(before: RoomView | null, now: RoomView): boolean {
+  if (before === null) {
+    return false;
+  }
+  return now.seats.some((seat) => {
+    const then = before.seats.find((other) => other.id === seat.id);
+    return then !== undefined && seat.score > then.score;
+  });
+}
+
+/**
  * Turns changes in room state into sound.
  *
  * Everything is derived from comparing the previous state to the new one
@@ -78,6 +98,24 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
       play("bet");
     }
 
+    /*
+     * Somebody banked, read from a score going up rather than from the turn
+     * moving on to somebody else.
+     *
+     * The turn moving was the wrong signal. At a table of one — practising
+     * alone, which is a whole mode — advanceTurn steps `(0 + 1) % 1` and lands
+     * back on the same seat, so the turn never "moves" and the chips never
+     * sounded. The same silence hit any table where everyone else happened to
+     * be disconnected or waiting for the next game.
+     *
+     * A score is also the truer signal: banking is the act of a score going
+     * up, whether the turn passes afterwards or not, and a farkle cannot fake
+     * it — which is why the farkle guard this used to need has gone.
+     */
+    if (someoneBanked(before, room)) {
+      play("bank");
+    }
+
     if (turn === null) {
       return;
     }
@@ -99,11 +137,9 @@ export function useSound(room: RoomView | null, seatId: string | null): void {
       return;
     }
 
-    // Someone banked: their turn ended and the table moved on.
+    // The table moved on to somebody else. The chips were sounded above; this
+    // is only the bell for whoever it moved on to.
     if (was !== null && was.seatId !== turn.seatId) {
-      if (before?.turn?.phase !== "farkled") {
-        play("bank");
-      }
       if (turn.seatId === seatId) {
         window.setTimeout(() => play("yourTurn"), 260);
       }
