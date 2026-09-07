@@ -8,3 +8,4 @@
  */
 export { drawGrid, FACES, STOPS, STRIP, WEIGHTS } from "./strip.js";
 export type { Face } from "./strip.js";
+export { LINE_COUNT, PAYLINES, runOn } from "./paylines.js";
