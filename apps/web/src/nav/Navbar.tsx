@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
 import { Sign } from "../game/Sign.js";
 import type { Account } from "../game/useAccount.js";
-import { Volume } from "./Volume.js";
+import { Sound } from "./Sound.js";
 
 /** The table you are sitting at, when you are sitting at one. */
 export interface NavTable {
@@ -60,7 +60,7 @@ export function Navbar({ game, table, account, connected }: NavbarProps) {
       ) : null}
 
       <Who account={account} />
-      <Volume />
+      <Sound />
       {connected === undefined ? null : <Connection up={connected} />}
     </header>
   );
