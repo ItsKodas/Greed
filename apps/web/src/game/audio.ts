@@ -341,8 +341,14 @@ function tone(options: ToneOptions): void {
   osc.stop(start + duration + 0.02);
 }
 
-/** A short filtered noise burst: the basis of every click and thud. */
-function noise(duration: number, frequency: number, gain: number): void {
+/**
+ * A short filtered noise burst: the basis of every click and thud.
+ *
+ * @param q How tight the band is. One by default, which is a click with a
+ * pitch to it; below one opens the filter up and the burst reads as a brush
+ * rather than a tap — softer without simply being quieter.
+ */
+function noise(duration: number, frequency: number, gain: number, q = 1): void {
   if (context === null || master === null) {
     return;
   }
@@ -357,6 +363,7 @@ function noise(duration: number, frequency: number, gain: number): void {
   const filter = context.createBiquadFilter();
   filter.type = "bandpass";
   filter.frequency.value = frequency;
+  filter.Q.value = q;
   const level = context.createGain();
   level.gain.value = gain;
   source.connect(filter).connect(level).connect(master);
@@ -396,13 +403,16 @@ export function play(cue: Cue): void {
       break;
     case "tap":
       /*
-       * Under everything, so it has to be felt rather than heard. Shorter and
-       * a third the level of picking a die up: this fires on every press on
-       * the site, and a click with any body to it becomes a nag by the
+       * Under everything, so it is closer to felt than to a click — low, wide
+       * and very quiet, with no tone on top of it at all. This fires on every
+       * press on the site, and anything with body to it is a nag by the
        * twentieth time somebody hears it.
+       *
+       * At this level it will be the first thing to disappear on small
+       * speakers, which is the right way round: a press people cannot hear is
+       * better than one they get tired of.
        */
-      noise(0.014, 3400, 0.05);
-      tone({ frequency: 1250, duration: 0.028, type: "triangle", gain: 0.022 });
+      noise(0.032, 520, 0.022, 0.5);
       break;
     case "bank":
       void sample(pickNamed("chips", "placing"), 0.8).then((played) => {
