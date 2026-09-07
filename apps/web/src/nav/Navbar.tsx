@@ -50,13 +50,17 @@ export function Navbar({ game, table, account, connected }: NavbarProps) {
 
       <span className="nav__spacer" />
 
+      {/* The table you are at, as one object — the same shape as the account
+          beside it, because both are a thing you are in rather than a control.
+          Leaving lives inside it: the way out belongs to the table, not to
+          the bar, and it says "Leave" rather than only drawing an arrow. */}
       {table !== undefined ? (
-        <>
+        <span className="nav__table">
           <span className="nav__code" title="This table's code">
             {table.code}
           </span>
           <LeaveButton table={table} />
-        </>
+        </span>
       ) : null}
 
       <Who account={account} />
@@ -90,7 +94,7 @@ function LeaveButton({ table }: { table: NavTable }) {
   return (
     <button
       type="button"
-      className={`iconbtn${arming ? " iconbtn--warn" : ""}`}
+      className={`nav__leave${arming ? " nav__leave--warn" : ""}`}
       title={label}
       aria-label={label}
       onClick={() => {
@@ -102,6 +106,7 @@ function LeaveButton({ table }: { table: NavTable }) {
       }}
     >
       <LeaveIcon />
+      <span>{arming ? "Sure?" : "Leave"}</span>
     </button>
   );
 }

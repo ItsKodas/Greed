@@ -137,12 +137,87 @@
   min-width: var(--gr-space-2);
 }
 
+/*
+ * The table you are at, built as the account badge's twin.
+ *
+ * Deliberately not called .table — that is already Greed's felt, and two
+ * unrelated things sharing a class name is how the scorecard once ended up
+ * dressed as a playing card.
+ *
+ * Leaving sits inside it rather than beside it. The way out belongs to the
+ * table, and an arrow on its own in the bar was quiet enough to hunt for.
+ */
+.nav__table {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  padding: 0 3px 0 var(--gr-space-4);
+  border: var(--gr-edge-soft);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.26);
+  white-space: nowrap;
+}
+
+/*
+ * One height for the pair.
+ *
+ * They are the same kind of object — a thing you are inside rather than a
+ * control — so they should read as a pair. Left to their contents they will
+ * not: one is sized by an avatar and the other by a button, and they landed
+ * two pixels apart, which is close enough to look like a mistake and not
+ * close enough to look like anything else.
+ */
+.me,
+.nav__table {
+  height: 34px;
+}
+
 .nav__code {
   font-family: var(--gr-font-data);
   font-size: var(--gr-text-base);
   letter-spacing: 0.24em;
   color: var(--gr-color-ink-lit);
   white-space: nowrap;
+}
+
+.nav__leave {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gr-space-1);
+  height: 26px;
+  padding: 0 var(--gr-space-3) 0 var(--gr-space-2);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gr-color-ink) 22%, transparent);
+  background: transparent;
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: var(--gr-text-xs);
+  cursor: pointer;
+}
+
+.nav__leave svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.nav__leave:hover {
+  border-color: var(--gr-color-bad);
+  color: var(--gr-color-bad);
+  background: color-mix(in srgb, var(--gr-color-bad) 12%, transparent);
+}
+
+.nav__leave:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 2px;
+}
+
+/* Armed: the next press leaves, and it says so before it happens. */
+.nav__leave--warn,
+.nav__leave--warn:hover {
+  border-color: var(--gr-color-bad);
+  color: var(--gr-color-ink-lit);
+  background: color-mix(in srgb, var(--gr-color-bad) 32%, transparent);
 }
 
 .nav__guest {
@@ -249,13 +324,6 @@
 .iconbtn:focus-visible {
   outline: 2px solid var(--gr-color-neon-hi);
   outline-offset: 1px;
-}
-
-/* Armed: the next press does the thing, and it says so before it happens. */
-.iconbtn--warn,
-.iconbtn--warn:hover {
-  color: var(--gr-color-bad);
-  border-color: var(--gr-color-bad);
 }
 
 .iconbtn svg {
