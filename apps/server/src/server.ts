@@ -1,4 +1,5 @@
 import { randomInt } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { Server as HttpServer } from "node:http";
 import { createServer as createHttpServer } from "node:http";
 import { dirname, join } from "node:path";
@@ -8,7 +9,7 @@ import { Catalogue } from "@backroom/core";
 import type { Store } from "@backroom/economy";
 import { judgeDaily, MemoryStore } from "@backroom/economy";
 import { BLACKJACK, blackjackAdapter } from "@backroom/game-blackjack";
-import { GREED, RoomError, greedAdapter } from "@backroom/game-greed";
+import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
 import type { Die } from "@backroom/rules";
 
 import type { Ack, ClientToServer, ServerToClient, TableOnOffer } from "@backroom/shared";
@@ -24,8 +25,8 @@ import {
   mintCodeSchema,
   removeSeatSchema,
   resumeSchema,
-  setListedSchema,
   setBuyInSchema,
+  setListedSchema,
   setRulesSchema,
   watchSchema,
 } from "@backroom/shared/schemas";
@@ -34,9 +35,12 @@ import session from "express-session";
 import type { DefaultEventsMap } from "socket.io";
 import { Server } from "socket.io";
 import { readAdmins } from "./admin.js";
-import { friendlyRedirect } from "./domains.js";
 import type { AuthConfig } from "./auth.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
+import { friendlyRedirect } from "./domains.js";
+import { inject, pageFor } from "./meta.js";
+import type { CardSpec } from "./og.js";
+import { Cards } from "./og.js";
 
 /**
  * What the room offers.
@@ -166,6 +170,15 @@ interface Budget {
   resetAt: number;
 }
 
+/**
+ * Every address the client owns, which is everything the server does not.
+ *
+ * Exported because it is a negative match and those fail quietly: get it wrong
+ * and API requests are answered with the HTML page, which a browser will
+ * cheerfully render and no test that talks to the socket will ever notice.
+ */
+export const CLIENT_ROUTE = /^(?!\/(?:healthz|auth|api|og|socket\.io)\b).*/;
+
 export function createBackRoomServer(options: BackRoomServerOptions = {}): BackRoomServer {
   const {
     roll = defaultRoll,
@@ -194,6 +207,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * people and pass messages, and has to ask the game for everything else.
    */
   const rooms = new Map<string, Seated>();
+  const here = dirname(fileURLToPath(import.meta.url));
+  const clientDist = join(here, "../../web/dist");
+  /** Draws the picture a link unfurls into, and keeps the last few. */
+  const cards = new Cards(join(here, "../assets/fonts"));
   /**
    * Which table each socket is at, and as whom. A null seat is someone
    * watching: at the table, in the room, sent every state, holding nothing.
@@ -402,6 +419,148 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     response.json({ code, game: seated.game.listing.id });
   });
 
+  // ------------------------------------------------- what a link looks like
+
+  /**
+   * The origin this request arrived on.
+   *
+   * Taken from the request rather than configured, because the server is the
+   * thing being fetched: whatever host an unfurler used to reach here is the
+   * host it can fetch the card from. Subdomains never get this far — they are
+   * redirected to the canonical origin above — so this is that origin.
+   */
+  function origin(request: express.Request): string {
+    return `${request.protocol}://${request.get("host") ?? "localhost"}`;
+  }
+
+  /** What the card for a table should say, or null if there is no such table. */
+  function tableCard(code: string): CardSpec | null {
+    const seated = rooms.get(code);
+    if (seated === undefined || seated.table.isEmpty) {
+      return null;
+    }
+    const listing = seated.game.listing;
+    const host = seated.table.seats.find((seat) => seat.id === seated.table.hostId);
+    return {
+      game: { id: listing.id, name: listing.name },
+      host: host?.name ?? null,
+      code,
+      seats: seated.table.seats.length,
+      maxSeats: listing.maxSeats,
+      note: seated.table.status === "lobby" ? "Open — pull up a chair" : "Hand in play",
+    };
+  }
+
+  /** The card for a whole game, which is a banner rather than a table. */
+  function gameCard(id: string): CardSpec | null {
+    const listing = CATALOGUE.get(id);
+    if (listing === undefined) {
+      return null;
+    }
+    return {
+      game: { id: listing.id, name: listing.name },
+      host: null,
+      code: null,
+      seats: 0,
+      maxSeats: listing.maxSeats,
+      note: listing.blurb,
+    };
+  }
+
+  /** The room's own banner, for every address that is not about one game. */
+  const SITE_CARD: CardSpec = {
+    game: null,
+    host: null,
+    code: null,
+    seats: 0,
+    maxSeats: 0,
+    note: "Played for chips and nothing else",
+  };
+
+  function sendCard(response: express.Response, spec: CardSpec): void {
+    const png = cards.png(spec);
+    response.type("image/png");
+    /*
+     * Long enough that a link pasted in a busy channel is drawn once, short
+     * enough that a table filling up is not advertised as empty all evening.
+     * Unfurlers cache these on their own machines regardless, which is the
+     * real reason a card has to be able to go stale gracefully.
+     */
+    response.setHeader("Cache-Control", "public, max-age=60");
+    response.send(png);
+  }
+
+  /** The card for one table, by its code. */
+  app.get("/og/table/:code", (request, response) => {
+    const code = String(request.params["code"] ?? "")
+      .replace(/\.png$/i, "")
+      .toUpperCase();
+    // A table that has closed still gets a picture, because the link to it is
+    // already out there — just the room's own rather than a table's.
+    sendCard(response, tableCard(code) ?? SITE_CARD);
+  });
+
+  /** The card for a game, or for the room. */
+  app.get("/og/:name", (request, response) => {
+    const name = String(request.params["name"] ?? "").replace(/\.png$/i, "");
+    sendCard(response, gameCard(name) ?? SITE_CARD);
+  });
+
+  app.get("/robots.txt", (request, response) => {
+    response.type("text/plain").send(
+      [
+        "User-agent: *",
+        "Allow: /",
+        // Somebody's own pages, and the desk behind the bar. Nothing here is
+        // secret — these are simply not results anybody wants to land on.
+        "Disallow: /me",
+        "Disallow: /admin",
+        "Disallow: /style",
+        "Disallow: /api/",
+        "",
+        `Sitemap: ${origin(request)}/sitemap.xml`,
+        "",
+      ].join("\n"),
+    );
+  });
+
+  /**
+   * The addresses worth indexing, which is the games and the door.
+   *
+   * Not the tables. A table is a room that will not exist tomorrow, and a
+   * search result leading to one is a dead end by the time anybody clicks it —
+   * which is also why a table's own page asks not to be indexed.
+   */
+  app.get("/sitemap.xml", (request, response) => {
+    const site = origin(request);
+    const urls = ["/", ...CATALOGUE.playable().map((game) => `/${game.id}`)];
+    response.type("application/xml").send(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        ...urls.map((path) => `  <url><loc>${site}${path}</loc></url>`),
+        "</urlset>",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  /** Everything meta.ts has to ask the room about, and nothing more. */
+  const lookups = {
+    game(id: string) {
+      const listing = CATALOGUE.get(id);
+      return listing === undefined
+        ? null
+        : { name: listing.name, blurb: listing.blurb, maxSeats: listing.maxSeats };
+    },
+    table(code: string) {
+      const card = tableCard(code);
+      return card === null
+        ? null
+        : { game: card.game?.name ?? "table", host: card.host, seats: card.seats, maxSeats: card.maxSeats };
+    },
+  };
+
   /**
    * What a game is handed when it needs to move money.
    *
@@ -586,21 +745,48 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   });
 
   if (serveClient) {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const clientDist = join(here, "../../web/dist");
     app.use(express.static(clientDist));
+
+    /**
+     * The built page, read once.
+     *
+     * A build changes when the server restarts and at no other time, so
+     * re-reading it per request would be a disk hit on the busiest path in the
+     * room, for a file that cannot have changed since the last one.
+     */
+    let shell: string | null = null;
+    const pageShell = (): string | null => {
+      if (shell === null) {
+        try {
+          shell = readFileSync(join(clientDist, "index.html"), "utf8");
+        } catch {
+          return null;
+        }
+      }
+      return shell;
+    };
+
     /**
      * Anything that is not a file and not an API path is a client route — a
      * table code, say — so hand back the app and let the router sort it out.
      * Without this a shared link like /6PMKG would 404 in production, even
      * though it works in dev where Vite does the same thing for us.
+     *
+     * The head is written on the way past. A crawler and a link unfurler both
+     * read it, and neither runs the script that would otherwise have filled it
+     * in, so this is the only chance a page gets to say what it is.
      */
-    app.get(/^(?!\/(?:healthz|auth|api|socket\.io)\b).*/, (_request, response) => {
-      response.sendFile(join(clientDist, "index.html"), (error) => {
-        if (error != null) {
-          response.status(404).end();
-        }
-      });
+    app.get(CLIENT_ROUTE, (request, response) => {
+      const html = pageShell();
+      if (html === null) {
+        response.status(404).end();
+        return;
+      }
+      response.type("html");
+      // The file is the same for everybody; the head is not, and a table's
+      // goes stale as its seats fill.
+      response.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+      response.send(inject(html, pageFor(request.path, origin(request), lookups)));
     });
   }
 

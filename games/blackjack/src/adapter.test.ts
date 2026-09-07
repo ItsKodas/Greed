@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { GameDeps } from "@backroom/core";
+import { describe, expect, it } from "vitest";
 import { blackjackAdapter } from "./adapter.js";
 
 /** A ledger that records what the game asked to move, without a database. */
@@ -26,6 +26,32 @@ function ledger(balances: Record<string, number> = {}) {
 }
 
 const identity = (userId: string) => ({ userId, avatar: null, accentColor: null });
+
+describe("who may change the window", () => {
+  it("lets the host, because it is everybody's time", async () => {
+    const game = blackjackAdapter();
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+    const { deps } = ledger({ u1: 10_000 });
+
+    await game.act(table, "a", { type: "window", ms: 60_000 }, deps);
+
+    expect(table.bettingMs).toBe(60_000);
+  });
+
+  it("refuses anybody else, for the same reason", async () => {
+    const game = blackjackAdapter();
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+    table.join("b", "Bo", identity("u2"));
+    const { deps } = ledger({ u1: 10_000, u2: 10_000 });
+
+    await expect(
+      game.act(table, "b", { type: "window", ms: 15_000 }, deps),
+    ).rejects.toThrow(/only the host/i);
+    expect(table.bettingMs).toBe(30_000);
+  });
+});
 
 describe("a bot at the felt", () => {
   it("does not bet once last call has gone out", () => {

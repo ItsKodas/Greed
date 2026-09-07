@@ -101,6 +101,53 @@ describe("taking a stake", () => {
   });
 });
 
+describe("how long the felt stays open", () => {
+  it("takes one of the windows on offer", () => {
+    const table = new Table("TEST1");
+
+    table.setWindow(15_000);
+
+    expect(table.bettingMs).toBe(15_000);
+    expect(table.view().bettingMs).toBe(15_000);
+  });
+
+  it("refuses a window nobody offered", () => {
+    // Two seconds is a table nobody can bet at; ten minutes is not a table.
+    const table = new Table("TEST1");
+
+    expect(() => table.setWindow(2000)).toThrow(TableError);
+    expect(() => table.setWindow(600_000)).toThrow(/not one of the windows/i);
+    expect(table.bettingMs).toBe(30_000);
+  });
+
+  it("leaves the window that is already running alone", () => {
+    /*
+     * The deal is scheduled against the clock people are watching. Moving that
+     * deadline out from under them either deals a hand somebody had not
+     * finished betting on, or waits on a moment that has already gone.
+     */
+    const table = new Table("TEST1");
+    seatTwo(table);
+    const running = table.deadline;
+
+    table.setWindow(60_000);
+
+    expect(table.deadline).toBe(running);
+  });
+
+  it("opens the next window at the new length", () => {
+    const table = stacked("5", "6", "7", "8");
+    seatTwo(table);
+    table.setWindow(15_000);
+
+    const before = Date.now();
+    table.beginBetting();
+
+    expect(table.deadline ?? 0).toBeGreaterThanOrEqual(before + 15_000);
+    expect(table.deadline ?? 0).toBeLessThan(before + 20_000);
+  });
+});
+
 describe("last call", () => {
   /** A table with the deal a moment away, rather than half a minute. */
   function closing(): Table {

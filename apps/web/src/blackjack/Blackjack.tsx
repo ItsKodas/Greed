@@ -1,13 +1,16 @@
-import { LAST_CALL_MS, value } from "@backroom/game-blackjack";
 import type { TableView } from "@backroom/game-blackjack";
+import { LAST_CALL_MS, value, WINDOWS } from "@backroom/game-blackjack";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Chip } from "../chips/Chip.js";
+import { ChipStack } from "../chips/ChipStack.js";
 import { Avatar } from "../game/Avatar.js";
 import { play } from "../game/audio.js";
 import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
+import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
@@ -22,9 +25,6 @@ import {
   StandIcon,
   UndoIcon,
 } from "./Icons.js";
-import { Chip } from "../chips/Chip.js";
-import { ChipStack } from "../chips/ChipStack.js";
-import { useCountdown } from "../game/useCountdown.js";
 import { useCardSound } from "./useCardSound.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
@@ -187,6 +187,18 @@ function Felt({
                         anybody actually reads across a table. */}
                     {hand.bet > 0 ? <ChipStack amount={hand.bet} width={40} /> : null}
                     <Hand cards={hand.cards} />
+                    {/* Beside the cards it counts, the way the dealer's sits
+                        beside theirs — and large, because at a card table the
+                        number is what you look at and everything else on the
+                        row is what you look at afterwards. */}
+                    {hand.cards.length > 0 ? (
+                      <p className={`bj__count${countTone(hand)}`}>
+                        <span className="bj__count-total">{hand.total}</span>
+                        {hand.soft && !hand.bust ? (
+                          <span className="bj__count-soft">soft</span>
+                        ) : null}
+                      </p>
+                    ) : null}
                   </div>
                   <footer className={`bj__result${outcomeTone(hand.outcome)}`}>
                     {handLine(seat, hand, state.phase)}
@@ -224,6 +236,7 @@ function Felt({
             seats={state.seats.length}
             listed={table.listed}
             deadline={state.deadline}
+            windowMs={state.bettingMs}
           />
         ) : state.phase === "settled" ? (
           <>
@@ -295,7 +308,7 @@ function handLine(
   seat: TableView["seats"][number],
   hand: TableView["seats"][number]["hands"][number],
   phase: TableView["phase"],
-): string {
+): string | null {
   if (seat.waiting) {
     return "In on the next hand";
   }
@@ -308,20 +321,40 @@ function handLine(
     }
     return hand.bet > 0 ? "Ready" : "Yet to bet";
   }
+  /*
+   * What happened, not what it came to. The total is drawn beside the cards
+   * now, so saying "bust on twenty-two" here would be the same number twice on
+   * one row — and the one in the smaller, dimmer type at that.
+   */
   switch (hand.outcome) {
     case "blackjack":
       return `Blackjack — ${fmt(hand.returned)}`;
     case "won":
       return `Won ${fmt(hand.returned - hand.bet)}`;
     case "push":
-      return `Push on ${hand.total}`;
+      return "Push";
     case "lost":
-      return `Lost on ${hand.total}`;
+      return "Lost";
     case "bust":
-      return `Bust on ${hand.total}`;
+      return "Bust";
     default:
-      return hand.soft ? `Soft ${hand.total}` : String(hand.total);
+      // Nothing to add while it is still being played: the count says it all.
+      return null;
   }
+}
+
+/**
+ * What colour the count is.
+ *
+ * Only two are worth colouring: gone past twenty-one, and dealt twenty-one.
+ * Every other total is a number you are still deciding about, and colouring
+ * those would be the table telling you what it thinks of your hand.
+ */
+function countTone(hand: TableView["seats"][number]["hands"][number]): string {
+  if (hand.bust) {
+    return " bj__count--bad";
+  }
+  return hand.outcome === "blackjack" ? " bj__count--chip" : "";
 }
 
 /** Whether a hand is two cards of the same value, and so may still be split. */
@@ -403,6 +436,7 @@ function Betting({
   seats,
   listed,
   deadline,
+  windowMs,
 }: {
   table: Table;
   mine: number;
@@ -412,6 +446,7 @@ function Betting({
   seats: number;
   listed: boolean;
   deadline: number | null;
+  windowMs: number;
 }) {
   const stake = (amount: number) => {
     // Sounded on the press rather than on the state coming back: the whole
@@ -489,6 +524,28 @@ function Betting({
             <DealIcon />
             <span>Deal now</span>
           </button>
+          {/* How long everybody gets to bet. Takes effect at the next
+              round rather than this one: the deal is already scheduled
+              against the clock that is running, and moving that out from
+              under it deals a hand somebody had not finished betting on. */}
+          <div className="bots">
+            <span className="bots__label">Time to bet</span>
+            <div className="bots__row">
+              {WINDOWS.map((ms) => (
+                <button
+                  key={ms}
+                  type="button"
+                  role="radio"
+                  aria-checked={windowMs === ms}
+                  className={`btn btn--small${windowMs === ms ? "" : " btn--ghost"}`}
+                  onClick={() => table.act({ type: "window", ms })}
+                >
+                  {ms / 1000}s
+                </button>
+              ))}
+            </div>
+            <p className="bots__hint">Takes effect on the next hand.</p>
+          </div>
           {/* Public by default: a table nobody can find is one you have to
               arrange before you can play at it. The code still works either
               way — private only means it is not advertised. */}

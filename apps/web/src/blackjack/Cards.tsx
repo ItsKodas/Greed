@@ -40,8 +40,17 @@ export function FaceDown() {
 }
 
 export function Hand({ cards, hidden }: { cards: readonly CardData[]; hidden?: boolean }) {
+  /*
+   * Four cards is where a hand stops fitting beside a seat.
+   *
+   * Up to three it is laid out flat, which is the clearest way to read one.
+   * Past that the row is wider than the seat holding it, and what got pushed
+   * out was the count — into the next player's seat. So a long hand is dealt
+   * onto itself instead, the way one actually sits in a hand on a felt.
+   */
+  const tight = cards.length + (hidden === true ? 1 : 0) > 3;
   return (
-    <span className="bj-hand">
+    <span className={`bj-hand${tight ? " bj-hand--tight" : ""}`}>
       {cards.map((card, index) => (
         /*
          * Position is the identity here. A hand only ever grows at its end,

@@ -267,6 +267,8 @@
   display: flex;
   align-items: flex-end;
   gap: var(--gr-space-3);
+  /* A long hand shrinks; the number beside it never does. */
+  min-width: 0;
 }
 
 /* ---------------------------------------------------------------- the cards */
@@ -290,6 +292,23 @@
    otherwise be a name above an empty box the size of a hand. */
 .bj-hand:empty {
   min-height: 0;
+}
+
+/*
+ * A hand that has outgrown its row, overlapped rather than spread.
+ *
+ * The index moves into the corner at the same time, because that is the part
+ * still showing — a rank centred on a card that is three-quarters covered is
+ * a rank nobody can read, which would trade one broken layout for another.
+ */
+.bj-hand--tight .bj-card + .bj-card {
+  margin-left: -24px;
+}
+
+.bj-hand--tight .bj-card {
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 4px 0 0 5px;
 }
 
 .bj-card {
@@ -379,4 +398,52 @@
   color: var(--gr-color-chip);
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+/* ------------------------------------------------------------- the count */
+
+/*
+ * What a hand is worth, beside the cards it is worth it on.
+ *
+ * The same place the dealer's total sits, because the two are the same
+ * question asked of two hands and a player comparing them should not have to
+ * look in two different directions. Larger than the dealer's: this is the one
+ * on the row that is yours.
+ */
+.bj__count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Level with the cards rather than sitting on their bottom edge: the number
+     answers the whole hand, not its last card. */
+  align-self: center;
+  flex: none;
+  margin: 0 0 0 var(--gr-space-2);
+  line-height: 1;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.bj__count-total {
+  font-size: 2rem;
+  font-weight: 500;
+  color: var(--gr-color-ink-lit);
+}
+
+/* Soft, which is the difference between a decision and a formality. */
+.bj__count-soft {
+  margin-top: 3px;
+  font-family: var(--gr-font-ui);
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.06em;
+  color: var(--gr-color-ink-faint);
+}
+
+.bj__count--bad .bj__count-total {
+  color: var(--gr-color-bad);
+}
+
+/* Gold, because a blackjack is not a good score — it is a payout. */
+.bj__count--chip .bj__count-total {
+  color: var(--gr-color-chip);
 }

@@ -2051,3 +2051,10 @@
 .btn:disabled .btn__cost {
   color: inherit;
 }
+
+/* A word under a control about when it actually bites. */
+.bots__hint {
+  margin: var(--gr-space-1) 0 0;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+}

@@ -1,8 +1,8 @@
-import { TableError } from "@backroom/core";
 import type { BotMove, Clock, GameAdapter } from "@backroom/core";
+import { TableError } from "@backroom/core";
 import { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
-import { BLACKJACK } from "./listing.js";
 import { value } from "./hand.js";
+import { BLACKJACK } from "./listing.js";
 import { Table, TURN_MS } from "./table.js";
 
 /**
@@ -52,7 +52,7 @@ export function blackjackAdapter(
     },
 
     async act(table, seatId, action, deps) {
-      const move = action as { type?: string; amount?: number };
+      const move = action as { type?: string; amount?: number; ms?: number };
       const seat = table.seats.find((candidate) => candidate.id === seatId);
       if (seat === undefined) {
         throw new TableError("You are not at this table.");
@@ -98,6 +98,17 @@ export function blackjackAdapter(
             throw new TableError("Only the host can deal early.");
           }
           table.deal();
+          return;
+        case "window":
+          /*
+           * How long everybody gets to bet, which is the host's call for the
+           * same reason dealing early is: it is a decision about everybody
+           * else's time rather than about one hand.
+           */
+          if (seatId !== table.hostId) {
+            throw new TableError("Only the host can change the window.");
+          }
+          table.setWindow(Number(move.ms));
           return;
         case "hit":
           table.hit(seatId);

@@ -1,11 +1,16 @@
 import type { AddressInfo } from "node:net";
 import type { Die } from "@backroom/rules";
 import type { Ack, ClientToServer, RoomView, ServerToClient } from "@backroom/shared";
-import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
+import { io as connect } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createBackRoomServer, resolveSessionSecret, resolveTrustProxy } from "./server.js";
 import type { BackRoomServer } from "./server.js";
+import {
+  CLIENT_ROUTE,
+  createBackRoomServer,
+  resolveSessionSecret,
+  resolveTrustProxy,
+} from "./server.js";
 
 /**
  * These drive the real socket layer with real clients.
@@ -923,5 +928,105 @@ describe("what the room offers", () => {
     const greed = body.games.find((game) => game.id === "greed");
     expect(greed?.tables).toBe(1);
     expect(greed?.seated).toBe(1);
+  });
+});
+
+describe("what a link to this place looks like", () => {
+  /** The port the running server is on, which every request here needs. */
+  function at(path: string): string {
+    const address = (server as BackRoomServer).http.address() as AddressInfo;
+    return `http://localhost:${address.port}${path}`;
+  }
+
+  it("draws a card for the room", async () => {
+    await start();
+    const response = await fetch(at("/og/site.png"));
+
+    expect(response.headers.get("content-type")).toContain("image/png");
+    const png = Buffer.from(await response.arrayBuffer());
+    expect(png.subarray(0, 4)).toEqual(Buffer.from([137, 80, 78, 71]));
+  });
+
+  it("draws a card for a table somebody is actually at", async () => {
+    await start();
+    const host = await client();
+    const code = await create(host, "Ada");
+    await stateWhere(host, (state) => state.seats.length === 1);
+
+    const response = await fetch(at(`/og/table/${code}.png`));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("image/png");
+  });
+
+  it("still draws something for a code that is nobody's table", async () => {
+    /*
+     * A link outlives the table it points at, and the moment somebody follows
+     * a dead one is exactly the moment an unfurler asks for the picture. It
+     * gets the room's own rather than a broken image.
+     */
+    await start();
+    const response = await fetch(at("/og/table/ZZZZZ.png"));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("image/png");
+  });
+
+  it("tells crawlers where the map is, and which doors are not for them", async () => {
+    await start();
+    const body = await (await fetch(at("/robots.txt"))).text();
+
+    expect(body).toContain("Disallow: /me");
+    expect(body).toContain("Disallow: /admin");
+    expect(body).toMatch(/Sitemap: http:\/\/localhost:\d+\/sitemap\.xml/);
+  });
+
+  it("lists the games on the map and none of the tables", async () => {
+    await start();
+    const host = await client();
+    const code = await create(host, "Ada");
+    await stateWhere(host, (state) => state.seats.length === 1);
+
+    const body = await (await fetch(at("/sitemap.xml"))).text();
+
+    expect(body).toContain("<loc>http://localhost");
+    expect(body).toContain("/greed</loc>");
+    // A table is a room that will not exist next week.
+    expect(body).not.toContain(code);
+    // And a game nobody can sit down at yet is not a page worth finding.
+    expect(body).not.toContain("/slots</loc>");
+  });
+});
+
+describe("which addresses belong to the client", () => {
+  /*
+   * A negative match, and those fail quietly. Getting this wrong answers an
+   * API request with the HTML page — which a browser renders happily, and no
+   * test that talks over the socket would ever see.
+   */
+  it("keeps its hands off everything the server answers", () => {
+    for (const path of [
+      "/api/room",
+      "/api/table/6PMKG",
+      "/auth/discord",
+      "/healthz",
+      "/og/site.png",
+      "/og/table/6PMKG.png",
+      "/socket.io/?EIO=4",
+    ]) {
+      expect(CLIENT_ROUTE.test(path)).toBe(false);
+    }
+  });
+
+  it("takes every address the app actually has", () => {
+    for (const path of ["/", "/blackjack", "/blackjack/6PMKG", "/6PMKG", "/me", "/admin"]) {
+      expect(CLIENT_ROUTE.test(path)).toBe(true);
+    }
+  });
+
+  it("does not mistake a table code for a service path", () => {
+    // The boundary is the point: /api is the server's, /apiary is a page.
+    expect(CLIENT_ROUTE.test("/apiary")).toBe(true);
+    expect(CLIENT_ROUTE.test("/ogre")).toBe(true);
   });
 });

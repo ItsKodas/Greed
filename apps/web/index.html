@@ -3,8 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>The Back Room</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!--
+      Everything between the markers is rewritten per address by the server,
+      which is the only thing that knows whose table /6PMKG is. What is written
+      here are the defaults: what a crawler sees if this build is ever served
+      by something simpler, and what the dev server shows, since Vite hands
+      this file straight over without asking anybody.
+    -->
+    <!--meta-->
+    <title>The Back Room</title>
+    <meta
+      name="description"
+      content="A back room for cards and dice, played for chips and nothing else. Blackjack, Greed, and a fresh handful every day — no real money anywhere near it."
+    />
+    <meta property="og:site_name" content="The Back Room" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="The Back Room" />
+    <meta
+      property="og:description"
+      content="A back room for cards and dice, played for chips and nothing else."
+    />
+    <meta property="og:image" content="/og/site.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0d1015" />
+    <!--/meta-->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

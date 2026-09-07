@@ -1,7 +1,7 @@
-import { MIN_SEATS, Seating, TableError } from "@backroom/core";
 import type { BotSkill, Seat as TableSeat, SeatIdentity, TableStatus } from "@backroom/core";
-import { Shoe } from "./cards.js";
+import { MIN_SEATS, Seating, TableError } from "@backroom/core";
 import type { Card } from "./cards.js";
+import { Shoe } from "./cards.js";
 import { isBlackjack, value } from "./hand.js";
 
 /**
@@ -105,6 +105,14 @@ export interface TableView {
   /** True when nothing at this table is played for real chips. */
   forFun: boolean;
   /**
+   * How long the felt is open for bets, which the host may change.
+   *
+   * In the view because the control that changes it has to show which one is
+   * on — and the clock a player is watching is only half the story if they
+   * cannot see how long it started at.
+   */
+  bettingMs: number;
+  /**
    * When whatever the table is waiting on runs out, or null while a hand is
    * being played — the betting window closing, or a finished hand clearing.
    *
@@ -134,6 +142,15 @@ const DEALER_STANDS = 17;
  * an evening without the table needing a host to keep it going.
  */
 export const BETTING_MS = 30_000;
+/**
+ * How long the host may leave the felt open for.
+ *
+ * Three, because a betting window is a matter of taste rather than a dial:
+ * fifteen for a table that knows what it is doing, sixty for one that is
+ * talking. Anything outside this is not offered — a window of two seconds is a
+ * table nobody can bet at, and one of ten minutes is not a table at all.
+ */
+export const WINDOWS = [15_000, 30_000, 60_000] as const;
 /**
  * How long before the deal the felt stops taking chips.
  *
@@ -260,6 +277,21 @@ export class Table {
       return false;
     }
     return this.deadline - Date.now() <= this.lastCallMs;
+  }
+
+  /**
+   * Sets how long the felt stays open, from the next round.
+   *
+   * Not this one. The window that is running has a deal already scheduled
+   * against its deadline, and moving that deadline out from under it is how a
+   * table ends up dealing a hand nobody had finished betting on — or waiting
+   * on a moment that has already passed.
+   */
+  setWindow(ms: number): void {
+    if (!WINDOWS.includes(ms as (typeof WINDOWS)[number])) {
+      throw new TableError("That is not one of the windows.");
+    }
+    this.bettingMs = ms;
   }
 
   /** Everyone actually in the hand being played. */
@@ -803,6 +835,7 @@ export class Table {
       maxBet: MAX_BET,
       forFun: this.forFun,
       deadline: this.deadline,
+      bettingMs: this.bettingMs,
       dealer: {
         cards: shown,
         total: value(shown).total,

@@ -2,11 +2,11 @@ import type { AddressInfo } from "node:net";
 import { MemoryStore, STARTING_CHIPS } from "@backroom/economy";
 import type { TableView } from "@backroom/game-blackjack";
 import type { Ack, ClientToServer, ServerToClient } from "@backroom/shared";
-import { io as connect } from "socket.io-client";
 import type { Socket } from "socket.io-client";
+import { io as connect } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
-import { createBackRoomServer } from "./server.js";
 import type { BackRoomServer } from "./server.js";
+import { createBackRoomServer } from "./server.js";
 
 /**
  * Blackjack, driven through the real socket layer.
@@ -500,5 +500,35 @@ describe("blackjack over the wire", () => {
     await act(host, { type: "roll" });
 
     expect(await refused).toMatch(/not something you can do/i);
+  });
+});
+
+describe("what a stake does when the hand is over", () => {
+  it("does not put the same chips back on the felt for the next hand", async () => {
+    /*
+     * A table that deals itself must not also bet for you. Nobody pressed
+     * anything between these two hands, so the second one should find the felt
+     * empty — a stake that quietly repeats is chips leaving an account every
+     * thirty seconds for a hand its owner never agreed to play.
+     */
+    const { port } = await startRoom(["Ada"], {
+      bettingMs: 200,
+      settleMs: 80,
+      turnMs: 200,
+      lastCallMs: 0,
+    });
+    const host = await client(port);
+    await open_(host, "Ada");
+    await stateWhere(host, (view) => view.seats.length === 1);
+
+    await act(host, { type: "bet", amount: 500 });
+    await stateWhere(host, (view) => view.phase !== "betting", 3000);
+    await stateWhere(host, (view) => view.phase === "settled", 4000);
+
+    // The window after that one: nobody has bet in it.
+    const next = await stateWhere(host, (view) => view.phase === "betting", 4000);
+
+    expect(next.seats[0]?.bet).toBe(0);
+    expect(next.seats[0]?.hands[0]?.cards).toHaveLength(0);
   });
 });
