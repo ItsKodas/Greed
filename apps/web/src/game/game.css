@@ -12,7 +12,13 @@
 
 .play__head {
   display: flex;
-  align-items: baseline;
+  /*
+   * Centred, not baseline-aligned. The sign is a two-line block set at an
+   * angle, so its last baseline sits far below its middle — aligning on it
+   * hung the sign low and left everything else riding high above it. Nothing
+   * else in this row shares a baseline worth keeping.
+   */
+  align-items: center;
   gap: var(--gr-space-4);
   padding-bottom: var(--gr-space-4);
   border-bottom: var(--gr-edge-hair);
