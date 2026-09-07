@@ -64,6 +64,14 @@ export interface BackRoomServerOptions {
   roll?: (count: number) => Die[];
   /** How long the busting dice stay on screen before play moves on. */
   farklePauseMs?: number;
+  /**
+   * How long a blackjack table waits for bets, and how long a finished hand
+   * stays up. Arguments so a test can hurry a table that otherwise takes half
+   * a minute to come round; never reachable from a client.
+   */
+  bettingMs?: number;
+  settleMs?: number;
+  turnMs?: number;
   /** How long a dropped player keeps their seat. */
   reconnectGraceMs?: number;
   /** How long an abandoned table survives. */
@@ -157,6 +165,9 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   const {
     roll = defaultRoll,
     farklePauseMs = 2200,
+    bettingMs,
+    settleMs,
+    turnMs,
     reconnectGraceMs = 90_000,
     emptyRoomTtlMs = 5 * 60 * 1000,
     clientOrigin = "http://localhost:5173",
@@ -183,7 +194,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    */
   const sockets = new Map<string, { code: string; seatId: string | null }>();
   const turnClocks = new Map<string, NodeJS.Timeout>();
-  const farklePauses = new Map<string, NodeJS.Timeout>();
+  /** What each table is waiting on, and the timer that ends the wait. */
+  const pauses = new Map<string, { key: string; timer: NodeJS.Timeout }>();
   const botMoves = new Map<string, NodeJS.Timeout>();
   const budgets = new Map<string, Budget>();
   /* Keyed by account, not by socket: a socket is free to make more of. */
@@ -391,11 +403,41 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * cannot invent a way to pay somebody that the economy has not agreed to —
    * every route to a player's chips goes through these four.
    */
+  /**
+   * Tells every screen this account is signed in on what it is now worth.
+   *
+   * Chips move from three directions — a stake taken here, a hand paying out
+   * on the table's clock, a daily claimed in another tab — and only the first
+   * of those is something the browser asked for. Pushing the number is what
+   * keeps the figure in the corner honest without it polling for one.
+   */
+  async function tellChips(userId: string): Promise<void> {
+    const profile = await store.get(userId);
+    if (profile === undefined || profile === null) {
+      return;
+    }
+    for (const socket of io.sockets.sockets.values()) {
+      if (socket.data.identity?.userId === userId) {
+        socket.emit("me:chips", profile.chips);
+      }
+    }
+  }
+
   const deps: GameDeps = {
-    take: async (userId, amount) => (amount <= 0 ? true : store.adjustChips(userId, -amount)),
+    take: async (userId, amount) => {
+      if (amount <= 0) {
+        return true;
+      }
+      const took = await store.adjustChips(userId, -amount);
+      if (took) {
+        await tellChips(userId);
+      }
+      return took;
+    },
     give: async (userId, amount) => {
       if (amount > 0) {
         await store.adjustChips(userId, amount);
+        await tellChips(userId);
       }
     },
     record: (userId, bump) => store.bumpStats(userId, bump),
@@ -404,8 +446,15 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
 
   /** Every game this server can host, by id. */
   const ADAPTERS = new Map<string, GameAdapter<PlayTable>>([
-    [GREED.id, greedAdapter({ roll }) as GameAdapter<PlayTable>],
-    [BLACKJACK.id, blackjackAdapter() as GameAdapter<PlayTable>],
+    [GREED.id, greedAdapter({ roll, pauseMs: farklePauseMs }) as GameAdapter<PlayTable>],
+    [
+      BLACKJACK.id,
+      blackjackAdapter({
+        ...(bettingMs === undefined ? {} : { bettingMs }),
+        ...(settleMs === undefined ? {} : { settleMs }),
+        ...(turnMs === undefined ? {} : { turnMs }),
+      }) as GameAdapter<PlayTable>,
+    ],
   ]);
 
   /**
@@ -657,7 +706,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     sendState(code, seated);
     schedulePause(code, seated);
     scheduleBot(code, seated);
-    if (seated.game.isSettled(seated.table) && !settled.has(code)) {
+    /*
+     * Settling is once per finished hand, and a table may finish many.
+     *
+     * The flag is both set and cleared here, beside the thing it guards,
+     * because a round can begin from a timer as easily as from somebody
+     * pressing something — and a flag cleared only in a socket handler would
+     * leave a table that deals itself unable to pay anybody after its first
+     * hand.
+     */
+    if (!seated.game.isSettled(seated.table)) {
+      settled.delete(code);
+    } else if (!settled.has(code)) {
       settled.add(code);
       void seated.game
         .settle(seated.table, deps)
@@ -674,27 +734,53 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * meant a bot that farkled froze the table for good.
    */
   function schedulePause(code: string, seated: Seated): void {
-    if (farklePauses.has(code)) {
-      return;
-    }
     const pause = seated.game.pause?.(seated.table) ?? null;
+    const waiting = pauses.get(code);
+    if (waiting !== undefined) {
+      /*
+       * Only left alone while it is still the same wait. A table can stop
+       * waiting on one thing and start waiting on another before the first is
+       * up — the host deals early, and a thirty-second betting window becomes
+       * six seconds of reading the result — and a timer kept for the wait that
+       * is over would both hold the new one up and, when it did fire, do the
+       * old wait's work to a table that had moved on.
+       */
+      if (pause !== null && waiting.key === pause.key) {
+        return;
+      }
+      clearTimeout(waiting.timer);
+      pauses.delete(code);
+    }
     if (pause === null) {
       return;
     }
-    farklePauses.set(
-      code,
-      later(() => {
-        farklePauses.delete(code);
+
+    pauses.set(code, {
+      key: pause.key,
+      /*
+       * However long the game said, rather than however long a farkle takes.
+       * This used to be one constant for the whole building, which was
+       * invisible while one game wanted one pause — and no use at all to a
+       * table that wants thirty seconds of betting and six of reading the
+       * result.
+       */
+      timer: later(() => {
+        pauses.delete(code);
         const still = rooms.get(code);
-        // Checked again on the way out: whatever wanted the pause may have
-        // been resolved by somebody else while it was running.
-        if (still === undefined || still.game.pause?.(still.table) == null) {
+        if (still === undefined) {
           return;
         }
-        pause.run();
+        // Asked again on the way out, and only run if the table is still
+        // waiting on the same thing: whatever wanted this may have been
+        // resolved by somebody else while the timer was running.
+        const now = still.game.pause?.(still.table) ?? null;
+        if (now === null || now.key !== pause.key) {
+          return;
+        }
+        now.run();
         broadcast(code);
-      }, farklePauseMs),
-    );
+      }, Math.max(0, pause.ms)),
+    });
   }
 
 
@@ -763,7 +849,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       const still = rooms.get(code);
       if (still?.table.isEmpty === true) {
         turnClocks.delete(code);
-        farklePauses.delete(code);
+        pauses.delete(code);
         botMoves.delete(code);
         rooms.delete(code);
       }
@@ -1108,10 +1194,6 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       }
       guard(socket.id, async (seated, seatId) => {
         await seated.game.act(seated.table, seatId, parsed.data, deps);
-        // A table that has been dealt again must be allowed to settle again.
-        if (!seated.game.isSettled(seated.table)) {
-          settled.delete(seated.table.code);
-        }
       });
       // Always acknowledged, refused or not: a client counting these needs to
       // know when its own optimistic picture can be dropped.
@@ -1194,12 +1276,16 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       clearTimeout(handle);
     }
     pending.clear();
-    for (const store of [turnClocks, farklePauses, botMoves]) {
+    for (const store of [turnClocks, botMoves]) {
       for (const handle of store.values()) {
         clearTimeout(handle);
       }
       store.clear();
     }
+    for (const waiting of pauses.values()) {
+      clearTimeout(waiting.timer);
+    }
+    pauses.clear();
     await io.close();
     await store.close();
     await new Promise<void>((resolve) => {

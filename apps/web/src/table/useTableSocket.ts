@@ -92,8 +92,20 @@ export interface TableSocketHook<TView> {
  * now, and a state from another table rendered through these components would
  * be nonsense at best.
  */
-export function useTableSocket<TView>(game: string, onLeave: () => void): TableSocketHook<TView> {
+/**
+ * @param onChips Called when the server says this account's balance has moved.
+ * Held in a ref rather than watched, because a caller that rebuilds the
+ * callback each render would otherwise tear the socket down and reconnect on
+ * every one of them.
+ */
+export function useTableSocket<TView>(
+  game: string,
+  onLeave: () => void,
+  onChips?: (chips: number) => void,
+): TableSocketHook<TView> {
   const socketRef = useRef<TableSocket | null>(null);
+  const chipsRef = useRef(onChips);
+  chipsRef.current = onChips;
   const [state, setState] = useState<TView | null>(null);
   const [seatId, setSeatId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -132,6 +144,7 @@ export function useTableSocket<TView>(game: string, onLeave: () => void): TableS
       setState(raw as unknown as TView);
     });
     socket.on("room:error", (message: string) => setError(message));
+    socket.on("me:chips", (chips: number) => chipsRef.current?.(chips));
     // Capped, because a long night at a table should not grow without limit.
     socket.on("chat:message", (message: ChatMessage) =>
       setChat((log) => [...log, message].slice(-60)),

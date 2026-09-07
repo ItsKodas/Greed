@@ -35,7 +35,7 @@ function dealt(player: [Rank, Rank], dealer: [Rank, Rank], rest: Rank[] = [], fo
   const table = stacked([player[0], dealer[0], player[1], dealer[1], ...rest], forFun);
   table.join("a", "Ada", forFun ? null : identity("u1"));
   table.bet("a", 500);
-  table.deal("a");
+  table.deal();
   return table;
 }
 
@@ -115,7 +115,7 @@ describe("splitting a pair", () => {
     table.join("b", "Bo", identity("u2"));
     table.bet("a", 500);
     table.bet("b", 500);
-    table.deal("a");
+    table.deal();
 
     table.split("a");
     // Still Ada's turn, now on the first of her two hands.
@@ -171,7 +171,7 @@ describe("what a split costs", () => {
     const moves: string[] = [];
     let chips = balance;
     const deps: GameDeps = {
-      async take(userId, amount) {
+      async take(_userId, amount) {
         if (chips < amount) {
           moves.push(`refused ${amount}`);
           return false;

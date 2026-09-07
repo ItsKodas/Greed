@@ -13,8 +13,18 @@ import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
 import { Hand } from "./Cards.js";
+import {
+  ClockIcon,
+  DealIcon,
+  DoubleIcon,
+  HitIcon,
+  SplitIcon,
+  StandIcon,
+  UndoIcon,
+} from "./Icons.js";
 import { Chip } from "../chips/Chip.js";
 import { ChipStack } from "../chips/ChipStack.js";
+import { useCountdown } from "../game/useCountdown.js";
 import { useCardSound } from "./useCardSound.js";
 import "@backroom/game-blackjack/theme.css";
 import "./blackjack.css";
@@ -35,7 +45,10 @@ export function Blackjack() {
   const urlCode = looksLikeCode ? raw : "";
 
   const back = useCallback(() => navigate("/blackjack"), [navigate]);
-  const table = useTableSocket<TableView>("blackjack", back);
+  // The balance in the corner follows the hand: the stake goes as the chips
+  // are pushed out and the payout lands on the table's own clock, neither of
+  // which the browser asked for.
+  const table = useTableSocket<TableView>("blackjack", back, account.setChips);
   const { state, seatId } = table;
   useCardSound(state, seatId);
 
@@ -210,60 +223,66 @@ function Felt({
             isHost={isHost}
             seats={state.seats.length}
             listed={table.listed}
+            deadline={state.deadline}
           />
         ) : state.phase === "settled" ? (
           <>
             <p className="panel__label">Hand over</p>
             <p className="panel__note">{settledLine(me)}</p>
-            {isHost ? (
-              <button
-                type="button"
-                className="btn btn--wide"
-                onClick={() => table.act({ type: "nextHand" })}
-              >
-                Another hand
-              </button>
-            ) : (
-              <p className="panel__note">Waiting for the host to deal again.</p>
-            )}
+            {/* Nobody has to start the next one, so the only useful thing to
+                say here is how long you have got to read this one. */}
+            <Countdown endsAt={state.deadline} verb="Next hand in" />
           </>
         ) : (
           <>
             <p className="panel__label">{myTurn ? "Your move" : "Waiting"}</p>
-            <button
-              type="button"
-              className="btn btn--wide"
-              disabled={!myTurn}
-              onClick={() => table.act({ type: "hit" })}
-            >
-              Hit
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--wide"
-              disabled={!myTurn}
-              onClick={() => table.act({ type: "stand" })}
-            >
-              Stand
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--wide"
-              // First two cards only: that is the rule, and also the only point
-              // at which doubling is a decision.
-              disabled={!myTurn || (myHand?.cards.length ?? 0) !== 2}
-              onClick={() => table.act({ type: "double" })}
-            >
-              Double for {fmt(myHand?.bet ?? 0)}
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--wide"
-              disabled={!myTurn || myHand === undefined || !splittable(myHand)}
-              onClick={() => table.act({ type: "split" })}
-            >
-              Split for {fmt(myHand?.bet ?? 0)}
-            </button>
+            {/* Hit and stand are the whole game and are always both there;
+                double and split are answers to a particular hand, so they sit
+                below as a pair and go quiet when the hand is not one. */}
+            <div className="bj__moves">
+              <button
+                type="button"
+                className="btn btn--move"
+                disabled={!myTurn}
+                onClick={() => table.act({ type: "hit" })}
+              >
+                <HitIcon />
+                <span>Hit</span>
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--move"
+                disabled={!myTurn}
+                onClick={() => table.act({ type: "stand" })}
+              >
+                <StandIcon />
+                <span>Stand</span>
+              </button>
+            </div>
+            <div className="bj__moves">
+              <button
+                type="button"
+                className="btn btn--ghost btn--move"
+                // First two cards only: that is the rule, and also the only
+                // point at which doubling is a decision.
+                disabled={!myTurn || (myHand?.cards.length ?? 0) !== 2}
+                onClick={() => table.act({ type: "double" })}
+              >
+                <DoubleIcon />
+                <span>Double</span>
+                <em className="btn__cost">{fmt(myHand?.bet ?? 0)}</em>
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--move"
+                disabled={!myTurn || myHand === undefined || !splittable(myHand)}
+                onClick={() => table.act({ type: "split" })}
+              >
+                <SplitIcon />
+                <span>Split</span>
+                <em className="btn__cost">{fmt(myHand?.bet ?? 0)}</em>
+              </button>
+            </div>
           </>
         )}
       </aside>
@@ -346,6 +365,29 @@ function settledLine(me: TableView["seats"][number] | null): string {
 }
 
 /**
+ * What the table is waiting on, in seconds.
+ *
+ * A table that runs itself has to say so, or it reads as a table that has
+ * stopped: the difference between "nothing is happening" and "something is
+ * about to" is the only thing this line carries, which is why it is here even
+ * while it says one second.
+ */
+function Countdown({ endsAt, verb }: { endsAt: number | null; verb: string }) {
+  const left = useCountdown(endsAt);
+  if (left === null) {
+    return null;
+  }
+  return (
+    <p className="bj__clock">
+      <ClockIcon />
+      <span>
+        {verb} {left}s
+      </span>
+    </p>
+  );
+}
+
+/**
  * Stacking a stake.
  *
  * Chips add rather than replace, the way they do on a real felt, and the whole
@@ -360,6 +402,7 @@ function Betting({
   isHost,
   seats,
   listed,
+  deadline,
 }: {
   table: Table;
   mine: number;
@@ -368,6 +411,7 @@ function Betting({
   isHost: boolean;
   seats: number;
   listed: boolean;
+  deadline: number | null;
 }) {
   const stake = (amount: number) => {
     // Sounded on the press rather than on the state coming back: the whole
@@ -379,6 +423,7 @@ function Betting({
   return (
     <>
       <p className="panel__label">Your bet</p>
+      <Countdown endsAt={deadline} verb="Cards out in" />
       <div className="bj__chips">
         {CHIPS.map((amount) => (
           <button
@@ -407,20 +452,25 @@ function Betting({
       </div>
       <button
         type="button"
-        className="btn btn--ghost btn--wide"
+        className="btn btn--ghost btn--wide btn--icon"
         disabled={mine === 0}
         onClick={() => stake(0)}
       >
-        Take it back
+        <UndoIcon />
+        <span>Take it back</span>
       </button>
       {isHost ? (
         <>
+          {/* Not what starts a round — the clock does that. This is for a
+              table that has finished betting and would rather not sit out the
+              rest of the window. */}
           <button
             type="button"
-            className="btn btn--wide"
+            className="btn btn--wide btn--icon"
             onClick={() => table.act({ type: "deal" })}
           >
-            Deal
+            <DealIcon />
+            <span>Deal now</span>
           </button>
           {/* Public by default: a table nobody can find is one you have to
               arrange before you can play at it. The code still works either
@@ -461,7 +511,10 @@ function Betting({
           ) : null}
         </>
       ) : (
-        <p className="panel__note">The host deals once everyone has bet.</p>
+        <p className="panel__note">
+          The table deals itself. Anything on the felt when the clock runs out
+          is in the hand.
+        </p>
       )}
     </>
   );

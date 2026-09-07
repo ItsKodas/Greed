@@ -1,9 +1,9 @@
 import { TableError } from "@backroom/core";
-import type { BotMove, GameAdapter } from "@backroom/core";
+import type { BotMove, Clock, GameAdapter } from "@backroom/core";
 import { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
 import { BLACKJACK } from "./listing.js";
 import { value } from "./hand.js";
-import { Table } from "./table.js";
+import { Table, TURN_MS } from "./table.js";
 
 /**
  * What the room does with a blackjack table.
@@ -14,8 +14,19 @@ import { Table } from "./table.js";
  * separately. That is why taking chips belongs to the game rather than to the
  * server — the server would have had to know which of those two it was.
  */
-export function blackjackAdapter(options: { random?: () => number } = {}): GameAdapter<Table> {
+export function blackjackAdapter(
+  options: {
+    random?: () => number;
+    /** How long the felt is open for bets. An argument so a test can hurry it. */
+    bettingMs?: number;
+    /** How long a finished hand stays up to be read. */
+    settleMs?: number;
+    /** How long one player may think before the table plays their hand. */
+    turnMs?: number;
+  } = {},
+): GameAdapter<Table> {
   const random = options.random ?? Math.random;
+  const turnMs = options.turnMs ?? TURN_MS;
 
   return {
     listing: BLACKJACK,
@@ -24,7 +35,15 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
       // Fixed at the table rather than changeable later: a table anybody may
       // sit at and a table that spends real chips are not the same game with
       // a different label.
-      return new Table(code, random, made?.["forFun"] === true);
+      const table = new Table(code, random, made?.["forFun"] === true);
+      if (options.bettingMs !== undefined) {
+        table.bettingMs = options.bettingMs;
+        table.deadline = Date.now() + options.bettingMs;
+      }
+      if (options.settleMs !== undefined) {
+        table.settleMs = options.settleMs;
+      }
+      return table;
     },
 
     async act(table, seatId, action, deps) {
@@ -65,7 +84,15 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           return;
         }
         case "deal":
-          table.deal(seatId);
+          /*
+           * Hurrying the clock along, not starting the round — the round
+           * starts itself. Kept to the host because cutting short everybody
+           * else's time to bet is not a thing any seat should be able to do.
+           */
+          if (seatId !== table.hostId) {
+            throw new TableError("Only the host can deal early.");
+          }
+          table.deal();
           return;
         case "hit":
           table.hit(seatId);
@@ -122,9 +149,6 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
           }
           return;
         }
-        case "nextHand":
-          table.nextHand(seatId);
-          return;
         default:
           throw new TableError("That is not something you can do here.");
       }
@@ -132,6 +156,56 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
 
     isSettled(table) {
       return table.phase === "settled";
+    },
+
+    /**
+     * The table's own clock, which is what makes it a table rather than a
+     * game somebody has to run.
+     *
+     * Two waits, and the server treats them the same way: the felt is open for
+     * bets until a deadline, and a finished hand sits where it is for a moment
+     * so it can be read. Between them there is nothing to wait for — a hand
+     * being played waits on people, and people have a clock of their own.
+     */
+    pause(table) {
+      if (table.phase === "betting" && table.deadline !== null) {
+        return {
+          key: "betting",
+          ms: Math.max(0, table.deadline - Date.now()),
+          run() {
+            table.closeBetting();
+          },
+        };
+      }
+      if (table.phase === "settled") {
+        return {
+          key: "settled",
+          ms: table.deadline === null ? table.settleMs : Math.max(0, table.deadline - Date.now()),
+          run() {
+            table.beginBetting();
+          },
+        };
+      }
+      return null;
+    },
+
+    /**
+     * Whose decision is running out.
+     *
+     * A table that deals itself cannot wait forever on somebody who has walked
+     * away from their screen, and everybody else at it is waiting on the same
+     * person.
+     */
+    clock(table): Clock | null {
+      const seat = table.currentSeat();
+      if (table.phase !== "playing" || seat === null) {
+        return null;
+      }
+      return { seatId: seat.id, endsAt: Date.now() + turnMs };
+    },
+
+    timeout(table, seatId) {
+      table.timeout(seatId);
     },
 
     /**
@@ -237,7 +311,31 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
       const paid = (seat: { hands: Array<{ returned: number }> }) =>
         seat.hands.reduce((total, hand) => total + hand.returned, 0);
 
-      const played = table.seats.filter((seat) => !seat.waiting && staked(seat) > 0);
+      /*
+       * Everything read off the table before anything is awaited.
+       *
+       * This is a settlement, so it has to talk to the economy, so it yields —
+       * and the table does not stand still while it does. A continuous table
+       * clears the felt on a timer, and a loop that read `seat.hands` after an
+       * await would find them emptied and pay the rest of the room nothing.
+       * The hand is over; what it was worth is a fact now, not a place to look
+       * things up later.
+       */
+      const played = table.seats
+        .filter((seat) => !seat.waiting && staked(seat) > 0)
+        .map((seat) => ({
+          userId: seat.userId,
+          name: seat.name,
+          isBot: seat.isBot,
+          out: staked(seat),
+          back: paid(seat),
+          outcomes: seat.hands.map((hand) => hand.outcome),
+          // No score in blackjack, so what the hand was worth stands in. After
+          // a split there are two, and the better of them is the fairer answer
+          // to "how did that go" than whichever happened to be dealt first.
+          score: Math.max(...seat.hands.map((hand) => value(hand.cards).total)),
+          seatId: seat.id,
+        }));
 
       for (const seat of played) {
         if (seat.userId === null) {
@@ -251,28 +349,24 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
          * rate would drift every time somebody split, which is exactly the
          * kind of quiet wrongness a stats page never admits to.
          */
-        const back = paid(seat);
-        const out = staked(seat);
-        if (back > 0) {
-          await deps.give(seat.userId, back);
+        if (seat.back > 0) {
+          await deps.give(seat.userId, seat.back);
         }
-        const outcomes = seat.hands.map((hand) => hand.outcome);
-        const won = back > out;
         await deps.record(seat.userId, {
           shared: {
             games: 1,
-            wins: won ? 1 : 0,
-            chipsWon: back - out,
+            wins: seat.back > seat.out ? 1 : 0,
+            chipsWon: seat.back - seat.out,
           },
           game: BLACKJACK.id,
           add: {
-            blackjacks: outcomes.filter((outcome) => outcome === "blackjack").length,
-            busts: outcomes.filter((outcome) => outcome === "bust").length,
+            blackjacks: seat.outcomes.filter((outcome) => outcome === "blackjack").length,
+            busts: seat.outcomes.filter((outcome) => outcome === "bust").length,
             // A split that pushes both hands is one push, not two: this counts
             // hands where the outcome was a push, which is what it says.
-            pushes: outcomes.filter((outcome) => outcome === "push").length,
+            pushes: seat.outcomes.filter((outcome) => outcome === "push").length,
           },
-          max: { biggestWin: Math.max(0, back - out) },
+          max: { biggestWin: Math.max(0, seat.back - seat.out) },
         });
       }
 
@@ -282,24 +376,21 @@ export function blackjackAdapter(options: { random?: () => number } = {}): GameA
         // A hand has no single stake and no pot to divide; the totals are what
         // the history can honestly say about it.
         buyIn: 0,
-        pot: played.reduce((total, seat) => total + staked(seat), 0),
+        pot: played.reduce((total, seat) => total + seat.out, 0),
         players: played.map((seat) => ({
           userId: seat.userId,
           name: seat.name,
-          // No score in blackjack, so what the hand was worth stands in. After
-          // a split there are two, and the better of them is the fairer answer
-          // to "how did that go" than whichever happened to be dealt first.
-          score: Math.max(...seat.hands.map((hand) => value(hand.cards).total)),
+          score: seat.score,
           isBot: seat.isBot,
           // The stake was taken as it was placed, so this is the whole story
           // of the hand: what came back, less what went out.
-          net: paid(seat) - staked(seat),
+          net: seat.back - seat.out,
         })),
         // Up on the deal, however many hands it took. One hand winning while
         // the other loses more is not a win, and should not be recorded as one.
         winnerIds: played
-          .filter((seat) => paid(seat) > staked(seat))
-          .map((seat) => seat.userId ?? seat.id),
+          .filter((seat) => seat.back > seat.out)
+          .map((seat) => seat.userId ?? seat.seatId),
         endedAt: Date.now(),
       });
     },

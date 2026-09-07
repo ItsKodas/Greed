@@ -1996,3 +1996,58 @@
 .code__chips {
   color: var(--gr-color-chip-hi);
 }
+
+/*
+ * A button that leads with a drawing.
+ *
+ * The icon takes its size from the type around it rather than a fixed pixel
+ * count, so a label and its glyph stay the same weight relative to each other
+ * wherever the button is used, and `flex: none` keeps the drawing square when
+ * a long label wants to squeeze it.
+ */
+.btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gr-space-2);
+}
+
+.btn--icon svg {
+  width: 1.15em;
+  height: 1.15em;
+  flex: none;
+}
+
+/*
+ * A move at the table: a glyph over a word, two to a row.
+ *
+ * Stacked rather than side by side because these sit in a narrow column and
+ * come in pairs — hit against stand, double against split — and a pair reads
+ * as a choice only when the two halves are the same shape.
+ */
+.btn--move {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-1);
+  padding: var(--gr-space-3) var(--gr-space-2);
+  line-height: 1.2;
+}
+
+.btn--move svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+/* What the move costs. Gold, because it is money. */
+.btn__cost {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xs);
+  font-style: normal;
+  color: var(--gr-color-chip);
+}
+
+.btn:disabled .btn__cost {
+  color: inherit;
+}

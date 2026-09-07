@@ -25,9 +25,11 @@ export function Play() {
   const looksLikeCode =
     raw.length === CODE_LENGTH && [...raw].every((letter) => CODE_ALPHABET.includes(letter));
   const urlCode = looksLikeCode ? raw : "";
-  const { room, listed, heldLocally, pendingRoll, chat, seatId, error, connected, busy, actions } =
-    useRoom();
   const account = useAccount();
+  // The balance in the corner follows the game: a stake leaves as it is
+  // placed and the pot comes back the moment somebody wins it.
+  const { room, listed, heldLocally, pendingRoll, chat, seatId, error, connected, busy, actions } =
+    useRoom(account.setChips);
   useSound(room, seatId);
 
   /*

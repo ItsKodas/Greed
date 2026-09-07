@@ -106,9 +106,16 @@ export interface RoomHook {
   actions: RoomActions;
 }
 
-export function useRoom(): RoomHook {
+/**
+ * @param onChips Called when the server says this account's balance has moved.
+ * Held in a ref rather than watched, so a caller that rebuilds the callback
+ * each render does not tear the socket down and reconnect on every one.
+ */
+export function useRoom(onChips?: (chips: number) => void): RoomHook {
   const navigate = useNavigate();
   const socketRef = useRef<GameSocket | null>(null);
+  const chipsRef = useRef(onChips);
+  chipsRef.current = onChips;
   const [room, setRoom] = useState<RoomView | null>(null);
   /** Whether the table is on the public list. Not part of the game's view. */
   const [listed, setListedHere] = useState(true);
@@ -202,6 +209,7 @@ export function useRoom(): RoomHook {
       // A refused throw is never answered, so the dice would hang in the air.
       setPendingRoll(null);
     });
+    socket.on("me:chips", (chips) => chipsRef.current?.(chips));
     // Kept client-side rather than in room state: the table broadcasts on
     // every roll, and shipping the backlog each time would be waste.
     socket.on("chat:message", (message) => {

@@ -340,3 +340,34 @@
     grid-template-areas: "dealer" "seats" "side";
   }
 }
+
+/* Moves come in pairs, so they are laid out in pairs. */
+.bj__moves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gr-space-2);
+  margin-bottom: var(--gr-space-2);
+}
+
+/*
+ * The table's clock.
+ *
+ * Lit, because a countdown is the most live thing on a table that runs itself
+ * — everything else here is waiting on a person, and this is the thing that
+ * is not.
+ */
+.bj__clock {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  margin: 0 0 var(--gr-space-3);
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-neon-hi);
+}
+
+.bj__clock svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}

@@ -26,6 +26,12 @@ export interface Account {
   available: boolean;
   loading: boolean;
   refresh: () => void;
+  /**
+   * Takes a balance the server has pushed, without asking for the profile
+   * again. Everything else on the profile is unchanged, because nothing else
+   * moved — this is the number going up and down during a hand.
+   */
+  setChips: (chips: number) => void;
   signOut: () => void;
   claimDaily: () => void;
   dailyMessage: string | null;
@@ -70,6 +76,10 @@ export function useAccount(): Account {
 
   useEffect(refresh, [refresh]);
 
+  const setChips = useCallback((chips: number) => {
+    setProfile((current) => (current === null ? current : { ...current, chips }));
+  }, []);
+
   const signOut = useCallback(() => {
     void (async () => {
       await fetch("/auth/logout", { method: "POST", credentials: "include" });
@@ -98,5 +108,15 @@ export function useAccount(): Account {
     })();
   }, []);
 
-  return { profile, available, loading, refresh, signOut, claimDaily, dailyMessage, dailyDue };
+  return {
+    profile,
+    available,
+    loading,
+    refresh,
+    setChips,
+    signOut,
+    claimDaily,
+    dailyMessage,
+    dailyDue,
+  };
 }

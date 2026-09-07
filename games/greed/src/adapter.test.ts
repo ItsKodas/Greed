@@ -63,6 +63,58 @@ function playOut(buyIn: number): Room {
 }
 
 describe("what a finished game is worth", () => {
+  it("records the game that was played, not the one somebody started next", async () => {
+    /*
+     * Settlement talks to the economy, so it yields, and the room does not wait
+     * for it: the host can press "play again" between one payout and the next.
+     * Read the room after that and every score is zero, the winners are gone,
+     * and the result written down is a game nobody has played yet.
+     */
+    const adapter = greedAdapter({ roll: sixes });
+    const room = playOut(500);
+    const winners = [...room.winnerIds];
+    const scores = room.seats.map((seat) => seat.score);
+
+    const book = ledger();
+    let open = () => {};
+    const released = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let reached = () => {};
+    const parked = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let held = false;
+    const hold = async () => {
+      if (held) {
+        return;
+      }
+      held = true;
+      reached();
+      await released;
+    };
+    const give = book.deps.give;
+    book.deps.give = async (userId, amount) => {
+      await hold();
+      await give(userId, amount);
+    };
+
+    const settling = adapter.settle(room, book.deps);
+    await parked;
+    room.playAgain(room.hostId ?? "a");
+    open();
+    await settling;
+
+    expect(book.recorded).toHaveLength(2);
+    expect(book.recorded.map((entry) => entry.bump.max?.bestTurn)).toEqual(scores);
+    expect(book.finished[0]?.winnerIds).toEqual(
+      winners.map((id) => room.seats.find((seat) => seat.id === id)?.userId ?? id),
+    );
+    // The pot went out even though the room had already been reset under it.
+    expect(book.given.reduce((total, move) => total + move.amount, 0)).toBe(1000);
+  });
+
+
   it("puts a game played for chips on both players' records", async () => {
     const adapter = greedAdapter({ roll: sixes });
     const room = playOut(500);

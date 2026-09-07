@@ -85,8 +85,18 @@ export interface GameAdapter<T extends PlayTable = PlayTable> {
   timeout?(table: T, seatId: string): void;
   /** A move a seated bot wants to make, if this game has bots. */
   botMove?(table: T): BotMove | null;
-  /** A pause the game wants before play moves on, so a result can be read. */
-  pause?(table: T): { ms: number; run(): void } | null;
+  /**
+   * A pause the game wants before play moves on, so a result can be read.
+   *
+   * `key` names what is being waited for. A table can be waiting on one thing
+   * and then, before that wait is up, be waiting on something else entirely —
+   * a hand dealt early ends the betting window and starts the one that clears
+   * the felt — and only the game knows those are different waits. Without the
+   * name the server cannot tell "already scheduled" from "scheduled for
+   * something that is no longer happening", and would sit out a thirty-second
+   * betting window before clearing a hand that finished in three.
+   */
+  pause?(table: T): { key: string; ms: number; run(): void } | null;
 }
 
 /** What a game is handed when it needs to move money or ask who somebody is. */

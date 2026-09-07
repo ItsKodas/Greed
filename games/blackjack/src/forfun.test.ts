@@ -82,7 +82,7 @@ describe("sitting down at a table playing for nothing", () => {
     const start = view(table).seats[0]?.purse ?? 0;
 
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
     while (table.currentSeat() !== null) {
       table.stand("a");
     }
@@ -107,13 +107,13 @@ describe("sitting down at a table playing for nothing", () => {
     // Force a settled hand so there is something to deal on from.
     seat.purse = 200;
     table.bet("a", 100);
-    table.deal("a");
+    table.deal();
     while (table.currentSeat() !== null) {
       table.stand("a");
     }
     // Whatever the hand did, drain it and ask for another.
     (table.seats[0] as { purse: number }).purse = 0;
-    table.nextHand("a");
+    table.beginBetting();
 
     expect(view(table).seats[0]?.purse).toBeGreaterThanOrEqual(view(table).minBet);
   });

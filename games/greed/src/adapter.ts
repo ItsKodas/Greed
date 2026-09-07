@@ -20,7 +20,14 @@ import { GREED } from "./listing.js";
  * A test hands in a scripted roller and gets a table whose every throw is
  * known; production hands in nothing and gets real ones.
  */
-export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room> {
+export function greedAdapter(
+  options: {
+    roll?: Roller;
+    /** How long the busting dice stay up. An argument so a test can hurry it. */
+    pauseMs?: number;
+  } = {},
+): GameAdapter<Room> {
+  const pauseMs = options.pauseMs ?? 1400;
   const roll: Roller =
     options.roll ??
     ((count) =>
@@ -114,29 +121,57 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
      * remainder of an uneven split goes to one of them, so "the share" is not
      * what every winner got and the history would be a rounding error out.
      */
-    const paid = new Map<string, number>();
-    for (const [index, seat] of winners.entries()) {
-      const amount = share + (index === 0 ? remainder : 0);
-      paid.set(seat.id, amount);
-      if (seat.userId === null) {
+    /*
+     * The whole result, read off the room before anything is awaited.
+     *
+     * Settlement talks to the economy, so it yields, and the room does not
+     * stand still while it does: the host can start the next game, which zeroes
+     * every score and empties the winners. A loop that read the room after an
+     * await would record that new, empty game over the top of the one actually
+     * played. The game is over; what it came to is a fact now, not a place to
+     * look things up later.
+     */
+    const buyIn = room.buyIn;
+    const table = { code: room.code, rulesetName: room.ruleset.name, pot: room.pot };
+
+    /*
+     * What each winner was handed, not what the share was. An uneven pot leaves
+     * a remainder, it goes to the earliest seated of them, and a history that
+     * recorded the share for everybody would be that remainder out.
+     */
+    const result = room.seats
+      .filter((seat) => !seat.waiting)
+      .map((seat) => ({
+        userId: seat.userId,
+        name: seat.name,
+        score: seat.score,
+        isBot: seat.isBot,
+        seatId: seat.id,
+        won: room.winnerIds.includes(seat.id),
+        got:
+          room.winnerIds.includes(seat.id) && winners[0] !== undefined
+            ? share + (winners[0].id === seat.id ? remainder : 0)
+            : 0,
+      }));
+
+    for (const seat of result) {
+      if (seat.userId === null || seat.got <= 0) {
         continue;
       }
-      if (amount > 0) {
-        await deps.give(seat.userId, amount);
-      }
+      await deps.give(seat.userId, seat.got);
     }
 
-    for (const seat of room.seats) {
-      // Somebody who arrived mid-game paid no stake and took no turn.
-      if (seat.userId === null || seat.waiting || !forChips) {
+    // Somebody who arrived mid-game paid no stake and took no turn, and was
+    // filtered out above along with the rest of the watchers.
+    for (const seat of result) {
+      if (seat.userId === null || !forChips) {
         continue;
       }
-      const won = room.winnerIds.includes(seat.id);
       await deps.record(seat.userId, {
         shared: {
           games: 1,
-          wins: won ? 1 : 0,
-          chipsWon: won ? share - room.buyIn : -room.buyIn,
+          wins: seat.won ? 1 : 0,
+          chipsWon: seat.got - buyIn,
         },
         game: GREED.id,
         // A best turn is a maximum and only the game knows that.
@@ -149,20 +184,18 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
     }
 
     await deps.finished({
-      code: room.code,
-      rulesetName: room.ruleset.name,
-      buyIn: room.buyIn,
-      pot: room.pot,
-      players: room.seats
-        .filter((seat) => !seat.waiting)
-        .map((seat) => ({
-          userId: seat.userId,
-          name: seat.name,
-          score: seat.score,
-          isBot: seat.isBot,
-          net: (paid.get(seat.id) ?? 0) - room.buyIn,
-        })),
-      winnerIds: winners.map((seat) => seat.userId ?? seat.id),
+      code: table.code,
+      rulesetName: table.rulesetName,
+      buyIn,
+      pot: table.pot,
+      players: result.map((seat) => ({
+        userId: seat.userId,
+        name: seat.name,
+        score: seat.score,
+        isBot: seat.isBot,
+        net: seat.got - buyIn,
+      })),
+      winnerIds: result.filter((seat) => seat.won).map((seat) => seat.userId ?? seat.seatId),
       endedAt: Date.now(),
     });
   },
@@ -243,7 +276,8 @@ export function greedAdapter(options: { roll?: Roller } = {}): GameAdapter<Room>
       return null;
     }
     return {
-      ms: 1400,
+      key: "farkled",
+      ms: pauseMs,
       // Not "then": an object with a then property is a thenable, and one that
       // reached an await by accident would hang rather than fail.
       run() {

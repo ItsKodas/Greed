@@ -23,7 +23,20 @@ import type { BackRoomServer } from "./server.js";
  * the table announced.
  */
 
-type Client = Socket<ServerToClient, ClientToServer> & { latest?: TableView };
+/*
+ * Every state the socket has been sent, and how far a test has read.
+ *
+ * A continuous table passes through states faster than a test can ask about
+ * them — a settled hand is on screen for a moment and then the felt is clear
+ * again — so a test that only ever sees "the state right now" is a test that
+ * fails whenever the machine is quick. States are kept as a stream instead,
+ * and each wait picks up where the last one finished.
+ */
+type Client = Socket<ServerToClient, ClientToServer> & {
+  latest?: TableView;
+  seen: TableView[];
+  read: number;
+};
 
 let server: BackRoomServer | null = null;
 const open: Client[] = [];
@@ -45,7 +58,20 @@ afterEach(async () => {
  * ids are handed to sockets in connection order, which is the only way to say
  * who somebody is without standing up a Discord round-trip.
  */
-async function startRoom(...people: Array<string | null>): Promise<{
+async function startRoom(
+  people: Array<string | null>,
+  /*
+   * How fast the table comes round. Left alone by most of these, because a
+   * table that deals itself every fraction of a second would race the very
+   * actions they are trying to take; the one test that is about the loop
+   * turns it right down.
+   */
+  timings: { bettingMs?: number; settleMs?: number; turnMs?: number } = {},
+  // A long window for bets so the table does not deal underneath a test that
+  // is still setting itself up, and almost no wait between rounds so one that
+  // needs several hands is not sitting through six seconds of each.
+  { bettingMs = 30_000, settleMs = 80 } = timings,
+): Promise<{
   store: MemoryStore;
   port: number;
   ids: Array<string | null>;
@@ -73,6 +99,9 @@ async function startRoom(...people: Array<string | null>): Promise<{
     serveClient: false,
     // Bots think for a moment in a real room; here that moment is nothing.
     botDelayMs: 5,
+    bettingMs,
+    settleMs,
+    ...(timings.turnMs === undefined ? {} : { turnMs: timings.turnMs }),
     identify: () => {
       const id = ids[seen] ?? null;
       seen += 1;
@@ -89,25 +118,56 @@ function client(port: number): Promise<Client> {
       transports: ["websocket"],
       forceNew: true,
     });
+    socket.seen = [];
+    socket.read = 0;
     open.push(socket);
     socket.on("room:state", (state) => {
       socket.latest = state as unknown as TableView;
+      socket.seen.push(socket.latest);
     });
     socket.on("connect", () => resolve(socket));
   });
 }
 
+/**
+ * The next state that matches, counting from wherever the last wait stopped.
+ *
+ * Reading forward through the stream rather than looking at the latest state
+ * is what makes these tests independent of how fast the table is: a hand that
+ * settled and cleared while the test was between two awaits is still there to
+ * be found. It also keeps them honest — a wait cannot be satisfied by a state
+ * from a hand two deals ago, because that has already been read past.
+ */
 function stateWhere(socket: Client, ok: (state: TableView) => boolean, ms = 2500) {
-  if (socket.latest !== undefined && ok(socket.latest)) {
-    return Promise.resolve(socket.latest);
+  for (let index = socket.read; index < socket.seen.length; index += 1) {
+    const state = socket.seen[index] as TableView;
+    if (ok(state)) {
+      socket.read = index + 1;
+      return Promise.resolve(state);
+    }
   }
+  socket.read = socket.seen.length;
+
   return new Promise<TableView>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("no matching state")), ms);
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            // What the stream actually held, because "no matching state" on
+            // its own says nothing about which wait gave up or why.
+            `no matching state: read ${socket.read} of ${socket.seen.length}, seen [${socket.seen
+              .map((view) => view.phase)
+              .join(" ")}]`,
+          ),
+        ),
+      ms,
+    );
     const listener = (raw: unknown) => {
       const state = raw as TableView;
       if (ok(state)) {
         clearTimeout(timer);
         socket.off("room:state", listener);
+        socket.read = socket.seen.length;
         resolve(state);
       }
     };
@@ -145,8 +205,10 @@ async function dealLive(socket: Client, stake = 500): Promise<TableView> {
     if (dealt.phase === "playing" && dealt.turnSeatId !== null) {
       return dealt;
     }
-    await stateWhere(socket, (view) => view.phase === "settled");
-    await act(socket, { type: "nextHand" });
+    // That hand is already over — `dealt` is the settled state itself, and
+    // waiting for another would be waiting for a hand nobody is going to
+    // deal. Nothing to ask for either: the felt clears itself and opens again
+    // on the table's own clock, which the harness turns right down.
     await stateWhere(socket, (view) => view.phase === "betting");
   }
   throw new Error("twelve hands running were over before they began");
@@ -154,7 +216,7 @@ async function dealLive(socket: Client, stake = 500): Promise<TableView> {
 
 describe("blackjack over the wire", () => {
   it("opens a table that says which game it is", async () => {
-    const { port } = await startRoom("Ada");
+    const { port } = await startRoom(["Ada"]);
     const host = await client(port);
     const ack = await open_(host, "Ada");
 
@@ -166,7 +228,7 @@ describe("blackjack over the wire", () => {
   });
 
   it("turns a guest away, because there is no friendly blackjack", async () => {
-    const { port } = await startRoom(null);
+    const { port } = await startRoom([null]);
     const guest = await client(port);
     const ack = await open_(guest, "Nobody");
 
@@ -174,7 +236,7 @@ describe("blackjack over the wire", () => {
   });
 
   it("takes the stake as it is placed and gives it back when it is withdrawn", async () => {
-    const { store, port, ids } = await startRoom("Ada");
+    const { store, port, ids } = await startRoom(["Ada"]);
     const ada = ids[0] as string;
     const host = await client(port);
     await open_(host, "Ada");
@@ -189,7 +251,7 @@ describe("blackjack over the wire", () => {
   });
 
   it("refuses a stake nobody can cover, and charges nothing for the refusal", async () => {
-    const { store, port, ids } = await startRoom("Ada");
+    const { store, port, ids } = await startRoom(["Ada"]);
     const ada = ids[0] as string;
     await store.adjustChips(ada, -(STARTING_CHIPS - 100));
     const host = await client(port);
@@ -204,7 +266,7 @@ describe("blackjack over the wire", () => {
   });
 
   it("keeps the hole card off the wire until the dealer plays", async () => {
-    const { port } = await startRoom("Ada");
+    const { port } = await startRoom(["Ada"]);
     const host = await client(port);
     await open_(host, "Ada");
 
@@ -218,7 +280,7 @@ describe("blackjack over the wire", () => {
   });
 
   it("settles the hand and pays what the outcome says it pays", async () => {
-    const { store, port, ids } = await startRoom("Ada");
+    const { store, port, ids } = await startRoom(["Ada"]);
     const ada = ids[0] as string;
     const host = await client(port);
     await open_(host, "Ada");
@@ -247,23 +309,120 @@ describe("blackjack over the wire", () => {
     expect(record?.stats.games).toBe(played + 1);
   });
 
-  it("deals another hand to everyone still sitting there", async () => {
-    const { port } = await startRoom("Ada");
+  it("tells you what you are worth as the chips move, without being asked", async () => {
+    /*
+     * The figure in the corner of every page. It moves for reasons the browser
+     * never asked about — a stake taken as it is placed, a hand paying out on
+     * the table's clock — so the server says so rather than waiting to be
+     * asked at the next page load.
+     */
+    const { port } = await startRoom(["Ada"]);
+    const host = await client(port);
+    const said: number[] = [];
+    host.on("me:chips", (chips) => said.push(chips));
+    await open_(host, "Ada");
+
+    await act(host, { type: "bet", amount: 500 });
+    await expect.poll(() => said).toEqual([STARTING_CHIPS - 500]);
+
+    await act(host, { type: "bet", amount: 0 });
+    // Not a fresh figure of its own: the balance is whatever it now is.
+    await expect.poll(() => said.at(-1)).toBe(STARTING_CHIPS);
+  });
+
+  it("keeps one player's balance to themselves", async () => {
+    const { port } = await startRoom(["Ada", "Bo"]);
+    const host = await client(port);
+    const other = await client(port);
+    await open_(host, "Ada");
+    const code = (await stateWhere(host, (view) => view.seats.length === 1)).code;
+    const heard: number[] = [];
+    other.on("me:chips", (chips) => heard.push(chips));
+    await new Promise<void>((resolve) =>
+      other.emit("lobby:join", { name: "Bo", code }, () => resolve()),
+    );
+    await stateWhere(other, (view) => view.seats.length === 2);
+
+    await act(host, { type: "bet", amount: 500 });
+    await stateWhere(other, (view) => (view.seats[0]?.bet ?? 0) === 500);
+
+    // Somebody else's stake is somebody else's business.
+    expect(heard).toEqual([]);
+  });
+
+  it("clears a hand that was dealt early without waiting out the betting window", async () => {
+    /*
+     * Two waits, one table. Dealing early ends the betting window and starts
+     * the one that clears the felt, and the server used to keep the first
+     * timer because a table that is waiting is a table that is waiting — so a
+     * hand dealt three seconds into a thirty-second window sat there face up
+     * for the remaining twenty-seven.
+     */
+    const { port } = await startRoom(["Ada"], { bettingMs: 30_000, settleMs: 120 });
     const host = await client(port);
     await open_(host, "Ada");
+
     await dealLive(host);
     await act(host, { type: "stand" });
-    await stateWhere(host, (view) => view.phase === "settled");
+    await stateWhere(host, (view) => view.phase === "settled", 3000);
 
-    await act(host, { type: "nextHand" });
-    const again = await stateWhere(host, (view) => view.phase === "betting");
+    // Well inside the betting window that dealing interrupted.
+    const next = await stateWhere(host, (view) => view.phase === "betting", 3000);
+    expect(next.seats[0]?.bet).toBe(0);
+  });
+
+  it("comes round on its own, with nobody dealing it", async () => {
+    /*
+     * The whole point of a continuous table: no host presses anything. A
+     * window opens for bets, closes itself, the hand is played, and the felt
+     * is cleared for the next one — all on the table's clock.
+     */
+    const { port } = await startRoom(["Ada"], { bettingMs: 150, settleMs: 120 });
+    const host = await client(port);
+    await open_(host, "Ada");
+    await stateWhere(host, (view) => view.seats.length === 1);
+
+    // A window that closes with nothing on the felt just opens another.
+    const idle = await stateWhere(host, (view) => (view.deadline ?? 0) > 0, 3000);
+    expect(idle.phase).toBe("betting");
+
+    await act(host, { type: "bet", amount: 500 });
+    // Nobody asked for this hand.
+    const dealt = await stateWhere(host, (view) => view.phase !== "betting", 3000);
+    expect(dealt.seats[0]?.hands[0]?.cards.length).toBeGreaterThanOrEqual(2);
+
+    // A natural is already settled, and waiting for a second settled state
+    // would be waiting for a hand nobody is going to deal.
+    if (dealt.phase === "playing") {
+      await act(host, { type: "stand" });
+      await stateWhere(host, (view) => view.phase === "settled", 3000);
+    }
+
+    // And nobody asked for the next one either.
+    const again = await stateWhere(host, (view) => view.phase === "betting", 3000);
     expect(again.seats[0]?.bet).toBe(0);
     expect(again.seats[0]?.hands[0]?.cards).toHaveLength(0);
     expect(again.dealer.cards).toHaveLength(0);
+    expect(again.deadline).not.toBeNull();
+  });
+
+  it("plays a hand for somebody who has walked away", async () => {
+    /*
+     * A table that deals itself cannot wait forever on one person, and
+     * everybody else at it is waiting on the same one. Standing rather than
+     * folding: silence should cost a turn, not a stake.
+     */
+    const { port } = await startRoom(["Ada"], { bettingMs: 30_000, turnMs: 150 });
+    const host = await client(port);
+    await open_(host, "Ada");
+    await dealLive(host);
+
+    const over = await stateWhere(host, (view) => view.phase === "settled", 3000);
+    expect(over.seats[0]?.hands.every((hand) => hand.done)).toBe(true);
   });
 
   it("seats a bot that bets, plays its own hand and costs nobody anything", async () => {
-    const { store, port, ids } = await startRoom("Ada");
+    const { store, port, ids } = await startRoom(["Ada"]);
     const ada = ids[0] as string;
     const host = await client(port);
     await open_(host, "Ada");
@@ -286,11 +445,16 @@ describe("blackjack over the wire", () => {
     // itself out — the seam where a bot that has stopped moving looks exactly
     // like a table that has frozen.
     const dealt = await stateWhere(host, (view) => view.phase !== "betting");
-    if (dealt.turnSeatId === host.latest?.seats[0]?.id) {
+    if (dealt.phase === "playing" && dealt.turnSeatId === dealt.seats[0]?.id) {
       await act(host, { type: "stand" });
     }
 
-    const over = await stateWhere(host, (view) => view.phase === "settled", 8000);
+    // Already settled when both hands were naturals, which happens often
+    // enough at a table of two to be worth not waiting for a second time.
+    const over =
+      dealt.phase === "settled"
+        ? dealt
+        : await stateWhere(host, (view) => view.phase === "settled", 8000);
     // Every hand it played, because a hard bot may have split into two.
     const botHands = over.seats[1]?.hands ?? [];
     expect(botHands.length).toBeGreaterThanOrEqual(1);
@@ -301,7 +465,7 @@ describe("blackjack over the wire", () => {
   });
 
   it("will not take a verb from another game", async () => {
-    const { port } = await startRoom("Ada");
+    const { port } = await startRoom(["Ada"]);
     const host = await client(port);
     await open_(host, "Ada");
 

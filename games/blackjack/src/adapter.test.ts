@@ -118,6 +118,78 @@ describe("what blackjack does with chips", () => {
     expect(moves.slice(before).every((move) => move.startsWith("give"))).toBe(true);
   });
 
+  it("pays the hand that was played, not the one the clock started", async () => {
+    /*
+     * The bug this is here for: settlement talks to the economy, so it yields,
+     * and a table that runs itself clears the felt on a timer. Settling by
+     * reading the seats after each await paid whatever was left of the hand —
+     * which, once the next betting window had opened, was nothing.
+     */
+    const game = blackjackAdapter({ settleMs: 60 });
+    const table = game.create("TEST1");
+    table.join("a", "Ada", identity("u1"));
+
+    const moves: string[] = [];
+    let counted: number | null = null;
+    let reported: number | null = null;
+    // Held at the first thing settlement asks the economy for, whatever that
+    // turns out to be: a losing hand never calls give at all.
+    let open = () => {};
+    const released = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    let reached = () => {};
+    const parked = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    let held = false;
+    const hold = async () => {
+      if (held) {
+        return;
+      }
+      held = true;
+      reached();
+      await released;
+    };
+    const deps: GameDeps = {
+      async take() {
+        return true;
+      },
+      async give(userId, amount) {
+        await hold();
+        moves.push(`give ${userId} ${amount}`);
+      },
+      async record(_userId, entry) {
+        await hold();
+        counted = entry.shared?.chipsWon ?? null;
+      },
+      async finished(game_) {
+        await hold();
+        reported = game_.players[0]?.net ?? null;
+      },
+    };
+
+    await game.act(table, "a", { type: "bet", amount: 1000 }, deps);
+    await game.act(table, "a", { type: "deal" }, deps);
+    while (table.phase === "playing") {
+      await game.act(table, "a", { type: "stand" }, deps);
+    }
+    // What the hand was actually worth, read while it is still on the felt.
+    const back = table.view().seats[0]?.hands.reduce((total, hand) => total + hand.returned, 0) ?? 0;
+
+    const settling = game.settle(table, deps);
+    await parked;
+    // The clock, going off in the middle of settlement.
+    table.beginBetting();
+    open();
+    await settling;
+
+    expect(table.view().seats[0]?.bet).toBe(0);
+    expect(moves).toEqual(back > 0 ? [`give u1 ${back}`] : []);
+    expect(counted).toBe(back - 1000);
+    expect(reported).toBe(back - 1000);
+  });
+
   it("refuses a verb it does not have", async () => {
     const game = blackjackAdapter();
     const table = game.create("TEST1");

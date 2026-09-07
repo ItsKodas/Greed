@@ -104,6 +104,13 @@ export interface TableView {
   maxBet: number;
   /** True when nothing at this table is played for real chips. */
   forFun: boolean;
+  /**
+   * When whatever the table is waiting on runs out, or null while a hand is
+   * being played — the betting window closing, or a finished hand clearing.
+   *
+   * Absolute, so a browser cannot drift away from the table by being slow.
+   */
+  deadline: number | null;
 }
 
 const MIN_BET = 100;
@@ -117,6 +124,20 @@ const MAX_BET = 10_000;
 const FUN_PURSE = 5_000;
 /** The dealer takes cards to here and stops, soft or hard. */
 const DEALER_STANDS = 17;
+
+/**
+ * How long the felt is open for bets before the cards come out.
+ *
+ * The table runs itself. Nobody deals it and nobody starts it: a round comes
+ * round, anybody who has staked something is in it, and anybody who has not is
+ * watching this one. That is what lets people arrive and leave in the middle of
+ * an evening without the table needing a host to keep it going.
+ */
+export const BETTING_MS = 30_000;
+/** Long enough to read what happened before the felt is cleared. */
+export const SETTLE_MS = 6_000;
+/** How long one player may think before the table plays their hand for them. */
+export const TURN_MS = 20_000;
 
 function emptyHand(fromSplit = false): PlayerHand {
   return { bet: 0, cards: [], done: false, outcome: null, returned: 0, fromSplit };
@@ -161,6 +182,24 @@ export class Table {
   phase: Phase = "betting";
   lastEvent: string | null = null;
   dealer: Card[] = [];
+  /**
+   * When the current phase runs out, as an absolute time.
+   *
+   * Absolute rather than a countdown, and stored rather than recomputed: every
+   * bet placed is a change everybody hears about, and a deadline worked out
+   * afresh each time anybody was told anything would be a window that never
+   * closed.
+   */
+  deadline: number | null = null;
+  /**
+   * How long the felt stays open, and how long a result stays up.
+   *
+   * Fields rather than constants so a test can hurry a table that otherwise
+   * takes half a minute to come round. Set once when the table is made; not
+   * anything a client can reach.
+   */
+  bettingMs = BETTING_MS;
+  settleMs = SETTLE_MS;
   private turnIndex = -1;
   private readonly seating = new Seating();
   private readonly shoe: Shoe;
@@ -169,6 +208,9 @@ export class Table {
     this.code = code;
     this.forFun = forFun;
     this.shoe = new Shoe(random);
+    // Open for business from the moment it exists. There is nobody to press
+    // start, because there is no start.
+    this.deadline = Date.now() + this.bettingMs;
   }
 
   get seats(): Seat[] {
@@ -315,11 +357,14 @@ export class Table {
       : `${seat.name} bet ${amount.toLocaleString("en-US")}`;
   }
 
-  /** Deals the hand. The host's call, and only once somebody has bet. */
-  deal(seatId: string): void {
-    if (seatId !== this.hostId) {
-      throw new TableError("Only the host can deal.");
-    }
+  /**
+   * Deals the hand.
+   *
+   * No longer anybody's call. The clock deals, and the host may only hurry it
+   * along — which is why there is no seat argument any more: a round belongs
+   * to the table rather than to whoever happens to be sitting first.
+   */
+  deal(): void {
     if (this.phase !== "betting") {
       throw new TableError("That hand is already going.");
     }
@@ -359,8 +404,29 @@ export class Table {
 
     this.phase = "playing";
     this.lastEvent = "Cards out";
+    // Nothing to count down to while a hand is being played: the clock on a
+    // turn belongs to whoever is taking it, not to the table.
+    this.deadline = null;
     this.turnIndex = -1;
     this.advance();
+  }
+
+  /**
+   * What happens when the betting window closes.
+   *
+   * Somebody staked something, so there is a hand to deal; nobody did, so the
+   * felt opens again. A table with nobody betting at it simply keeps offering,
+   * which is what an empty table in a real room does too.
+   */
+  closeBetting(): void {
+    if (this.phase !== "betting") {
+      return;
+    }
+    if (this.playing.length === 0) {
+      this.beginBetting();
+      return;
+    }
+    this.deal();
   }
 
   currentSeat(): Seat | null {
@@ -487,6 +553,27 @@ export class Table {
     return extra;
   }
 
+  /**
+   * The clock ran out on somebody's decision, so the table takes it for them.
+   *
+   * Standing rather than folding: it is the choice that costs them least, and
+   * a table that keeps moving is the whole point of a clock. Silence is not a
+   * reason to lose a stake.
+   */
+  timeout(seatId: string): void {
+    if (this.phase !== "playing" || this.currentSeat()?.id !== seatId) {
+      return;
+    }
+    const seat = this.currentSeat() as Seat;
+    this.lastEvent = `${seat.name} ran out of time`;
+    // Every hand of theirs: a split leaves two, and taking only the first
+    // would hand the clock straight back to somebody who is not there.
+    for (const hand of seat.hands) {
+      hand.done = true;
+    }
+    this.advance();
+  }
+
   private requireTurn(seatId: string): { seat: Seat; hand: PlayerHand } {
     const seat = this.currentSeat();
     if (seat === null || seat.id !== seatId) {
@@ -509,7 +596,7 @@ export class Table {
   private advance(): void {
     const inHand = this.playing;
     const seat = inHand[this.turnIndex];
-    if (seat !== undefined && seat.connected) {
+    if (seat?.connected) {
       const next = seat.hands.findIndex((hand, index) => index > seat.active && !hand.done);
       if (next !== -1) {
         seat.active = next;
@@ -610,17 +697,23 @@ export class Table {
 
     this.phase = "settled";
     this.status = "over";
+    /*
+     * How long the hand stays up. It is a deadline rather than a duration so
+     * that somebody opening the table halfway through the wait sees the same
+     * few seconds everybody else is looking at, rather than a fresh count.
+     */
+    this.deadline = Date.now() + this.settleMs;
     this.lastEvent = dealer.bust ? `Dealer bust on ${dealer.total}` : `Dealer has ${dealer.total}`;
   }
 
-  /** Clears the table for another hand, keeping everyone at it. */
-  nextHand(seatId: string): void {
-    if (seatId !== this.hostId) {
-      throw new TableError("Only the host can deal another hand.");
-    }
-    if (this.phase !== "settled") {
-      throw new TableError("That hand is still going.");
-    }
+  /**
+   * Opens the felt for the next round.
+   *
+   * Everyone at the table is dealt in, whenever they arrived — somebody who
+   * sat down in the middle of the last hand has been waiting for exactly this
+   * moment, and there is no host to notice them.
+   */
+  beginBetting(): void {
     for (const seat of this.seats) {
       this.clear(seat);
       /*
@@ -638,6 +731,7 @@ export class Table {
     this.phase = "betting";
     this.status = "lobby";
     this.turnIndex = -1;
+    this.deadline = Date.now() + this.bettingMs;
     this.lastEvent = "Place your bets";
   }
 
@@ -667,6 +761,7 @@ export class Table {
       minBet: MIN_BET,
       maxBet: MAX_BET,
       forFun: this.forFun,
+      deadline: this.deadline,
       dealer: {
         cards: shown,
         total: value(shown).total,

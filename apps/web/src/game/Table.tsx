@@ -5,6 +5,7 @@ import { SeatAvatar } from "./Avatar.js";
 import { play } from "./audio.js";
 import { Die } from "./Die.js";
 import { ScoreCard } from "./ScoreCard.js";
+import { useCountdown } from "./useCountdown.js";
 import type { PendingRoll } from "./useRollAnimation.js";
 import { ROLL_SETTLE_MS, useRollAnimation } from "./useRollAnimation.js";
 import type { RoomActions } from "./useRoom.js";
@@ -14,22 +15,6 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 
 function greedLine(skin: string): string {
   return skin === "letters" ? "$GREED — one of every face." : "A straight — one of every face.";
-}
-
-/** Seconds left on the turn clock, ticking locally off the server's deadline. */
-function useCountdown(endsAt: number | null): number | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (endsAt === null) {
-      return;
-    }
-    const timer = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(timer);
-  }, [endsAt]);
-  if (endsAt === null) {
-    return null;
-  }
-  return Math.max(0, Math.ceil((endsAt - now) / 1000));
 }
 
 interface TableProps {

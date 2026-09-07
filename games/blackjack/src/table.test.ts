@@ -51,20 +51,53 @@ describe("taking a stake", () => {
     table.bet("a", 0);
     expect(table.seats[0]?.hands[0]?.bet).toBe(0);
     // And so there is nothing left to deal to.
-    expect(() => table.deal("a")).toThrow(/nobody has bet/i);
+    expect(() => table.deal()).toThrow(/nobody has bet/i);
   });
 
   it("will not deal with nothing on the table", () => {
     const table = new Table("TEST1");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
-    expect(() => table.deal("a")).toThrow(/nobody has bet/i);
+    expect(() => table.deal()).toThrow(/nobody has bet/i);
   });
 
-  it("is the host's deal", () => {
-    const table = new Table("TEST1");
+  it("deals itself once the betting window closes", () => {
+    /*
+     * Nobody's call any more. The table runs on a clock, so closing the window
+     * is what deals — and who, if anybody, may hurry that along is a house
+     * rule that belongs with the adapter rather than here.
+     */
+    // Arranged rather than shuffled: a natural ends the hand where it stands,
+    // so a live shoe would have this asserting "playing" against a table that
+    // had correctly gone straight to settled about one run in twenty.
+    const table = stacked("5", "6", "7", "8");
     seatTwo(table);
     table.bet("a", 500);
-    expect(() => table.deal("b")).toThrow(/only the host/i);
+
+    table.closeBetting();
+
+    expect(table.phase).toBe("playing");
+    expect(table.deadline).toBeNull();
+  });
+
+  it("opens the felt again when nobody staked anything", () => {
+    const table = new Table("TEST1");
+    seatTwo(table);
+    const first = table.deadline ?? 0;
+
+    table.closeBetting();
+
+    /*
+     * Still betting, with the window open again: an empty round is not a hand.
+     * Not asserted by the deadline having changed — both windows can open
+     * inside the same millisecond, and a test that fails on a fast machine is
+     * a test about the clock rather than about the table.
+     */
+    expect(table.phase).toBe("betting");
+    expect(table.deadline).not.toBeNull();
+    expect(table.deadline ?? 0).toBeGreaterThanOrEqual(first);
+    expect(table.lastEvent).toMatch(/place your bets/i);
+    // And nothing was dealt to nobody.
+    expect(table.dealer).toHaveLength(0);
   });
 });
 
@@ -74,7 +107,7 @@ describe("the dealer's hole card", () => {
     const table = stacked("10", "9", "7", "K");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
 
     const view = table.view("a");
     /*
@@ -92,7 +125,7 @@ describe("the dealer's hole card", () => {
     const table = stacked("10", "9", "7", "K");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
     table.stand("a");
 
     const view = table.view("a");
@@ -108,7 +141,7 @@ describe("playing a hand", () => {
     seatTwo(table);
     table.bet("a", 500);
     table.bet("b", 500);
-    table.deal("a");
+    table.deal();
 
     expect(table.currentSeat()?.id).toBe("a");
     expect(() => table.hit("b")).toThrow(/not your turn/i);
@@ -121,7 +154,7 @@ describe("playing a hand", () => {
     const table = stacked("10", "6", "9", "5", "K");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
 
     table.hit("a");
     expect(table.seats[0]?.hands[0]?.outcome).toBe("bust");
@@ -137,7 +170,7 @@ describe("playing a hand", () => {
     const table = stacked("10", "6", "9", "5", "K");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
     table.hit("a");
 
     expect(table.dealer).toHaveLength(2);
@@ -148,7 +181,7 @@ describe("playing a hand", () => {
     const table = stacked("5", "6", "6", "5", "9");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
 
     const extra = table.double("a");
     expect(extra).toBe(500);
@@ -161,7 +194,7 @@ describe("playing a hand", () => {
     const table = stacked("5", "6", "6", "5", "2", "9");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
     table.hit("a");
     expect(() => table.double("a")).toThrow(/first two cards/i);
   });
@@ -173,7 +206,7 @@ describe("what a hand pays", () => {
     const table = stacked(...ranks);
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 1000);
-    table.deal("a");
+    table.deal();
     if (table.phase === "playing") {
       play(table);
     }
@@ -233,7 +266,7 @@ describe("what a hand pays", () => {
     const table = stacked("7", "A", "7", "K", "7");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 1000);
-    table.deal("a");
+    table.deal();
     table.hit("a");
     expect(table.seats[0]?.hands[0]?.outcome).toBe("lost");
   });
@@ -243,7 +276,7 @@ describe("what a hand pays", () => {
     const table = stacked("5", "6", "6", "5", "9", "8");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 1000);
-    table.deal("a");
+    table.deal();
     table.double("a");
     expect(table.seats[0]?.hands[0]?.bet).toBe(2000);
     expect(table.seats[0]?.hands[0]?.outcome).toBe("won");
@@ -251,16 +284,16 @@ describe("what a hand pays", () => {
   });
 });
 
-describe("another hand", () => {
+describe("the next round", () => {
   it("clears the table and keeps everybody at it", () => {
     const table = stacked("10", "9", "9", "K");
     seatTwo(table);
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
     table.stand("a");
     expect(table.phase).toBe("settled");
 
-    table.nextHand("a");
+    table.beginBetting();
 
     expect(table.phase).toBe("betting");
     expect(table.seats).toHaveLength(2);
@@ -276,7 +309,7 @@ describe("another hand", () => {
     const table = stacked("10", "9", "9", "K");
     table.join("a", "Ada", { userId: "u1", avatar: null, accentColor: null });
     table.bet("a", 500);
-    table.deal("a");
+    table.deal();
 
     const late = table.join("c", "Cy", { userId: "u3", avatar: null, accentColor: null });
     expect(late.waiting).toBe(true);
@@ -284,7 +317,7 @@ describe("another hand", () => {
     expect(() => table.bet("c", 500)).toThrow(/already been dealt/i);
 
     table.stand("a");
-    table.nextHand("a");
+    table.beginBetting();
     expect(table.seats.every((seat) => !seat.waiting)).toBe(true);
     table.bet("c", 500);
     expect(table.seats[1]?.hands[0]?.bet).toBe(500);

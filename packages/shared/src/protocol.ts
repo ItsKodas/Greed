@@ -164,6 +164,15 @@ export interface ServerToClient {
   "room:state": (state: TableState) => void;
   "room:error": (message: string) => void;
   "chat:message": (message: ChatMessage) => void;
+  /**
+   * What this account is now worth, pushed as it changes.
+   *
+   * Chips move while you are looking at them — a stake is taken as it is
+   * placed and a hand pays out on its own clock — and a balance that only
+   * catches up on a page load is a balance nobody trusts. Sent only to the
+   * sockets signed in as that account, so it is never anybody else's business.
+   */
+  "me:chips": (chips: number) => void;
 }
 
 export interface ChatMessage {
