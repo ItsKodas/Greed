@@ -338,12 +338,18 @@
  * Bottom-aligned on purpose: a stack grows upward from the felt, so lining the
  * two up by their tops would have a tall wager floating and a short one sunk.
  */
+/*
+ * The stake, the hand and the count, across the width of the seat.
+ *
+ * Pushed apart rather than packed left: what is riding on the hand goes to one
+ * edge, what it comes to goes to the other, and the cards sit between them. On
+ * one line through their middles, because the pile sitting on the cards'
+ * bottom edge read as three things resting on a shelf rather than one hand.
+ */
 .bj__felt {
   display: flex;
-  /* The pile, the cards and the count on one line through their middles. The
-     pile sat on the cards' bottom edge before, which read as three things
-     resting on a shelf rather than one hand. */
   align-items: center;
+  justify-content: space-between;
   gap: var(--gr-space-3);
   /* A long hand shrinks; the number beside it never does. */
   min-width: 0;
