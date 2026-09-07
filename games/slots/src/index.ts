@@ -9,3 +9,6 @@
 export { drawGrid, FACES, STOPS, STRIP, WEIGHTS } from "./strip.js";
 export type { Face } from "./strip.js";
 export { LINE_COUNT, PAYLINES, runOn } from "./paylines.js";
+export { evaluate, PAYS } from "./paytable.js";
+export type { WinningLine } from "./paytable.js";
+export { jackpotOdds, LINE_RTP, lineRtp } from "./rtp.js";
