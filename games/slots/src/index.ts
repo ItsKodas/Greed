@@ -12,3 +12,11 @@ export { LINE_COUNT, PAYLINES, runOn } from "./paylines.js";
 export { evaluate, PAYS } from "./paytable.js";
 export type { WinningLine } from "./paytable.js";
 export { jackpotOdds, LINE_RTP, lineRtp } from "./rtp.js";
+export {
+  JACKPOT_SHARE,
+  jackpotPay,
+  MAX_LINE_PAY,
+  maxStake,
+  STAKE_DIVISOR,
+  worstCase,
+} from "./bank.js";
