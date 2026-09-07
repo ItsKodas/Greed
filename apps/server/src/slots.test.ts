@@ -391,3 +391,20 @@ describe("the jackpot", () => {
     expect(await store.bank()).toBeGreaterThanOrEqual(0);
   });
 });
+
+describe("the sign on the machine", () => {
+  it("says what the bank holds without anybody signing in", async () => {
+    // The bank is the whole appeal of this game; a sign only members can read
+    // advertises nothing.
+    const { base } = await openMachine({ bank: 250_000, signedIn: false });
+    const body = await (await fetch(`${base}/api/slots`)).json();
+    expect(body).toEqual({ bank: 250_000, maxStake: 192, jackpot: 100_000 });
+  });
+
+  it("says nothing about who is playing", async () => {
+    const { base } = await openMachine({ bank: 250_000 });
+    const body = (await (await fetch(`${base}/api/slots`)).json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(["bank", "jackpot", "maxStake"]);
+  });
+});
+

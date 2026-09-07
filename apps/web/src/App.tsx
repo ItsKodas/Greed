@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import { Admin } from "./admin/Admin.js";
 import { Haze } from "./atmosphere/Haze.js";
 import { Blackjack } from "./blackjack/Blackjack.js";
+import Slots from "./slots/Slots.js";
 import { Play } from "./game/Play.js";
 import { useButtonSound } from "./game/useButtonSound.js";
 import { Profile } from "./profile/Profile.js";
@@ -33,6 +34,7 @@ export default function App() {
       <Route path="/greed" element={<Play />} />
       <Route path="/greed/:code" element={<Play />} />
       <Route path="/blackjack" element={<Blackjack />} />
+      <Route path="/slots" element={<Slots />} />
       <Route path="/blackjack/:code" element={<Blackjack />} />
       {/*
         * A bare code at the root, so a link that was shared before there were

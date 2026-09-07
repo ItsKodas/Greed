@@ -769,6 +769,20 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   });
 
   /**
+   * What the machine is worth playing for.
+   *
+   * Public, and deliberately so: the bank is the whole appeal of this game and
+   * a sign nobody can read until they have signed in advertises nothing. It
+   * carries no one's balance and says nothing about who is playing.
+   */
+  app.get("/api/slots", (_request, response) => {
+    void (async () => {
+      const bank = await store.bank();
+      response.json({ bank, maxStake: maxStake(bank), jackpot: jackpotPay(bank) });
+    })();
+  });
+
+  /**
    * The one place chips enter the slot machine's bank from outside play.
    *
    * Behind the same allowlist that mints redemption codes, because it is the
