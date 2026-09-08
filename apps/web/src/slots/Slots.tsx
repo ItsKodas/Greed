@@ -114,6 +114,17 @@ export function celebrationMs(
   return Math.min(2200, LINE_LIGHT_MS + 700 + lit * 90);
 }
 
+/**
+ * How many paylines a machine arrives with bought.
+ *
+ * One of the four the picker offers, so the machine never opens on a number a
+ * player cannot get back to.
+ */
+export const DEFAULT_LINES = 3;
+
+/** The line counts the picker offers, fewest first. */
+export const LINE_CHOICES = [1, 3, 5, 9] as const;
+
 /** The reels, named so each keeps its identity across a spin. */
 const REEL_NAMES = ["one", "two", "three", "four", "five"] as const;
 
@@ -412,11 +423,13 @@ export default function Slots() {
    * which is the whole meaning of choosing fewer.
    */
   /*
-   * Nothing chosen to start with. A machine that arrives with nine lines
-   * already bought has made a decision about somebody's money before they
-   * touched it — and nine is not a small one.
+   * Three to start with: enough that the machine is playable the moment you
+   * walk up to it, and small enough that it has not made a large decision
+   * about somebody's money before they touched it. Nine would be that
+   * decision — it trebles what a spin costs — and nought meant every player
+   * had to work out what a payline was before the lever would move at all.
    */
-  const [lineCount, setLineCount] = useState(0);
+  const [lineCount, setLineCount] = useState(DEFAULT_LINES);
   /** Whether the spin on the glass was the jackpot, for what the belly says. */
   const [wasJackpot, setWasJackpot] = useState(false);
   /** Gives up on an answer that never comes, so the machine cannot lock. */
@@ -1243,7 +1256,7 @@ function LinePicker({
     <div className="picker">
       <span className="picker__label">Lines</span>
       <div className="picker__row" role="radiogroup" aria-label="How many paylines">
-        {[1, 3, 5, 9].map((count) => (
+        {LINE_CHOICES.map((count) => (
           <button
             key={count}
             type="button"

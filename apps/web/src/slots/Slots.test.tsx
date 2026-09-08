@@ -5,6 +5,8 @@ import { MIN_STAKE, STAKE_DIVISOR, type Face } from "@backroom/game-slots";
 import { exact } from "../game/money.js";
 import {
   AFTER_A_WIN_MS,
+  DEFAULT_LINES,
+  LINE_CHOICES,
   autoBeatMs,
   BETWEEN_SPINS_MS,
   bonusRun,
@@ -596,5 +598,25 @@ describe("the beat between spins the machine pulls itself", () => {
 
   it("always waits longer after something happened than after nothing", () => {
     expect(autoBeatMs({ won: 1, awarded: 0 })).toBeGreaterThan(autoBeatMs({ won: 0, awarded: 0 }));
+  });
+});
+
+describe("the lines a machine opens with", () => {
+  it("has some bought, so the lever works the moment you walk up", () => {
+    // It used to open on none, which meant working out what a payline was
+    // before the machine would do anything at all.
+    expect(DEFAULT_LINES).toBeGreaterThan(0);
+  });
+
+  it("is one of the counts the picker offers", () => {
+    // Otherwise the machine opens on a number the player cannot get back to
+    // once they have touched the picker.
+    expect(LINE_CHOICES).toContain(DEFAULT_LINES);
+  });
+
+  it("is not the dearest, because that is a decision about somebody's money", () => {
+    // Nine trebles what a spin costs against three. A machine that arrives
+    // with the most expensive option bought has chosen for the player.
+    expect(DEFAULT_LINES).toBeLessThan(Math.max(...LINE_CHOICES));
   });
 });

@@ -26,3 +26,4 @@ export type {
   PlayTable,
   StatBumpLike,
 } from "./game.js";
+export { COMING } from "./coming.js";

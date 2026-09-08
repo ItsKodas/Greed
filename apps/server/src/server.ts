@@ -5,7 +5,7 @@ import { createServer as createHttpServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
-import { Catalogue } from "@backroom/core";
+import { Catalogue, COMING } from "@backroom/core";
 import type { BankName, Store } from "@backroom/economy";
 import { judgeDaily, MemoryStore } from "@backroom/economy";
 import {
@@ -75,7 +75,15 @@ import { Avatars, Cards } from "./og.js";
  * carry, so a game cannot be advertised here with a name, a seat count or an
  * open sign that differs from the one it is actually played under.
  */
-const CATALOGUE = new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS);
+/*
+ * Everything the room shows, in the order it shows it: what can be played
+ * first, then what is coming. `playable()` filters on the same `open` flag the
+ * room draws from, so a listing here is a sign on a door rather than a door.
+ */
+const CATALOGUE = COMING.reduce(
+  (catalogue, game) => catalogue.add(game),
+  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS),
+);
 
 
 /**
