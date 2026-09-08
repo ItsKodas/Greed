@@ -31,9 +31,10 @@ export interface Face {
 /*
  * Casino convention where it has one, and a house's own choice where it does
  * not — two-fifty is not a chip anybody mints, so it takes the rose a real
- * table would give it.
+ * table would give it, and the fifty is green because this house says so.
  */
 export const FACES: Record<number, Face> = {
+  50: { body: "#2f6b45", trim: "#d7f0e0", spots: 8 },
   100: { body: "#2b3038", trim: "#eceff3", spots: 8 },
   250: { body: "#8e3358", trim: "#f6d7e4", spots: 6 },
   500: { body: "#4b3277", trim: "#e2d6f7", spots: 4 },

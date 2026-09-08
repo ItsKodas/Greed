@@ -173,7 +173,7 @@ export interface ClientToServer {
      * `forFun` plays the machine for nothing: a purse and a bank that live at
      * the machine, touch no account and are gone when you walk away.
      */
-    payload: { stake: number; forFun?: boolean },
+    payload: { stake: number; lines?: number; forFun?: boolean },
     ack: (result: SpinResult) => void,
   ) => void;
 }
@@ -233,6 +233,9 @@ export type SpinResult =
       lines: SpinLine[];
       /** Everything won, jackpot included. */
       won: number;
+      /** What was staked, and across how many lines, so the glass can say so. */
+      stake: number;
+      linesPlayed: number;
       jackpot: boolean;
       /** What the bank holds now, so the sign can be right without a refetch. */
       bank: number;

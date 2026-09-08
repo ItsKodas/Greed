@@ -101,8 +101,12 @@ export const FUN_BANK = 8_000_000;
  *
  * Every one of these needs a bank of 1296 times it before the machine will
  * take it, so the tray fills up as the bank does rather than all at once.
+ *
+ * The fifty is the machine's own, below anything the card tables take: a
+ * spin is a smaller thing than a hand, and nine lines at fifty is already
+ * four hundred and fifty on the felt.
  */
-export const CHIPS = [5000, 1000, 500, 250, 100] as const;
+export const CHIPS = [5000, 1000, 500, 250, 100, 50] as const;
 
 /** The smallest thing anybody can put in. */
 export const MIN_STAKE = CHIPS[CHIPS.length - 1];

@@ -5,6 +5,7 @@ import {
   FUN_PURSE,
   jackpotPay,
   maxStake,
+  LINE_COUNT,
   MIN_STAKE,
   PAYLINES,
   runOn,
@@ -45,6 +46,24 @@ import "./slots.css";
 
 /** How long after the last reel stops before the winning lines light. */
 export const LINE_LIGHT_MS = 420;
+
+/**
+ * How long a win is left to be looked at before the lever comes back.
+ *
+ * A machine that will take your next stake while it is still counting out the
+ * last one is hurrying you past the only part worth watching. So the lever
+ * stays down until the lines have lit and the coins have finished.
+ */
+export function celebrationMs(won: number, jackpot: boolean, lit: number): number {
+  if (won <= 0) {
+    return 0;
+  }
+  if (jackpot) {
+    return 2600;
+  }
+  // The lines light one after another, so more of them is a longer look.
+  return Math.min(2200, LINE_LIGHT_MS + 700 + lit * 90);
+}
 
 /** The reels, named so each keeps its identity across a spin. */
 const REEL_NAMES = ["one", "two", "three", "four", "five"] as const;
@@ -123,7 +142,7 @@ type SpinSocket = Socket<
   { "slots:spun": (news: SpinNews) => void },
   {
     "slots:spin": (
-      payload: { stake: number; forFun?: boolean },
+      payload: { stake: number; lines?: number; forFun?: boolean },
       ack: (result: SpinResult) => void,
     ) => void;
     "slots:watch": (payload: Record<string, never>, ack: (recent: SpinNews[]) => void) => void;
@@ -179,13 +198,25 @@ export default function Slots() {
    * the winning lines both wait on.
    */
   const [settling, setSettling] = useState(false);
+  /**
+   * How many of the nine lines are being bought.
+   *
+   * The chips on the tray are the bet *per line*, so this multiplies what
+   * leaves the account. A line nobody bought does not pay however it lands,
+   * which is the whole meaning of choosing fewer.
+   */
+  const [lineCount, setLineCount] = useState(LINE_COUNT);
+  /** Whether the spin on the glass was the jackpot, for what the belly says. */
+  const [wasJackpot, setWasJackpot] = useState(false);
   /** Gives up on an answer that never comes, so the machine cannot lock. */
   const patience = useRef<number | null>(null);
   /** The spin loop and the rising note, so whatever started them can end them. */
   const reelsLoop = useRef<(() => void) | null>(null);
   const rising = useRef<(() => void) | null>(null);
   /** The result, kept for the moment the last reel finally settles. */
-  const landed = useRef<{ won: number; jackpot: boolean; stake: number } | null>(null);
+  const landed = useRef<{ won: number; jackpot: boolean; stake: number; lit: number } | null>(
+    null,
+  );
   const [said, setSaid] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   /*
@@ -247,17 +278,27 @@ export default function Slots() {
     : account.profile === null
       ? null
       : account.profile.chips - pending;
+  /*
+   * What actually leaves the account: a bet on every line bought. The chips on
+   * the tray are the bet *per line*, which is how a machine with selectable
+   * lines has to work — otherwise choosing fewer would quietly make each one
+   * worth more rather than making the spin cheaper.
+   */
+  const total = stake * lineCount;
   const canPull =
     connected &&
     !settling &&
     stake >= MIN_STAKE &&
-    stake <= cap &&
+    total <= cap &&
     balance !== null &&
-    stake <= balance;
+    total <= balance;
 
   /** Whether one more of this chip could go on: the bank's ceiling and yours. */
   const canAdd = (amount: number) =>
-    !settling && stake + amount <= cap && balance !== null && stake + amount <= balance;
+    !settling &&
+    (stake + amount) * lineCount <= cap &&
+    balance !== null &&
+    (stake + amount) * lineCount <= balance;
 
   /**
    * Everything the machine is making a noise about, stopped.
@@ -307,17 +348,26 @@ export default function Slots() {
       if (index < 4) {
         return;
       }
-      // The pull is over: the lever comes back and the lines may light.
-      setSettling(false);
-
       // The last one. Everything that was running stops, and the machine says
       // what it did.
       hush();
       const result = landed.current;
       landed.current = null;
       if (result === null || result.won <= 0) {
+        // Nothing to watch, so the lever comes straight back.
+        setSettling(false);
         return;
       }
+
+      /*
+       * Held down while the win plays out. The lines light, the coins run, and
+       * only then is the machine ready for another stake — taking one over the
+       * top of a payout hurries the player past the part they are here for.
+       */
+      window.setTimeout(
+        () => setSettling(false),
+        celebrationMs(result.won, result.jackpot, result.lit),
+      );
 
       /*
        * How the money arrives, sized to how much of it there is. A handful of
@@ -362,6 +412,7 @@ export default function Slots() {
     setGrid(undefined);
     setLines([]);
     setLit(false);
+    setWasJackpot(false);
     setSaid(null);
   };
 
@@ -380,7 +431,7 @@ export default function Slots() {
     setLines([]);
     setLit(false);
     setSaid(null);
-    setPending(stake);
+    setPending(total);
     setHolds([0, 0, 0, 0, 0]);
     setSettling(true);
     landed.current = null;
@@ -404,7 +455,10 @@ export default function Slots() {
       setSaid("The machine did not answer. Nothing was staked.");
     }, PATIENCE_MS);
 
-    socket.emit("slots:spin", { stake, ...(forFun ? { forFun: true } : {}) }, (result) => {
+    socket.emit(
+      "slots:spin",
+      { stake: total, lines: lineCount, ...(forFun ? { forFun: true } : {}) },
+      (result) => {
       if (patience.current !== null) {
         window.clearTimeout(patience.current);
         patience.current = null;
@@ -430,7 +484,13 @@ export default function Slots() {
        * a reel that had already decided when to stop.
        */
       setHolds(holdsFor(grid));
-      landed.current = { won: result.won, jackpot: result.jackpot, stake };
+      setWasJackpot(result.jackpot);
+      landed.current = {
+        won: result.won,
+        jackpot: result.jackpot,
+        stake: total,
+        lit: result.lines.length,
+      };
       if (forFun) {
         setFunPurse(result.balance);
         setFunSign({
@@ -499,45 +559,74 @@ export default function Slots() {
         />
 
         <div className="slots__cabinet">
-        <ModeSwitch forFun={forFun} onChange={changeMachine} busy={spinning} />
-        <BankSign bank={shown?.bank ?? 0} jackpot={shown?.jackpot ?? 0} forFun={forFun} />
+          <ModeSwitch forFun={forFun} onChange={changeMachine} busy={settling} />
 
-        <div className="slots__glass">
-          {columns.map((column, reel) => (
-            <Reel
-              // Five fixed positions; what changes is the faces in one of them.
-              key={REEL_NAMES[reel]}
-              column={column}
-              spinning={spinning}
-              index={reel}
-              resting={ATTRACT[reel]}
-              holdMs={holds[reel] ?? 0}
-              onStop={() => reelStopped(reel)}
-            />
-          ))}
-          <PaylineOverlay lines={lit ? lines : []} />
-        </div>
+          {/*
+            * The machine itself: a marquee over glass over a belly, with the
+            * handle bolted down the side. Drawn as one object rather than a
+            * stack of panels, because a slot machine is a thing you stand in
+            * front of and everything on this page is part of it.
+            */}
+          <div className="cab">
+            <div className="cab__body">
+              <div className="cab__marquee">
+                <BankSign bank={shown?.bank ?? 0} jackpot={shown?.jackpot ?? 0} forFun={forFun} />
+              </div>
 
-        <p className={`slots__said${said?.startsWith("JACKPOT") === true ? " slots__said--big" : ""}`} aria-live="polite">
-          {said ?? " "}
-        </p>
+              <div className="cab__glass">
+                <div className="slots__glass">
+                  {columns.map((column, reel) => (
+                    <Reel
+                      // Five fixed positions; what changes is the faces in one.
+                      key={REEL_NAMES[reel]}
+                      column={column}
+                      spinning={spinning}
+                      index={reel}
+                      resting={ATTRACT[reel]}
+                      holdMs={holds[reel] ?? 0}
+                      onStop={() => reelStopped(reel)}
+                    />
+                  ))}
+                  <PaylineOverlay lines={lit ? lines : []} />
+                </div>
+              </div>
 
-        {canPlay ? (
-          <Controls
-            stake={stake}
-            onAdd={(amount) => setStake((on) => on + amount)}
-            onClear={() => setStake(0)}
-            canAdd={canAdd}
-            onPull={pull}
-            canPull={canPull}
-            spinning={spinning}
-            balance={balance ?? 0}
-            cap={cap}
-            forFun={forFun}
-          />
-        ) : (
-          <SignInToPlay available={account.available} />
-        )}
+              <div className="cab__belly">
+                <p
+                  className={`slots__said${said?.startsWith("JACKPOT") === true ? " slots__said--big" : ""}`}
+                  aria-live="polite"
+                >
+                  {said ?? " "}
+                </p>
+                {lit ? <WinBreakdown lines={lines} jackpot={wasJackpot} /> : null}
+
+                {canPlay ? (
+                  <Controls
+                    stake={stake}
+                    onAdd={(amount) => setStake((on) => on + amount)}
+                    onClear={() => setStake(0)}
+                    canAdd={canAdd}
+                    busy={settling}
+                    balance={balance ?? 0}
+                    cap={cap}
+                    forFun={forFun}
+                    lineCount={lineCount}
+                    onLines={setLineCount}
+                    total={total}
+                    onPull={pull}
+                    canPull={canPull}
+                  />
+                ) : (
+                  <SignInToPlay available={account.available} />
+                )}
+              </div>
+
+              {/* Where the coins would land. Empty, and that is the point: it
+                  is the bottom edge of a machine rather than a panel. */}
+              <div className="cab__tray" aria-hidden="true" />
+            </div>
+
+          </div>
         </div>
 
         <SpinFeed
@@ -599,6 +688,97 @@ function SpinFeed({
         </ul>
       )}
     </aside>
+  );
+}
+
+/**
+ * What paid, and for what.
+ *
+ * A figure on its own tells a player they won without telling them why, and a
+ * slot machine that cannot be read is a slot machine nobody trusts. This is
+ * the same information the reels are showing, in words: the run, the face, the
+ * line it landed on, and what that came to.
+ */
+function WinBreakdown({ lines, jackpot }: { lines: SpinLine[]; jackpot: boolean }) {
+  if (lines.length === 0 && !jackpot) {
+    return null;
+  }
+
+  /*
+   * Grouped by what actually happened rather than listed line by line.
+   *
+   * Three chips across can light six paylines at once, and six rows saying
+   * "3 x Chip" one after another is the same sentence six times — it filled
+   * the belly of the machine and said nothing the first row had not. The glass
+   * is already showing *which* lines lit, so the words only have to say what
+   * landed and what it came to.
+   */
+  const groups = new Map<string, { face: string; length: number; count: number; paid: number }>();
+  for (const line of lines) {
+    const key = `${line.face}-${line.length}`;
+    const seen = groups.get(key) ?? { face: line.face, length: line.length, count: 0, paid: 0 };
+    seen.count += 1;
+    seen.paid += line.pay;
+    groups.set(key, seen);
+  }
+  const best = [...groups.values()].sort((a, b) => b.paid - a.paid);
+
+  return (
+    <ul className="won">
+      {jackpot ? (
+        <li className="won__row won__row--jackpot">
+          <span className="won__what">Five sevens — the jackpot</span>
+        </li>
+      ) : null}
+      {best.map((group) => (
+        <li className="won__row" key={`${group.face}-${group.length}`}>
+          <span className="won__what">
+            {group.length} × {group.face}
+          </span>
+          {group.count > 1 ? <span className="won__lines">on {group.count} lines</span> : null}
+          <span className="won__pay">{exact(group.paid)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** How many of the nine lines to buy. */
+function LinePicker({
+  lines,
+  onChange,
+  disabled,
+  perLine,
+}: {
+  lines: number;
+  onChange: (lines: number) => void;
+  disabled: boolean;
+  perLine: number;
+}) {
+  return (
+    <div className="picker">
+      <span className="picker__label">Lines</span>
+      <div className="picker__row" role="radiogroup" aria-label="How many paylines">
+        {[1, 3, 5, 9].map((count) => (
+          <button
+            key={count}
+            type="button"
+            role="radio"
+            aria-checked={lines === count}
+            className={`picker__pick${lines === count ? " picker__pick--on" : ""}`}
+            disabled={disabled}
+            onClick={() => onChange(count)}
+          >
+            {count}
+          </button>
+        ))}
+      </div>
+      {/* What it actually costs, because two numbers multiplied is exactly the
+          sort of arithmetic a machine should not make anybody do. */}
+      <span className="picker__cost">
+        {exact(perLine)} a line — {exact(perLine * lines)} a spin
+      </span>
+    </div>
   );
 }
 
@@ -729,23 +909,29 @@ function Controls({
   onAdd,
   onClear,
   canAdd,
-  onPull,
-  canPull,
-  spinning,
+  busy,
   balance,
   cap,
   forFun,
+  lineCount,
+  onLines,
+  total,
+  onPull,
+  canPull,
 }: {
   stake: number;
   onAdd: (amount: number) => void;
   onClear: () => void;
   canAdd: (amount: number) => boolean;
-  onPull: () => void;
-  canPull: boolean;
-  spinning: boolean;
+  busy: boolean;
   balance: number;
   cap: number;
   forFun: boolean;
+  lineCount: number;
+  onLines: (lines: number) => void;
+  total: number;
+  onPull: () => void;
+  canPull: boolean;
 }) {
   if (cap < MIN_STAKE) {
     return (
@@ -758,6 +944,8 @@ function Controls({
 
   return (
     <div className="slots__controls">
+      <LinePicker lines={lineCount} onChange={onLines} disabled={busy} perLine={stake} />
+
       <div className="slots__tray" data-quiet>
         {TRAY.map((amount) => (
           <button
@@ -766,9 +954,9 @@ function Controls({
             className="slots__chip"
             disabled={!canAdd(amount)}
             title={
-              amount > cap
-                ? `The bank cannot cover ${exact(amount)} yet`
-                : `Add ${exact(amount)}`
+              (stake + amount) * lineCount > cap
+                ? `The bank cannot cover ${exact((stake + amount) * lineCount)} yet`
+                : `Add ${exact(amount)} a line`
             }
             onClick={() => onAdd(amount)}
           >
@@ -782,26 +970,34 @@ function Controls({
       <div className={`slots__bet${stake > 0 ? " slots__bet--on" : ""}`}>
         {stake > 0 ? (
           <>
-            <ChipStack amount={stake} width={64} />
-            <span className="slots__bet-total">{exact(stake)}</span>
-            <button type="button" className="slots__take" onClick={onClear} disabled={spinning}>
+            <ChipStack amount={total} width={64} />
+            <span className="slots__bet-total">{exact(total)}</span>
+            <button type="button" className="slots__take" onClick={onClear} disabled={busy}>
               Take it back
             </button>
           </>
         ) : (
           <span className="slots__bet-empty">
-            nothing on yet — {exact(MIN_STAKE)} minimum
+            nothing on yet — {exact(MIN_STAKE)} a line minimum
           </span>
         )}
       </div>
 
+      {/*
+        * The button, set into the machine rather than laid on the page.
+        *
+        * Chunky on purpose: it has a side face you can see, it goes down when
+        * pressed and springs back past its own height on release. That is the
+        * whole trick — a flat rectangle that changes colour is a link, and
+        * this is the thing you hit to make the machine go.
+        */}
       <button
         type="button"
-        className={`slots__lever${spinning ? " slots__lever--going" : ""}`}
+        className={`spin${busy ? " spin--going" : ""}`}
         onClick={onPull}
         disabled={!canPull}
       >
-        <span className="slots__lever-face">{spinning ? "Spinning" : "Spin"}</span>
+        <span className="spin__face">{busy ? "Spinning" : "Spin"}</span>
       </button>
 
       <p className="slots__purse">

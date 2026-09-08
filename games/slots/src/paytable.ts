@@ -42,12 +42,22 @@ export interface WinningLine {
 export function evaluate(
   grid: Face[][],
   stake: number,
+  /**
+   * How many of the nine lines were bought, from the top of the list.
+   *
+   * A line nobody bet on does not pay, however it lands — which is the whole
+   * meaning of choosing fewer. The stake is split across the lines that were
+   * bought, so the line bet goes *up* as the count comes down and a spin on
+   * one line is not a spin on nine for a ninth of the money.
+   */
+  played: number = LINE_COUNT,
 ): { lines: WinningLine[]; fixed: number; jackpot: boolean } {
   const lines: WinningLine[] = [];
   let fixed = 0;
   let jackpot = false;
+  const bought = Math.max(1, Math.min(LINE_COUNT, Math.floor(played)));
 
-  for (let index = 0; index < LINE_COUNT; index += 1) {
+  for (let index = 0; index < bought; index += 1) {
     const line = PAYLINES[index] as readonly number[];
     const { face, length } = runOn(grid, line);
     if (length < 3) {
@@ -65,11 +75,11 @@ export function evaluate(
       continue;
     }
     /*
-     * The line bet is a ninth of the stake, floored. Floored rather than
-     * rounded because rounding up invents chips, and this whole game is an
-     * argument that nothing here invents chips.
+     * The line bet is the stake split across the lines that were bought,
+     * floored. Floored rather than rounded because rounding up invents chips,
+     * and this whole game is an argument that nothing here invents chips.
      */
-    const pay = Math.floor((multiplier * stake) / LINE_COUNT);
+    const pay = Math.floor((multiplier * stake) / bought);
     fixed += pay;
     lines.push({ line: index, face, length, pay });
   }
