@@ -56,6 +56,74 @@ export interface Payout {
 /** The smallest table that can play a hand: heads up. */
 export const MIN_SEATS = 2;
 
+/** One seat, as somebody at the table is allowed to see it. */
+export interface SeatView {
+  id: string;
+  name: string;
+  connected: boolean;
+  waiting: boolean;
+  avatar: string | null;
+  accentColor: number | null;
+  stack: number;
+  committed: number;
+  folded: boolean;
+  allIn: boolean;
+  /**
+   * Their two cards — or two nulls, which is a hand that exists and is not
+   * yours to see. Null rather than absent so the felt can lay a face-down card
+   * where a face-up one would go without measuring anything.
+   */
+  hole: Array<Card | null>;
+  /** How their hand read, once they have turned it over. */
+  showed: string | null;
+}
+
+/**
+ * What the seat this view was built for may do right now.
+ *
+ * Sent rather than worked out in the browser, and the difference matters. The
+ * smallest legal raise depends on `raiseSize` — the size of the last raise
+ * made on this street — which is not otherwise anywhere in the view. A client
+ * left to guess would have to guess it, and a slider whose minimum is a guess
+ * spends half its range on amounts the table refuses.
+ *
+ * It also keeps the rule in one place. The felt may show what a player can do;
+ * what a player may actually do is the table's answer, and this is the table
+ * answering rather than the browser deciding.
+ */
+export interface OwnView {
+  /** What it costs to stay in. Zero when checking is free. */
+  toCall: number;
+  /** The smallest and largest raise, each as a total to raise *to*. */
+  minRaiseTo: number;
+  maxRaiseTo: number;
+  /** Whether there is any raise to make: false once calling is all they have. */
+  canRaise: boolean;
+}
+
+/** The table as one seat sees it. What crosses the wire, and nothing more. */
+export interface TableView {
+  /** Null for somebody watching, and for a seat with no decision to make. */
+  you: OwnView | null;
+  code: string;
+  street: Street;
+  board: Card[];
+  pot: number;
+  toAct: string | null;
+  /** When their turn runs out, so the felt can show it running out. */
+  turnEndsAt: number | null;
+  button: string | null;
+  /** Who put the blinds in this hand, for the felt to mark. */
+  smallBlindId: string | null;
+  bigBlindId: string | null;
+  smallBlind: number;
+  bigBlind: number;
+  paid: Payout[];
+  lastEvent: string | null;
+  watching: number;
+  seats: SeatView[];
+}
+
 export class Table implements PlayTable {
   street: Street = "waiting";
   board: Card[] = [];
@@ -84,6 +152,17 @@ export class Table implements PlayTable {
   }
   /** Which seat has the button, by id. */
   button: string | null = null;
+  /**
+   * Who posted the blinds this hand.
+   *
+   * Kept rather than worked out from the button, because it cannot be worked
+   * out from the button once the hand is going: who is small and who is big
+   * depends on how many were dealt in, and heads up the button is the small
+   * blind. Somebody leaving changes that count without changing who actually
+   * put the money in, so the answer is recorded when it is true.
+   */
+  smallBlindId: string | null = null;
+  bigBlindId: string | null = null;
   /** What the last hand paid out, for the felt to show. */
   paid: Payout[] = [];
   lastEvent: string | null = null;
@@ -124,8 +203,22 @@ export class Table implements PlayTable {
     readonly smallBlind: number,
     readonly bigBlind: number,
     maxSeats: number,
+    /**
+     * How long a seat gets to act.
+     *
+     * On the table rather than only in the adapter because the felt has to
+     * draw it: a clock the player cannot see is a clock that folds their hand
+     * without warning. The adapter reads its deadline from here too, so there
+     * is one answer to how long a turn is rather than two that can disagree.
+     */
+    readonly turnMs = 30_000,
   ) {
     this.seating = new Seating(maxSeats);
+  }
+
+  /** When the seat now to act runs out of time, or null if nobody is on one. */
+  get turnEndsAt(): number | null {
+    return this.actingSince === null ? null : this.actingSince + this.turnMs;
   }
 
   // ------------------------------------------------------------- the table
@@ -301,14 +394,19 @@ export class Table implements PlayTable {
   }
 
   /** The table as one seat may see it: everybody else's cards stay face down. */
-  view(forSeatId: string | null): unknown {
+  view(forSeatId: string | null): TableView {
+    const mine = forSeatId === null ? undefined : (this.seating.find(forSeatId) as Seat | undefined);
     return {
+      you: mine === undefined ? null : this.ownView(mine),
       code: this.code,
       street: this.street,
       board: this.board,
       pot: this.pot,
       toAct: this.toAct,
+      turnEndsAt: this.turnEndsAt,
       button: this.button,
+      smallBlindId: this.smallBlindId,
+      bigBlindId: this.bigBlindId,
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
       paid: this.paid,
@@ -445,6 +543,8 @@ export class Table implements PlayTable {
   private postBlinds(playing: Seat[]): void {
     const small = this.smallBlindSeat(playing);
     const big = this.bigBlindSeat(playing);
+    this.smallBlindId = small?.id ?? null;
+    this.bigBlindId = big?.id ?? null;
     if (small !== undefined) {
       this.put(small, Math.min(this.smallBlind, small.stack));
     }
@@ -492,6 +592,28 @@ export class Table implements PlayTable {
   /** The smallest raise this seat could make, as a total commitment. */
   minRaise(seat: Seat): number {
     return this.highest + Math.max(this.raiseSize, this.bigBlind) - seat.committed;
+  }
+
+  /**
+   * The same two rules, as totals rather than deltas, for the felt to draw.
+   *
+   * Totals because that is what a raise is sent as, and a client converting
+   * between the two is a client with its own copy of the arithmetic.
+   */
+  private ownView(seat: Seat): OwnView {
+    const most = seat.committed + seat.stack;
+    const least = Math.min(this.minRaise(seat) + seat.committed, most);
+    return {
+      toCall: this.owed(seat),
+      minRaiseTo: least,
+      maxRaiseTo: most,
+      /*
+       * Somebody who cannot cover the smallest legal raise has no raise to
+       * make — only a call, or all their chips, which is what the all-in
+       * button is for. Offering a slider with one stop on it says otherwise.
+       */
+      canRaise: most > this.highest && seat.stack > this.owed(seat),
+    };
   }
 
   // ------------------------------------------------------------- the moves

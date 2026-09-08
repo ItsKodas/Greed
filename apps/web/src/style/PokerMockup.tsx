@@ -7,6 +7,8 @@ import { useState } from "react";
  */
 import type { Card as CardData } from "@backroom/game-blackjack";
 import { Card, FaceDown } from "../blackjack/Cards.js";
+// The felt's own stylesheet, which the real table shares: see poker.css.
+import "../poker/poker.css";
 
 /**
  * A poker table, before there is one.

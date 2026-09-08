@@ -1,0 +1,549 @@
+/*
+ * The felt, and everything that sits on it.
+ *
+ * Owned by the game rather than by the gallery, because two things draw a
+ * poker table now: the real one, and the mockup in /style that the real one
+ * was designed against. Kept as one stylesheet so those two cannot drift —
+ * a mockup that no longer looks like the table it was approved as is worse
+ * than no mockup.
+ *
+ * The whole layout hangs off one decision: the seats are placed round an
+ * ellipse in percentages, so the table is one box that can be any size and the
+ * seats stay where they belong in it. A phone gets the same felt, smaller,
+ * rather than a different arrangement that would have to be designed twice.
+ */
+
+.pk {
+  container-type: inline-size;
+}
+
+/*
+ * The rail: the wood a table is built out of, and what the players sit behind.
+ *
+ * Its own colours rather than the building's, because this is a material the
+ * game is played on rather than one it borrows. The room's palette is smoke
+ * and neon; a card table is oak, and a green cloth sitting straight on a dark
+ * page reads as a shape rather than as furniture.
+ */
+.pk__table {
+  /*
+   * How far the ring of seats reaches.
+   *
+   * Well inside the rail, because a seat is a column with its cards at the top
+   * and its name below, and the whole column is centred on this ring — so the
+   * cards of any seat above the middle stick out past it by half the column.
+   * At 41% that put four hands on the timber. Every card corner is checked
+   * against the cloth, not judged by eye.
+   */
+  --across: 36%;
+  --down: 32%;
+  /*
+   * The ring the chips sit on: just inside the seats, well outside the board.
+   *
+   * Close to the seats on purpose, and no closer than that.
+   *
+   * At a table your chips sit in front of you, and that is the whole of how
+   * anybody knows whose they are — there is no label on them. Pushed too far
+   * in they became a ring of unattached numbers floating on the cloth, and the
+   * first person to see them asked what they were for, which is the only test
+   * that matters. Brought right up to the seats they landed on the cards.
+   *
+   * So: near enough that the closest seat to a pile is always the seat that
+   * bet it, far enough that it clears that seat's cards. Both are measured.
+   */
+  --bet-across: 25%;
+  --bet-down: 18.5%;
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 46% / 48%;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgb(255 214 160 / 0.22) 0%, transparent 55%),
+    linear-gradient(168deg, #6b452a 0%, #4a2e1b 42%, #2b1a0f 100%);
+  box-shadow:
+    inset 0 2px 0 rgb(255 224 180 / 0.18),
+    inset 0 -3px 8px rgb(0 0 0 / 0.6),
+    0 22px 48px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * The cloth, inset inside the wood.
+ *
+ * A hair off centre downwards, so the rail reads as thicker at the bottom,
+ * which is what a table looks like from a chair rather than from above.
+ */
+.pk__felt {
+  position: absolute;
+  inset: 6% 4.5% 7%;
+  border-radius: 46% / 48%;
+  background: radial-gradient(70% 70% at 50% 38%, #21523c 0%, #17392c 58%, #0d2119 100%);
+  box-shadow:
+    inset 0 0 70px rgb(0 0 0 / 0.5),
+    inset 0 3px 10px rgb(0 0 0 / 0.55),
+    0 0 0 1px rgb(0 0 0 / 0.45);
+}
+
+/* The pot and the board, in the middle where everybody can read them. */
+.pk__middle {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-2);
+  /*
+   * As wide as the board and no wider. It was a fixed share of the table,
+   * which made an invisible box most of the way across the felt — nothing to
+   * look at, but something for everything else to collide with.
+   */
+  width: max-content;
+  max-width: 78%;
+}
+
+.pk__pot {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--gr-space-2);
+  font-size: var(--gr-text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.7);
+}
+
+.pk__pot-label,
+.pk__side {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.pk__board {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+/*
+ * A card that has not come yet. It holds the space so the board keeps its
+ * width all the way from the flop to the river: without it every street shunts
+ * the cards sideways, and a card that moves when a different card arrives
+ * reads as the wrong card moving.
+ */
+.pk__gap {
+  width: 58px;
+  aspect-ratio: 5 / 7;
+  border-radius: 5px;
+  border: 1px dashed rgb(255 255 255 / 0.1);
+}
+
+.pk__board .bj-card {
+  width: 58px;
+  height: auto;
+}
+
+/* ------------------------------------------------------------ the seats */
+
+/*
+ * A seat is cards on the cloth and a name under them. No box.
+ *
+ * A bordered panel per player turned the felt into a grid of cards about
+ * players rather than a table with people at it: ten little windows, each with
+ * its own edge, none of them looking like they were sitting anywhere. What is
+ * left is the things themselves, and a shadow under the text so they still
+ * read against the cloth.
+ */
+.pk__seat {
+  position: absolute;
+  left: calc(50% + var(--cos) * var(--across));
+  top: calc(50% + var(--sin) * var(--down));
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 108px;
+  text-align: center;
+}
+
+.pk__cards {
+  display: flex;
+  gap: 3px;
+  filter: drop-shadow(0 3px 6px rgb(0 0 0 / 0.55));
+}
+
+.pk__cards .bj-card {
+  width: 38px;
+  height: auto;
+}
+
+/*
+ * Your own seat, drawn larger than the rest.
+ *
+ * Every other hand is two cards you cannot see and do not need to read; yours
+ * is the one you are making decisions with, and at the size the others are
+ * drawn a suit is a guess. It is also the seat you look at most, so it is the
+ * one worth the room.
+ */
+.pk__seat--you .pk__cards .bj-card {
+  width: 62px;
+}
+
+.pk__seat--you .pk__name,
+.pk__seat--you .pk__stack {
+  font-size: var(--gr-text-md);
+}
+
+.pk__who {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+  text-shadow:
+    0 1px 3px rgb(0 0 0 / 0.9),
+    0 0 10px rgb(0 0 0 / 0.6);
+}
+
+.pk__name {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pk__stack {
+  font-size: var(--gr-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+}
+
+/*
+ * What this seat has bet, said in the seat rather than shown on the cloth.
+ *
+ * Only ever on a narrow table, where there is no room for a ring of chips
+ * between the seats and the board. Off everywhere else, because chips on the
+ * felt say it better than a word does.
+ */
+.pk__wager {
+  display: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip-hi);
+}
+
+/*
+ * The button, and the blinds. On the corner of the cards rather than of a box,
+ * since there is no box any more.
+ */
+.pk__mark {
+  position: absolute;
+  top: -6px;
+  right: 14px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: #f2f0ea;
+  color: #1b2028;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.pk__mark--sb,
+.pk__mark--bb {
+  background: rgb(0 0 0 / 0.78);
+  color: var(--gr-color-ink-dim);
+  border: 1px solid rgb(255 255 255 / 0.24);
+}
+
+/*
+ * What a seat has bet, on its own ring between the seats and the pot.
+ *
+ * Placed against the table rather than against a seat, on the same angle but a
+ * shorter radius. Hung off the seat it had nowhere to go: pushed towards the
+ * pot from a seat above the middle, towards the pot is downwards, and
+ * downwards is where that player name already is. On its own ring it cannot
+ * touch any of them, and it looks like what it is — chips pushed out in front
+ * of somebody, in a ring around the pot.
+ */
+.pk__bet {
+  position: absolute;
+  left: calc(50% + var(--cos) * var(--bet-across));
+  top: calc(50% + var(--sin) * var(--bet-down));
+  transform: translate(-50%, -50%);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--gr-color-chip);
+  color: #2a1704;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+  white-space: nowrap;
+}
+
+.pk__says {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+}
+
+/*
+ * The clock on the seat being waited for.
+ *
+ * A number rather than a ring: at a ten-handed table there is not room for a
+ * ring that reads at a glance, and what the player actually needs to know is
+ * how many seconds they have — which a ring only tells you by how empty it is.
+ * Sits on the opposite corner from the button so the two never collide.
+ */
+.pk__clock {
+  position: absolute;
+  top: -6px;
+  left: 14px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: var(--gr-color-accent, #3f9d6a);
+  color: #0d120f;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+/*
+ * Somebody whose connection has gone, who still has a seat and chips in front
+ * of them. Dimmed rather than removed: a table that appeared to empty out
+ * every time a phone locked would be a table nobody trusted.
+ */
+.pk__seat--away {
+  opacity: 0.5;
+}
+
+/** What the table is waiting for, in the middle where the board will be. */
+.pk__waiting {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+  text-align: center;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
+}
+
+/** Where the buttons would be, when there is nothing to press. */
+.pk__note {
+  margin: 12px auto 0;
+  max-width: 46ch;
+  text-align: center;
+  font-size: 13px;
+  color: var(--gr-color-ink-faint);
+}
+
+/*
+ * The one seat that is waiting on somebody.
+ *
+ * A glow on the cloth beneath them rather than a border, now that there is
+ * nothing to put a border on. It reads better for it: light on the table is
+ * what a dealer paying attention looks like, and at a ten-handed table whose
+ * turn it is has to be answerable from the corner of the eye.
+ */
+.pk__seat--acting::before {
+  content: "";
+  position: absolute;
+  inset: -14px -10px;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgb(46 123 255 / 0.34), transparent 70%);
+  z-index: -1;
+}
+
+.pk__seat--acting .pk__name {
+  color: var(--gr-color-neon-hi);
+}
+
+/*
+ * Folded: still there, and plainly out.
+ *
+ * It keeps its place rather than disappearing. A table that emptied out every
+ * hand would look like people leaving rather than people folding.
+ */
+.pk__seat--folded {
+  opacity: 0.4;
+}
+
+.pk__seat--folded .pk__cards {
+  visibility: hidden;
+}
+
+.pk__seat--allIn .pk__stack {
+  color: var(--gr-color-good);
+}
+
+.pk__seat--won::before {
+  content: "";
+  position: absolute;
+  inset: -14px -10px;
+  border-radius: 50%;
+  background: radial-gradient(50% 50% at 50% 50%, rgb(224 176 72 / 0.38), transparent 70%);
+  z-index: -1;
+}
+
+/* ---------------------------------------------------------- what you do */
+
+.pk__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gr-space-2);
+  margin-top: var(--gr-space-3);
+}
+
+.pk__act {
+  min-height: 44px;
+  padding: 0 var(--gr-space-4);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink);
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+}
+
+.pk__act--fold {
+  color: var(--gr-color-ink-dim);
+}
+
+.pk__act--raise {
+  border-color: var(--gr-color-neon);
+  color: var(--gr-color-ink-lit);
+}
+
+.pk__slider {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.pk__slider input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pk__slider-label {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  white-space: nowrap;
+}
+
+/*
+ * A phone gets the same table, smaller.
+ *
+ * Everything that shrinks here is a size rather than an arrangement: the seats
+ * stay where they are round the ellipse, because a second layout is a second
+ * thing to get right and a table that rearranged itself would stop being the
+ * same table.
+ */
+@container (max-width: 560px) {
+  /*
+   * Taller, because the seats need somewhere to go.
+   *
+   * Ten seats round a wide ellipse at this width collided: six overlapping
+   * pairs, and the outermost ones hanging off the sides of the page. A table
+   * nearer square has far more room down its sides, which is where the seats
+   * that were fighting each other end up.
+   */
+  .pk__table {
+    aspect-ratio: 1 / 1;
+    --across: 34%;
+    --down: 33%;
+    --bet-across: 23%;
+    --bet-down: 24%;
+  }
+
+  .pk__seat {
+    width: 64px;
+    gap: 2px;
+  }
+
+  /*
+   * Everybody else has their cards taken away.
+   *
+   * They are face down: two dark rectangles saying nothing, at a size where
+   * they say it illegibly. What a player needs from another seat on a phone is
+   * who it is, what they have left, and whether they are still in, so the
+   * cards give up their room to those. Your own hand keeps its own.
+   */
+  .pk__seat .pk__cards {
+    display: none;
+  }
+
+  .pk__seat--acting .pk__cards,
+  .pk__seat--won .pk__cards {
+    display: flex;
+  }
+
+  .pk__cards .bj-card {
+    width: 30px;
+  }
+
+  /* Still the biggest thing on the table, because it is still the only hand
+     anybody has to read. */
+  .pk__seat--you .pk__cards .bj-card {
+    width: 44px;
+  }
+
+  .pk__seat--you .pk__name,
+  .pk__seat--you .pk__stack {
+    font-size: var(--gr-text-sm);
+  }
+
+  .pk__board .bj-card,
+  .pk__gap {
+    width: 36px;
+  }
+
+  .pk__pot {
+    font-size: var(--gr-text-sm);
+  }
+
+  .pk__name,
+  .pk__stack {
+    font-size: var(--gr-text-xs);
+  }
+
+  .pk__mark {
+    right: 2px;
+    min-width: 17px;
+    height: 17px;
+    font-size: 9px;
+  }
+
+  /*
+   * The chips come off the cloth and into the seat.
+   *
+   * Three concentric rings do not fit across 375px: the board is most of the
+   * middle, the seats are most of the edge, and a ring of chips between them
+   * lands on one or the other whatever radius it is given. So the seat says
+   * the number instead, which needs no room of its own at all.
+   */
+  .pk__bet {
+    display: none;
+  }
+
+  .pk__wager {
+    display: block;
+  }
+}

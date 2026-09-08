@@ -46,6 +46,7 @@ export function pokerAdapter(
         SMALL_BLIND,
         BIG_BLIND,
         seatLimit(made?.["maxSeats"], POKER.maxSeats),
+        turnMs,
       );
     },
 
@@ -123,12 +124,13 @@ export function pokerAdapter(
     },
 
     clock(table) {
-      if (table.toAct === null || table.actingSince === null) {
+      const endsAt = table.turnEndsAt;
+      if (table.toAct === null || endsAt === null) {
         return null;
       }
-      // Absolute, so a slow browser cannot drift away from the table's own idea
-      // of how long is left.
-      return { seatId: table.toAct, endsAt: table.actingSince + turnMs };
+      // The table's own deadline, which is also the one it puts in the view —
+      // so what runs out on screen is what runs out here.
+      return { seatId: table.toAct, endsAt };
     },
 
     timeout(table, seatId) {

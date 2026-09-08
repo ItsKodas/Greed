@@ -11,7 +11,7 @@ export type { Category, Score } from "./hand.js";
 export { best, CATEGORIES, compare, describe, scoreFive } from "./hand.js";
 export type { Contribution, Pot } from "./pot.js";
 export { pots, split } from "./pot.js";
-export type { Move, Payout, Seat, Street } from "./table.js";
+export type { Move, OwnView, Payout, Seat, SeatView, Street, TableView } from "./table.js";
 export { MIN_SEATS, Table } from "./table.js";
 export { pokerAdapter } from "./adapter.js";
 export { BIG_BLIND, BUY_IN, POKER, SMALL_BLIND } from "./listing.js";

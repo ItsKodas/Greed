@@ -302,6 +302,80 @@ describe("how a hand ends", () => {
   });
 });
 
+describe("what a seat is told it may do", () => {
+  /*
+   * The felt draws its buttons from this, so what is wrong here is a control
+   * offered for a move the table then refuses — or worse, not offered for one
+   * it would have taken.
+   */
+  const own = (made: Table, seatId: string) => {
+    const view = made.view(seatId);
+    return view.you;
+  };
+
+  it("says nothing to somebody who is not at the table", () => {
+    const made = table([1_000, 1_000]);
+    expect(made.view(null).you).toBeNull();
+    expect(made.view("nobody").you).toBeNull();
+  });
+
+  it("asks the big blind for nothing and the small blind for the difference", () => {
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const big = made.seats.find((seat) => seat.id === made.bigBlindId) as { id: string };
+    const small = made.seats.find((seat) => seat.id === made.smallBlindId) as { id: string };
+
+    expect(own(made, big.id)?.toCall).toBe(0);
+    // 100 in, 50 already up: the other 50.
+    expect(own(made, small.id)?.toCall).toBe(50);
+  });
+
+  it("gives the smallest raise as a total, not as a difference", () => {
+    /*
+     * A raise is sent as the figure to raise *to*, so this has to be that
+     * figure. The table's own `minRaise` is a delta, and handing the browser
+     * the delta is how a slider ends up a blind out at every stop.
+     */
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const seatId = made.toAct as string;
+    // Preflop the highest is the big blind, and the smallest raise is one more
+    // of it on top: to 200, whatever this seat has already put in.
+    expect(own(made, seatId)?.minRaiseTo).toBe(200);
+  });
+
+  it("caps the largest raise at what the seat actually has", () => {
+    const made = table([1_000, 1_000, 240]);
+    made.deal();
+    const short = made.seats.find((seat) => seat.stack + seat.committed === 240) as { id: string };
+    const mine = own(made, short.id);
+    expect(mine?.maxRaiseTo).toBe(240);
+    // And the smallest never asks for more than the largest allows.
+    expect(mine?.minRaiseTo).toBeLessThanOrEqual(240);
+  });
+
+  it("offers no raise to somebody who cannot cover a call", () => {
+    // 30 chips against a 100 blind: calling is all in, and there is no raise
+    // to make. A slider here would have one stop on it.
+    const made = table([1_000, 1_000, 30]);
+    made.deal();
+    const short = made.seats.find((seat) => seat.stack + seat.committed === 30) as { id: string };
+    expect(own(made, short.id)?.canRaise).toBe(false);
+  });
+});
+
+describe("the clock", () => {
+  it("is null while nobody is being waited on, and a deadline once somebody is", () => {
+    const made = table([1_000, 1_000]);
+    expect(made.turnEndsAt).toBeNull();
+    made.deal();
+    expect(made.turnEndsAt).toBeGreaterThan(Date.now());
+    // The same answer the view gives, because a felt counting down to a
+    // different moment from the table is a felt that folds hands early.
+    expect(made.view(made.toAct).turnEndsAt).toBe(made.turnEndsAt);
+  });
+});
+
 describe("leaving", () => {
   it("folds somebody who walks out mid-hand and keeps their chips in", () => {
     /*
