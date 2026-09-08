@@ -325,15 +325,26 @@ export class Table {
   }
 
   /**
+   * Whether there is a bank behind this table.
+   *
+   * Set by whatever built it, because the table has no business knowing where
+   * chips are kept. What it changes is who the counterparty is: against a bank
+   * the house is real — it holds chips that real people staked — so one player
+   * against the dealer is a game between people who are simply not in the room
+   * at the same time.
+   */
+  housed = false;
+
+  /**
    * Whether this table is allowed to deal at all.
    *
-   * A table playing for chips needs company. It does not refuse the bet — the
-   * felt stays exactly as it is and the window opens again — because the chips
-   * were taken when they were placed, and clearing the felt to wait would be
-   * the table keeping them.
+   * A table playing for chips needs company, unless it has a bank behind it.
+   * It does not refuse the bet — the felt stays exactly as it is and the
+   * window opens again — because the chips were taken when they were placed,
+   * and clearing the felt to wait would be the table keeping them.
    */
   get canDeal(): boolean {
-    return this.forFun || this.seats.length >= MIN_FOR_CHIPS;
+    return this.forFun || this.housed || this.seats.length >= MIN_FOR_CHIPS;
   }
 
   /** Everyone actually in the hand being played. */
@@ -505,7 +516,7 @@ export class Table {
       throw new TableError("Nobody has bet yet.");
     }
 
-    this.shoe.refresh();
+    this.shoe.refresh(this.housed);
     this.status = "playing";
     this.dealer = [];
     for (const seat of inHand) {

@@ -87,6 +87,14 @@ export interface DailyResult {
   nextAt?: number;
 }
 
+/**
+ * The banks this building keeps, by the game that fills them.
+ *
+ * A closed set rather than a string, so a typo is a build error rather than a
+ * bank nobody can find that quietly holds somebody's chips.
+ */
+export type BankName = "slots" | "blackjack";
+
 export interface Store {
   readonly kind: "memory" | "mongo";
   upsertDiscordUser(input: {
@@ -107,18 +115,25 @@ export interface Store {
   recordGame(record: GameRecord): Promise<void>;
 
   /**
-   * The slot machine's bank: chips players have staked and not yet won back.
+   * A game's bank: chips players have staked at it and not yet won back.
    *
-   * It lives here rather than at the machine because it is real money and has
-   * to survive a restart. Nothing in the building may add to it except a spin
-   * and an admin's deliberate float — a bank that could be topped up from
-   * anywhere is a house that mints chips, which is the one thing this casino
-   * must not contain.
+   * It lives here rather than at the game because it is real money and has to
+   * survive a restart. Nothing in the building may add to one except play at
+   * that game and an admin's deliberate float — a bank that could be topped up
+   * from anywhere is a house that mints chips, which is the one thing this
+   * casino must not contain.
+   *
+   * One per game rather than one for the building, and the name is required
+   * rather than defaulted. The two games fill their banks at very different
+   * rates — a machine keeps a tenth of what goes through it, a blackjack table
+   * about a two-hundredth — so a shared bank would be the machine quietly
+   * paying for the table. A missing argument would be exactly that bug,
+   * silently, so there is no argument to miss.
    */
-  bank(): Promise<number>;
-  bankAdd(delta: number): Promise<void>;
+  bank(which: BankName): Promise<number>;
+  bankAdd(which: BankName, delta: number): Promise<void>;
   /** Pays out, or returns false rather than overdrawing. */
-  bankTake(amount: number): Promise<boolean>;
+  bankTake(which: BankName, amount: number): Promise<boolean>;
 
   /** Puts a new code into circulation. */
   mintCode(input: {
@@ -182,22 +197,23 @@ export class MemoryStore implements Store {
   readonly kind = "memory" as const;
   private readonly people = new Map<string, Profile>();
   private readonly games: GameRecord[] = [];
-  /** The slot machine's bank. A number, because that is all it ever is. */
-  private house = 0;
+  /** Each game's bank. Numbers, because that is all they ever are. */
+  private readonly house = new Map<BankName, number>();
 
-  async bank(): Promise<number> {
-    return this.house;
+  async bank(which: BankName): Promise<number> {
+    return this.house.get(which) ?? 0;
   }
 
-  async bankAdd(delta: number): Promise<void> {
-    this.house += delta;
+  async bankAdd(which: BankName, delta: number): Promise<void> {
+    this.house.set(which, (this.house.get(which) ?? 0) + delta);
   }
 
-  async bankTake(amount: number): Promise<boolean> {
-    if (amount > this.house) {
+  async bankTake(which: BankName, amount: number): Promise<boolean> {
+    const held = this.house.get(which) ?? 0;
+    if (amount > held) {
       return false;
     }
-    this.house -= amount;
+    this.house.set(which, held - amount);
     return true;
   }
 

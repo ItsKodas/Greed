@@ -6,6 +6,7 @@ import type { Socket } from "socket.io-client";
 import { io as connect } from "socket.io-client";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BackRoomServer } from "./server.js";
+import { maxStake as blackjackMaxStake } from "@backroom/game-blackjack";
 import { createBackRoomServer } from "./server.js";
 
 /**
@@ -72,6 +73,8 @@ async function startRoom(
     turnMs?: number;
     lastCallMs?: number;
     reconnectGraceMs?: number;
+    /** What the blackjack bank starts with, for the tests that are about it. */
+    bank?: number;
   } = {},
   // A long window for bets so the table does not deal underneath a test that
   // is still setting itself up, and almost no wait between rounds so one that
@@ -83,6 +86,13 @@ async function startRoom(
   ids: Array<string | null>;
 }> {
   const store = new MemoryStore();
+  /*
+   * A float in the blackjack bank, because a chips table now pays out of one.
+   * Without it every bet here is refused with "the bank is empty", which is
+   * correct and tells you nothing about the seam these tests are for. Deep
+   * enough that the cap is never what refuses a stake in this file.
+   */
+  await store.bankAdd("blackjack", timings.bank ?? 10_000_000);
   const ids: Array<string | null> = [];
   for (const [index, name] of people.entries()) {
     if (name === null) {
@@ -208,6 +218,24 @@ function open_(socket: Client, name: string, forFun = false): Promise<Ack> {
   return new Promise((resolve) =>
     socket.emit("lobby:create", { name, game: "blackjack", forFun }, resolve),
   );
+}
+
+/**
+ * The next refusal this socket is told about.
+ *
+ * Refusals do not come back on the ack — that only says the server has dealt
+ * with the message, refused or not — so a test that wants the reason has to
+ * listen for it. Armed before the action that causes it, because the answer
+ * can arrive before the ack does.
+ */
+function refusal(socket: Client, ms = 2000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("nothing was refused")), ms);
+    socket.once("room:error", (message: string) => {
+      clearTimeout(timer);
+      resolve(message);
+    });
+  });
 }
 
 /** Sends a move and waits for the server to say it has dealt with it. */
@@ -626,41 +654,39 @@ describe("chips are only won from real people", () => {
     expect(host.latest?.seats).toHaveLength(1);
   });
 
-  it("holds a chips table at one player rather than dealing to them alone", async () => {
-    const { port } = await startRoom(["Ada", "Bo"], { bettingMs: 150, lastCallMs: 0 });
+  it("deals to one player, because the bank is the other side of the hand", async () => {
+    /*
+     * This table used to wait for company, and the rule it was waiting on has
+     * not changed: chips are only won from real people. What changed is who
+     * the other people are. The bank holds chips that real players staked, so
+     * a lone hand against the dealer is a hand against everybody who played
+     * here before — the same footing the machine stands on.
+     */
+    const { port } = await startRoom(["Ada"], { bettingMs: 150, lastCallMs: 0 });
     const host = await client(port);
     await open_(host, "Ada");
     await stateWhere(host, (view) => view.seats.length === 1);
 
     await act(host, { type: "bet", amount: 500 });
-    const waiting = await stateWhere(host, (view) => view.waitingForPlayers, 3000);
 
-    // Held, not refused: the stake stays on the felt, because it already left
-    // the account when it was placed.
-    expect(waiting.phase).toBe("betting");
-    expect(waiting.seats[0]?.bet).toBe(500);
-
-    // And the moment somebody else sits down, the table gets on with it.
-    const company = await client(port);
-    await new Promise<void>((resolve) =>
-      company.emit("lobby:join", { name: "Bo", code: waiting.code }, () => resolve()),
-    );
     const dealt = await stateWhere(host, (view) => view.phase !== "betting", 4000);
     expect(dealt.seats[0]?.hands[0]?.cards.length).toBeGreaterThanOrEqual(2);
+    expect(dealt.waitingForPlayers).toBe(false);
   });
 });
 
 describe("a player who drops out without leaving", () => {
-  it("gives up their seat, and the table stops dealing for chips", async () => {
+  it("gives up the seat of somebody who has gone", async () => {
     /*
      * The ordinary way people leave a table: a closed laptop, a tunnel, a
      * phone going to sleep. Nobody presses leave.
      *
-     * At a chips table this matters more than tidiness. A seat held by
-     * somebody who is not there still counts towards the two real players the
-     * house requires, so a table that never gave it up would happily deal on
-     * — one live player against a ghost, which is exactly the arrangement
-     * "chips are only won from real people" exists to forbid.
+     * It used to matter for a second reason — a ghost counted towards the two
+     * real players a chips table needed, so a table that never released the
+     * seat would deal one live player against nobody. The bank has taken that
+     * job over: the house is now a real counterparty, so the table deals on
+     * quite legitimately. What is left is the plain version of the rule, which
+     * is still worth holding: a seat nobody is in is not a seat.
      */
     const { port } = await startRoom(["Ada", "Bo"], { reconnectGraceMs: 250 });
     const ada = await client(port);
@@ -678,8 +704,155 @@ describe("a player who drops out without leaving", () => {
     // Marked gone at once, then released once they have not come back.
     const alone = await stateWhere(ada, (view) => view.seats.length === 1, 4000);
     expect(alone.seats[0]?.name).toBe("Ada");
-    // And with one real player left, the table will not deal for chips.
-    expect(alone.waitingForPlayers).toBe(true);
+    // And Ada plays on against the bank rather than against a ghost.
+    expect(alone.waitingForPlayers).toBe(false);
   });
 });
 
+/*
+ * The bank, and the property that makes a table against the dealer allowed.
+ *
+ * Blackjack used to take stakes off accounts and hand winnings back with
+ * nothing in between: a player who beat the dealer was paid in chips that did
+ * not exist, and one who lost had theirs deleted. It very nearly balanced,
+ * which is not the same thing at all.
+ */
+describe("the bank behind the table", () => {
+  it("mints nothing, ever", async () => {
+    /*
+     * The invariant, and the reason a table is allowed to deal to one player
+     * in a building where chips only come from real people. Every chip the
+     * player gained came out of the bank; every chip the bank gained came off
+     * the player. The two must cancel exactly — not on average, and not by the
+     * end of the run, but across every hand.
+     */
+    const { port, store, ids } = await startRoom(["Ada"], {
+      bettingMs: 200,
+      lastCallMs: 0,
+      turnMs: 200,
+    });
+    const userId = ids[0] as string;
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    const chipsBefore = (await store.get(userId))?.chips ?? 0;
+    const bankBefore = await store.bank("blackjack");
+
+    for (let hand = 0; hand < 6; hand += 1) {
+      await act(ada, { type: "bet", amount: 100 });
+      await stateWhere(ada, (view) => view.phase !== "betting", 5000);
+      await stateWhere(ada, (view) => view.phase === "betting", 8000);
+    }
+
+    const chipsAfter = (await store.get(userId))?.chips ?? 0;
+    const bankAfter = await store.bank("blackjack");
+    expect(chipsAfter - chipsBefore + (bankAfter - bankBefore)).toBe(0);
+  });
+
+  it("never lets the bank go negative", async () => {
+    const { port, store } = await startRoom(["Ada"], {
+      bettingMs: 200,
+      lastCallMs: 0,
+      turnMs: 200,
+    });
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    for (let hand = 0; hand < 6; hand += 1) {
+      await act(ada, { type: "bet", amount: 100 });
+      await stateWhere(ada, (view) => view.phase !== "betting", 5000);
+      await stateWhere(ada, (view) => view.phase === "betting", 8000);
+      expect(await store.bank("blackjack")).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("refuses a bet the bank could not pay out on", async () => {
+    // A thin bank offers a small hand rather than closing the table: the same
+    // choice the machine makes, for the same reason.
+    const { port, store } = await startRoom(["Ada"], { bank: 4_000 });
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    const cap = blackjackMaxStake(await store.bank("blackjack"));
+    expect(cap).toBeGreaterThan(0);
+
+    // A refusal comes back as room:error rather than on the ack: the ack only
+    // says the server has dealt with the message, refused or not.
+    const said = refusal(ada);
+    await act(ada, { type: "bet", amount: cap + 1 });
+    expect(await said).toMatch(/bank/i);
+
+    // And the felt is untouched by the refusal.
+    expect(ada.latest?.seats[0]?.bet ?? 0).toBe(0);
+  });
+
+  it("says the table is shut rather than dealing out of an empty bank", async () => {
+    const { port } = await startRoom(["Ada"], { bank: 0 });
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    const said = refusal(ada);
+    await act(ada, { type: "bet", amount: 100 });
+    expect(await said).toMatch(/empty|nothing to play for/i);
+  });
+
+  it("takes the stake into the bank before the cards are dealt", async () => {
+    /*
+     * The ordering that the whole payout argument rests on. By the time
+     * anything is owed, the chips to pay it are already there.
+     */
+    const { port, store } = await startRoom(["Ada"], { bettingMs: 30_000 });
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    const before = await store.bank("blackjack");
+    await act(ada, { type: "bet", amount: 500 });
+    // Still betting — nothing has been dealt — and the stake is already in.
+    expect((await stateWhere(ada, (view) => (view.seats[0]?.bet ?? 0) > 0)).phase).toBe("betting");
+    expect(await store.bank("blackjack")).toBe(before + 500);
+  });
+
+  it("gives a withdrawn stake back to the player, not to the bank", async () => {
+    const { port, store, ids } = await startRoom(["Ada"], { bettingMs: 30_000 });
+    const userId = ids[0] as string;
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    const chips = (await store.get(userId))?.chips ?? 0;
+    const bank = await store.bank("blackjack");
+
+    await act(ada, { type: "bet", amount: 500 });
+    await act(ada, { type: "bet", amount: 0 });
+
+    expect((await store.get(userId))?.chips).toBe(chips);
+    expect(await store.bank("blackjack")).toBe(bank);
+  });
+
+  it("keeps the machine's bank out of it", async () => {
+    // Two banks, and a table that could reach the other one would be the
+    // machine paying for the table.
+    const { port, store } = await startRoom(["Ada"], {
+      bettingMs: 200,
+      lastCallMs: 0,
+      turnMs: 200,
+    });
+    await store.bankAdd("slots", 500_000);
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    await stateWhere(ada, (view) => view.seats.length === 1);
+
+    for (let hand = 0; hand < 4; hand += 1) {
+      await act(ada, { type: "bet", amount: 100 });
+      await stateWhere(ada, (view) => view.phase !== "betting", 5000);
+      await stateWhere(ada, (view) => view.phase === "betting", 8000);
+    }
+
+    expect(await store.bank("slots")).toBe(500_000);
+  });
+});

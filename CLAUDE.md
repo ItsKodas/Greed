@@ -26,18 +26,19 @@ It follows that:
 - **No bots at a table playing for chips.** Bots exist to make a for-fun table
   worth sitting at on your own. They are dealt in at play-money tables and
   refused at every other kind.
-- **A chips game does not run for one player.** It waits. A table that cannot
-  find a second real player does not deal; one that loses its second player
-  pauses and says so rather than quietly carrying on paying out.
+- **A chips game does not run for one player** unless it is playing against a
+  bank on the terms below. Otherwise it waits: a table that cannot find a
+  second real player does not deal; one that loses its second player pauses and
+  says so rather than quietly carrying on paying out.
 - **Waiting never costs anybody a stake.** Chips leave an account when they are
   put on the felt, so a table that holds must hold with the felt untouched.
   Clearing it to wait is the table keeping the money.
 - **Play money never touches an account.** A for-fun table's purse lives at
   that table and is gone when it closes.
 
-**A machine is the one exception, and only on these terms.** A game played
-alone against the house would be a button that mints chips, so a machine may
-run for one player *if and only if*:
+**Playing against the house is the one exception, and only on these terms.** A
+game played alone against the house would otherwise be a button that mints
+chips, so a game may run for one player *if and only if*:
 
 - it pays from a bank that players alone fill, chip for chip, and every stake
   enters that bank before the game decides anything;
@@ -57,9 +58,19 @@ run for one player *if and only if*:
   under a run of them, and the bank at the eighth is not the bank that awarded
   it. A machine that cannot cover the rest of a run says so and stops.
 
-On those terms a win at a machine still comes from real people: everybody who
-played it before you. Slots is the only game in the building on this footing,
-and a second one would have to earn it the same way.
+A game dealt from a deck has one more condition, because its edge is thin
+enough to be turned over: **it reshuffles every hand.** A machine's odds are
+fixed by its strip whatever the player knows, but cards carried between hands
+are cards that can be counted, and a counted shoe pays the player more than it
+takes — out of a bank everybody else filled.
+
+On those terms a win still comes from real people: everybody who played there
+before you. Slots and blackjack are the two games in the building on this
+footing, and each keeps **its own bank**. A shared one would be whichever game
+holds back the most quietly paying for the one that holds back the least — the
+machine keeps a tenth of what goes through it and a blackjack table about a
+two-hundredth, so one bank would be the machine funding the felt. A third game
+would have to earn all of this the same way.
 
 ### The server is the only authority
 
@@ -148,8 +159,8 @@ packages/rules     dice scoring
 packages/shared    the socket protocol and its zod schemas
 packages/ui        design tokens and procedural textures
 games/greed        six dice, bank it or lose it
-games/blackjack    beat the dealer to twenty-one
-games/slots        five reels, nine lines, one shared bank
+games/blackjack    beat the dealer to twenty-one, from its own bank
+games/slots        five reels, nine lines, its own bank
 apps/server        express + socket.io, one game:action envelope
 apps/web           react client
 ```

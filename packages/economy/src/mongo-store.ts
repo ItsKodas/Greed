@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import mongoose from "mongoose";
 import { judgeCode, mintCodeText, normaliseCode } from "./codes.js";
 import type { CodeRecord, RedeemResult } from "./codes.js";
+import type { BankName } from "./store.js";
 import type { Model } from "mongoose";
 import {
   DAILY_FLOOR,
@@ -124,17 +125,29 @@ interface HouseDoc {
 }
 
 /*
- * One document, always with the id "bank".
+ * One document per bank.
  *
- * A collection holding a single row looks odd until you want the update to be
- * atomic: $inc on one document is, and a read followed by a write is not. Two
- * spins finishing a millisecond apart is the ordinary case here, not an
+ * A collection holding a couple of rows looks odd until you want the update to
+ * be atomic: $inc on one document is, and a read followed by a write is not.
+ * Two spins finishing a millisecond apart is the ordinary case here, not an
  * exotic one.
  */
 const houseSchema = new mongoose.Schema<HouseDoc>({
   _id: { type: String, required: true },
   amount: { type: Number, required: true, default: 0 },
 });
+
+/**
+ * The document id a bank is stored under.
+ *
+ * The machine's stays "bank" rather than becoming "slots". It is the id the
+ * chips are already sitting under in every deployed database, and renaming it
+ * would not move them — it would leave them somewhere nothing looks and open a
+ * fresh bank at zero, which reads as the machine having been robbed.
+ */
+function bankId(which: BankName): string {
+  return which === "slots" ? "bank" : which;
+}
 
 function toProfile(doc: UserDoc): Profile {
   return {
@@ -351,23 +364,27 @@ export class MongoStore implements Store {
     return docs as unknown as GameRecord[];
   }
 
-  async bank(): Promise<number> {
-    const doc = await this.house.findById("bank");
+  async bank(which: BankName): Promise<number> {
+    const doc = await this.house.findById(bankId(which));
     return doc?.amount ?? 0;
   }
 
-  async bankAdd(delta: number): Promise<void> {
-    await this.house.updateOne({ _id: "bank" }, { $inc: { amount: delta } }, { upsert: true });
+  async bankAdd(which: BankName, delta: number): Promise<void> {
+    await this.house.updateOne(
+      { _id: bankId(which) },
+      { $inc: { amount: delta } },
+      { upsert: true },
+    );
   }
 
-  async bankTake(amount: number): Promise<boolean> {
+  async bankTake(which: BankName, amount: number): Promise<boolean> {
     /*
      * The whole rule expressed as the filter, in the manner of adjustChips. A
      * payout that would overdraw matches nothing and changes nothing, so two
      * concurrent wins cannot both take the last of it.
      */
     const result = await this.house.updateOne(
-      { _id: "bank", amount: { $gte: amount } },
+      { _id: bankId(which), amount: { $gte: amount } },
       { $inc: { amount: -amount } },
     );
     return result.modifiedCount === 1;

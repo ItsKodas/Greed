@@ -77,9 +77,18 @@ export class Shoe {
     return this.cards.length < this.full * RESHUFFLE_AT;
   }
 
-  /** Reshuffles if the shoe is low. Called between hands, never during one. */
-  refresh(): void {
-    if (this.spent) {
+  /**
+   * Reshuffles if the shoe is low. Called between hands, never during one.
+   *
+   * `always` forces it, which is what a table playing against a bank does.
+   * Cards carried between hands are cards a player can count, and counting is
+   * the one thing that turns blackjack's half a percent the other way round —
+   * a bank funded by everybody who played here would be paying for it. A shoe
+   * shuffled every hand cannot be counted at all, so the edge is whatever the
+   * rules say it is and nothing else.
+   */
+  refresh(always = false): void {
+    if (always || this.spent) {
       this.refill();
     }
   }

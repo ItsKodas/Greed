@@ -6,9 +6,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
 import { Catalogue } from "@backroom/core";
-import type { Store } from "@backroom/economy";
+import type { BankName, Store } from "@backroom/economy";
 import { judgeDaily, MemoryStore } from "@backroom/economy";
-import { BLACKJACK, blackjackAdapter } from "@backroom/game-blackjack";
+import {
+  BLACKJACK,
+  blackjackAdapter,
+  maxStake as blackjackMaxStake,
+} from "@backroom/game-blackjack";
 import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
 import {
   countScatters,
@@ -719,6 +723,24 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         ...(settleMs === undefined ? {} : { settleMs }),
         ...(turnMs === undefined ? {} : { turnMs }),
         ...(lastCallMs === undefined ? {} : { lastCallMs }),
+        /*
+         * The shuffle, from the same source the reels come from. A table that
+         * pays from a bank hands the player every card it deals, which over a
+         * shoe is exactly the run of observations needed to recover
+         * Math.random's state — and then the next card is not a question.
+         */
+        random: spinRandom,
+        /*
+         * The bank these tables play against, scoped to blackjack's own. The
+         * game is handed the three things it can do with chips rather than the
+         * store, so a table cannot reach the machine's bank however it is
+         * asked to.
+         */
+        bank: {
+          holds: () => store.bank("blackjack"),
+          add: (amount: number) => store.bankAdd("blackjack", amount),
+          take: (amount: number) => store.bankTake("blackjack", amount),
+        },
       }) as GameAdapter<PlayTable>,
     ],
   ]);
@@ -840,13 +862,32 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    */
   app.get("/api/slots", (_request, response) => {
     void (async () => {
-      const bank = await store.bank();
+      const bank = await store.bank("slots");
       response.json({ bank, maxStake: maxStake(bank), jackpot: jackpotPay(bank) });
     })();
   });
 
   /**
-   * The one place chips enter the slot machine's bank from outside play.
+   * Which bank a request means, or nothing if it named one that does not exist.
+   *
+   * Absent means the machine's. Every one of these routes predates there being
+   * a second bank, and an admin who floats the building without saying which
+   * bank means the one they have always meant.
+   */
+  function bankNamed(value: unknown): BankName | null {
+    if (value === undefined || value === "slots") {
+      return "slots";
+    }
+    return value === "blackjack" ? "blackjack" : null;
+  }
+
+  /** What a bank can offer, which each game works out its own way. */
+  function capOf(which: BankName, bank: number): number {
+    return which === "slots" ? maxStake(bank) : blackjackMaxStake(bank);
+  }
+
+  /**
+   * The one place chips enter a game's bank from outside play.
    *
    * Behind the same allowlist that mints redemption codes, because it is the
    * same power: this adds chips to the building that nobody won. It is a
@@ -854,23 +895,48 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * offers a stake of zero — somebody has to strike the match — and because a
    * named human doing it is auditable in a way a mechanism is not.
    */
-  app.get("/api/admin/bank", requireAdmin, (_request, response) => {
+  app.get("/api/admin/bank", requireAdmin, (request, response) => {
     void (async () => {
-      const bank = await store.bank();
-      response.json({ bank, maxStake: maxStake(bank) });
+      const which = bankNamed((request.query as { game?: unknown })?.game);
+      if (which === null) {
+        response.status(400).json({ error: "No such bank." });
+        return;
+      }
+      const bank = await store.bank(which);
+      response.json({ bank, maxStake: capOf(which, bank) });
     })();
   });
 
   app.post("/api/admin/bank", requireAdmin, (request, response) => {
     void (async () => {
-      const amount = (request.body as { amount?: unknown })?.amount;
+      const body = request.body as { amount?: unknown; game?: unknown };
+      const which = bankNamed(body?.game);
+      if (which === null) {
+        response.status(400).json({ error: "No such bank." });
+        return;
+      }
+      const amount = body?.amount;
       if (typeof amount !== "number" || !Number.isInteger(amount) || amount < 1) {
         response.status(400).json({ error: "That is not an amount." });
         return;
       }
-      await store.bankAdd(amount);
-      const bank = await store.bank();
-      response.json({ bank, maxStake: maxStake(bank) });
+      await store.bankAdd(which, amount);
+      const bank = await store.bank(which);
+      response.json({ bank, maxStake: capOf(which, bank) });
+    })();
+  });
+
+  /**
+   * What the blackjack tables can cover, for anybody at all.
+   *
+   * The same reasoning as the machine's sign: the bank is what makes a table
+   * against the dealer possible, so a table that will not deal has to be able
+   * to say why without asking who is asking.
+   */
+  app.get("/api/blackjack", (_request, response) => {
+    void (async () => {
+      const bank = await store.bank("blackjack");
+      response.json({ bank, maxStake: blackjackMaxStake(bank) });
     })();
   });
 
@@ -1726,7 +1792,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
          * in the bank by the time anything is owed; a free spin's never was,
          * so the same worst case has to come out of a bank one stake shallower.
          */
-        const cap = wasFree ? maxFreeStake(await store.bank()) : maxStake(await store.bank());
+        const cap = wasFree ? maxFreeStake(await store.bank("slots")) : maxStake(await store.bank("slots"));
         if (stake > cap) {
           if (wasFree) {
             /*
@@ -1760,12 +1826,12 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
             ack({ ok: false, error: "Not enough chips." });
             return;
           }
-          await store.bankAdd(stake);
+          await store.bankAdd("slots", stake);
         }
 
         const grid = drawGrid(spinRandom);
         const { lines: paid, fixed, jackpot } = evaluate(grid, stake, lines);
-        const won = fixed + (jackpot ? jackpotPay(await store.bank()) : 0);
+        const won = fixed + (jackpot ? jackpotPay(await store.bank("slots")) : 0);
 
         /*
          * Paid out of the bank, and only if the bank actually has it. The
@@ -1773,9 +1839,9 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
          * checked: the alternative to checking is a bank that goes negative in
          * silence and a machine that has quietly started minting chips.
          */
-        if (won > 0 && !(await store.bankTake(won))) {
+        if (won > 0 && !(await store.bankTake("slots", won))) {
           if (!wasFree) {
-            await store.bankAdd(-stake);
+            await store.bankAdd("slots", -stake);
             await deps.give(userId, stake);
           }
           ack({ ok: false, error: "The bank is short. Nothing was staked." });
@@ -1843,7 +1909,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           awarded,
           freeLeft: left,
           wasFree,
-          bank: await store.bank(),
+          bank: await store.bank("slots"),
           balance: (await store.get(userId))?.chips ?? 0,
         });
       })();

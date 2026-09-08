@@ -49,7 +49,9 @@ export function Admin() {
 
       {allowed === null ? null : allowed ? (
         <div className="profile">
-          <Bank />
+          {BANKS.map((bank) => (
+            <Bank key={bank.game} game={bank.game} label={bank.label} per={bank.per} />
+          ))}
           <Mint onMinted={load} />
           <section className="panel">
             <p className="panel__label">Codes</p>
@@ -93,17 +95,23 @@ export function Admin() {
  * a stake of zero — the machine cannot open itself, and somebody has to strike
  * the match.
  */
-function Bank() {
+/** The games that keep a bank, and what each calls the thing it deals. */
+const BANKS = [
+  { game: "slots", label: "Slots", per: "a spin" },
+  { game: "blackjack", label: "Blackjack", per: "a hand" },
+] as const;
+
+function Bank({ game, label, per }: { game: string; label: string; per: string }) {
   const [held, setHeld] = useState<{ bank: number; maxStake: number } | null>(null);
   const [amount, setAmount] = useState("50000");
   const [said, setSaid] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    void fetch("/api/admin/bank", { credentials: "include" })
+    void fetch(`/api/admin/bank?game=${game}`, { credentials: "include" })
       .then((response) => (response.ok ? response.json() : null))
       .then((body: { bank: number; maxStake: number } | null) => setHeld(body))
       .catch(() => setHeld(null));
-  }, []);
+  }, [game]);
 
   useEffect(load, [load]);
 
@@ -117,7 +125,7 @@ function Bank() {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ amount: Math.floor(chips) }),
+      body: JSON.stringify({ amount: Math.floor(chips), game }),
     })
       .then((response) => (response.ok ? response.json() : null))
       .then((body: { bank: number; maxStake: number } | null) => {
@@ -133,7 +141,7 @@ function Bank() {
 
   return (
     <section className="panel">
-      <p className="panel__label">Slots bank</p>
+      <p className="panel__label">{label} bank</p>
       {held === null ? (
         <p className="panel__note">Could not read it.</p>
       ) : (
@@ -141,8 +149,8 @@ function Bank() {
           <strong className="code__chips">{fmt(held.bank)}</strong>
           <span className="panel__note">
             {held.maxStake < 1
-              ? "Empty, so the machine will not take a spin at any stake."
-              : `Covers a stake of ${fmt(held.maxStake)} a spin.`}
+              ? `Empty, so ${label.toLowerCase()} will not take a stake at all.`
+              : `Covers a stake of ${fmt(held.maxStake)} ${per}.`}
           </span>
         </p>
       )}
@@ -160,7 +168,8 @@ function Bank() {
       </button>
       <p className="panel__note">
         Players fill this from then on, chip for chip, and every win comes back out of it. This
-        is the only other way in.
+        is the only other way in. Each game keeps its own — a shared one would be whichever game
+        keeps the most quietly paying for the one that keeps the least.
       </p>
       {said === null ? null : <p className="panel__note">{said}</p>}
     </section>

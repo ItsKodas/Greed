@@ -156,21 +156,21 @@ describe("figures a game keeps for itself", () => {
 describe("the house bank", () => {
   it("starts empty, because nobody has played yet", async () => {
     const store = new MemoryStore();
-    expect(await store.bank()).toBe(0);
+    expect(await store.bank("slots")).toBe(0);
   });
 
   it("holds what is put into it", async () => {
     const store = new MemoryStore();
-    await store.bankAdd(500);
-    await store.bankAdd(250);
-    expect(await store.bank()).toBe(750);
+    await store.bankAdd("slots", 500);
+    await store.bankAdd("slots", 250);
+    expect(await store.bank("slots")).toBe(750);
   });
 
   it("pays out what it holds", async () => {
     const store = new MemoryStore();
-    await store.bankAdd(500);
-    expect(await store.bankTake(200)).toBe(true);
-    expect(await store.bank()).toBe(300);
+    await store.bankAdd("slots", 500);
+    expect(await store.bankTake("slots", 200)).toBe(true);
+    expect(await store.bank("slots")).toBe(300);
   });
 
   it("refuses rather than going negative", async () => {
@@ -181,15 +181,15 @@ describe("the house bank", () => {
      * negative and a machine that has started minting chips.
      */
     const store = new MemoryStore();
-    await store.bankAdd(100);
-    expect(await store.bankTake(101)).toBe(false);
-    expect(await store.bank()).toBe(100);
+    await store.bankAdd("slots", 100);
+    expect(await store.bankTake("slots", 101)).toBe(false);
+    expect(await store.bank("slots")).toBe(100);
   });
 
   it("lets a payout take the bank to exactly nothing", async () => {
     const store = new MemoryStore();
-    await store.bankAdd(100);
-    expect(await store.bankTake(100)).toBe(true);
-    expect(await store.bank()).toBe(0);
+    await store.bankAdd("slots", 100);
+    expect(await store.bankTake("slots", 100)).toBe(true);
+    expect(await store.bank("slots")).toBe(0);
   });
 });

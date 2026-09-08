@@ -178,13 +178,13 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
      */
     store ??= await MongoStore.connect(url as string);
     // Whatever previous tests left behind; the bank is one shared row.
-    await store.bankTake(await store.bank());
-    await store.bankAdd(100);
+    await store.bankTake("slots", await store.bank("slots"));
+    await store.bankAdd("slots", 100);
 
-    const [first, second] = await Promise.all([store.bankTake(100), store.bankTake(100)]);
+    const [first, second] = await Promise.all([store.bankTake("slots", 100), store.bankTake("slots", 100)]);
 
     expect([first, second].filter(Boolean)).toHaveLength(1);
-    expect(await store.bank()).toBe(0);
+    expect(await store.bank("slots")).toBe(0);
   });
 
 });

@@ -1,6 +1,7 @@
 import type { BotMove, Clock, GameAdapter } from "@backroom/core";
 import { seatLimit, TableError } from "@backroom/core";
 import { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
+import { maxStake } from "./bank.js";
 import { value } from "./hand.js";
 import { BLACKJACK } from "./listing.js";
 import { Table, TURN_MS } from "./table.js";
@@ -14,6 +15,14 @@ import { Table, TURN_MS } from "./table.js";
  * separately. That is why taking chips belongs to the game rather than to the
  * server — the server would have had to know which of those two it was.
  */
+/** What a table needs of the chips everybody before it has staked. */
+export interface Bank {
+  holds(): Promise<number>;
+  add(amount: number): Promise<void>;
+  /** Pays out, or returns false rather than overdrawing. */
+  take(amount: number): Promise<boolean>;
+}
+
 export function blackjackAdapter(
   options: {
     random?: () => number;
@@ -25,10 +34,25 @@ export function blackjackAdapter(
     lastCallMs?: number;
     /** How long one player may think before the table plays their hand. */
     turnMs?: number;
+    /**
+     * The bank these tables pay from, when there is one.
+     *
+     * Without it a chips table takes stakes off accounts and hands winnings
+     * back with nothing in between — the players who beat the dealer are paid
+     * in chips that did not exist. With it, every stake goes in before the
+     * cards are settled and every payout comes out, so the table can only ever
+     * hand over what somebody put there.
+     *
+     * It is also what lets a table deal to one player. Against a bank the
+     * house is a real counterparty holding real chips; without one, a lone
+     * player beating the dealer is a button that mints.
+     */
+    bank?: Bank;
   } = {},
 ): GameAdapter<Table> {
   const random = options.random ?? Math.random;
   const turnMs = options.turnMs ?? TURN_MS;
+  const bank = options.bank ?? null;
 
   return {
     listing: BLACKJACK,
@@ -43,6 +67,12 @@ export function blackjackAdapter(
         made?.["forFun"] === true,
         seatLimit(made?.["maxSeats"], BLACKJACK.maxSeats),
       );
+      /*
+       * A table with a bank behind it plays against the house, so it does not
+       * need a second player — the counterparty is the chips everybody who
+       * played here before put in. Without one it waits, as it always has.
+       */
+      table.housed = bank !== null;
       if (options.bettingMs !== undefined) {
         table.bettingMs = options.bettingMs;
         table.deadline = Date.now() + options.bettingMs;
@@ -80,6 +110,21 @@ export function blackjackAdapter(
           if (seat.userId === null) {
             throw new TableError("Sign in to play for chips.");
           }
+          /*
+           * What the bank can cover, checked before the chips move. The whole
+           * worst hand — split, both doubled, both won — has to be payable out
+           * of what is in there, and a bet the bank cannot cover is refused
+           * rather than paid out of nothing later.
+           */
+          if (bank !== null && amount > maxStake(await bank.holds())) {
+            table.bet(seatId, already);
+            const cap = maxStake(await bank.holds());
+            throw new TableError(
+              cap < 1
+                ? "The bank is empty. Nothing to play for yet."
+                : `The bank covers ${cap.toLocaleString("en-US")} a hand at the moment.`,
+            );
+          }
           // Only the difference, so changing a bet before the deal does not
           // charge twice for the same hand.
           const owed = amount - already;
@@ -91,6 +136,12 @@ export function blackjackAdapter(
           if (owed < 0) {
             await deps.give(seat.userId, -owed);
           }
+          /*
+           * Into the bank as it leaves the account, and back out of it if the
+           * bet shrinks. The stake is in there before the cards are dealt,
+           * which is what makes the payout arithmetic hold.
+           */
+          await bank?.add(owed);
           return;
         }
         case "deal":
@@ -142,6 +193,8 @@ export function blackjackAdapter(
             await deps.give(seat.userId, extra);
             throw error;
           }
+          // In before the card is turned, like every other stake here.
+          await bank?.add(extra);
           return;
         }
         case "split": {
@@ -168,6 +221,7 @@ export function blackjackAdapter(
             await deps.give(seat.userId, stake);
             throw error;
           }
+          await bank?.add(stake);
           return;
         }
         default:
@@ -382,7 +436,27 @@ export function blackjackAdapter(
          * kind of quiet wrongness a stats page never admits to.
          */
         if (seat.back > 0) {
-          await deps.give(seat.userId, seat.back);
+          /*
+           * Out of the bank before it reaches the account, and only if the
+           * bank actually holds it. The stake cap means this cannot refuse —
+           * which is exactly why it is checked. The alternative to checking is
+           * a bank that goes negative in silence and a table that has quietly
+           * started minting chips, which is the thing this whole arrangement
+           * exists to prevent.
+           *
+           * If it ever does refuse, the player keeps their stake rather than
+           * being paid winnings the building has not got: the stakes are
+           * already in the bank, so handing back what went in is the one
+           * answer that moves no chips that do not exist.
+           */
+          if (bank !== null && !(await bank.take(seat.back))) {
+            if (seat.out > 0) {
+              await bank.take(Math.min(seat.out, await bank.holds()));
+              await deps.give(seat.userId, seat.out);
+            }
+          } else {
+            await deps.give(seat.userId, seat.back);
+          }
         }
         await deps.record(seat.userId, {
           shared: {

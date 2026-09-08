@@ -82,7 +82,7 @@ async function openMachine(
     await store.adjustChips(player.id, options.chips - current);
   }
   if (options.bank !== undefined && options.bank > 0) {
-    await store.bankAdd(options.bank);
+    await store.bankAdd("slots", options.bank);
   }
 
   const as = options.signedIn === false ? null : player.id;
@@ -184,12 +184,12 @@ describe("a spin", () => {
     const { client, store, userId } = await openMachine({ bank: 500_000, chips: 100_000 });
     for (let n = 0; n < 200; n += 1) {
       const chipsBefore = (await store.get(userId))?.chips ?? 0;
-      const bankBefore = await store.bank();
+      const bankBefore = await store.bank("slots");
 
       await spin(client, 5);
 
       const chipsAfter = (await store.get(userId))?.chips ?? 0;
-      const bankAfter = await store.bank();
+      const bankAfter = await store.bank("slots");
       expect(chipsAfter - chipsBefore + (bankAfter - bankBefore)).toBe(0);
     }
   });
@@ -198,7 +198,7 @@ describe("a spin", () => {
     const { client, store } = await openMachine({ bank: 500_000, chips: 100_000 });
     for (let n = 0; n < 200; n += 1) {
       await spin(client, 5);
-      expect(await store.bank()).toBeGreaterThanOrEqual(0);
+      expect(await store.bank("slots")).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -218,7 +218,7 @@ describe("a spin", () => {
         const cost = result.wasFree ? 0 : 5;
         expect(after - before).toBe(result.won - cost);
         expect(result.balance).toBe(after);
-        expect(result.bank).toBe(await store.bank());
+        expect(result.bank).toBe(await store.bank("slots"));
       }
     }
   });
@@ -233,21 +233,21 @@ describe("a spin", () => {
   it("puts nothing on the felt when it refuses", async () => {
     const { client, store, userId } = await openMachine({ bank: 50_000 });
     const before = (await store.get(userId))?.chips ?? 0;
-    const bank = await store.bank();
+    const bank = await store.bank("slots");
 
     await spin(client, maxStake(50_000) + 1);
 
     expect((await store.get(userId))?.chips).toBe(before);
-    expect(await store.bank()).toBe(bank);
+    expect(await store.bank("slots")).toBe(bank);
   });
 
   it("refuses a stake the player cannot cover", async () => {
     const { client, store } = await openMachine({ bank: 5_000_000, chips: 3 });
-    const bank = await store.bank();
+    const bank = await store.bank("slots");
     const result = await spin(client, 10);
     expect(result.ok).toBe(false);
     // And the bank did not quietly keep a stake that was never paid.
-    expect(await store.bank()).toBe(bank);
+    expect(await store.bank("slots")).toBe(bank);
   });
 
   it("refuses a stake that is not a positive whole number", async () => {
@@ -311,7 +311,7 @@ describe("stocking the bank", () => {
     // What the machine may then offer, derived from the paytable's top line.
     expect(response.body["maxStake"]).toBe(maxStake(50_000));
     expect(response.body["maxStake"]).toBeGreaterThan(0);
-    expect(await store.bank()).toBe(50_000);
+    expect(await store.bank("slots")).toBe(50_000);
   });
 
   it("refuses anybody who is not an admin", async () => {
@@ -328,14 +328,14 @@ describe("stocking the bank", () => {
     // 404 rather than 403, in step with every other admin route: whether this
     // endpoint exists is not something an unauthorised visitor needs to learn.
     expect(response.status).toBe(404);
-    expect(await store.bank()).toBe(0);
+    expect(await store.bank("slots")).toBe(0);
   });
 
   it("refuses everybody when the admin list is unset", async () => {
     // admin.ts fails closed, and so does this.
     const { base, store } = await openMachine({ bank: 0, discordId: "d-admin" });
     expect((await post(`${base}/api/admin/bank`, { amount: 500 })).status).toBe(404);
-    expect(await store.bank()).toBe(0);
+    expect(await store.bank("slots")).toBe(0);
   });
 
   it("refuses an amount that is not a positive whole number", async () => {
@@ -344,7 +344,7 @@ describe("stocking the bank", () => {
     for (const amount of [0, -1, 2.5, "lots", null]) {
       expect((await post(`${base}/api/admin/bank`, { amount })).status).toBe(400);
     }
-    expect(await store.bank()).toBe(0);
+    expect(await store.bank("slots")).toBe(0);
   });
 
   it("reports what the bank holds and what it can therefore offer", async () => {
@@ -415,7 +415,7 @@ describe("the jackpot", () => {
     // 40% of 500,010 — the bank with the stake already in it.
     expect(result.won).toBe(200_004);
     expect((await store.get(userId))?.chips).toBe(chipsBefore - 10 + 200_004);
-    expect(await store.bank()).toBe(500_000 + 10 - 200_004);
+    expect(await store.bank("slots")).toBe(500_000 + 10 - 200_004);
   });
 
   it("pays once, not once per line", async () => {
@@ -430,7 +430,7 @@ describe("the jackpot", () => {
     });
     const result = await spin(client, 10);
     expect(result.ok && result.won).toBe(200_004);
-    expect(await store.bank()).toBeGreaterThan(0);
+    expect(await store.bank("slots")).toBeGreaterThan(0);
   });
 
   it("still leaves the bank solvent at the largest stake the cap allows", async () => {
@@ -444,7 +444,7 @@ describe("the jackpot", () => {
     // The most this bank can certainly cover.
     const result = await spin(client, maxStake(bank));
     expect(result.ok).toBe(true);
-    expect(await store.bank()).toBeGreaterThanOrEqual(0);
+    expect(await store.bank("slots")).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -473,14 +473,14 @@ describe("the machine played for nothing", () => {
      */
     const { client, store, userId } = await openMachine({ bank: 500_000, chips: 10_000 });
     const chipsBefore = (await store.get(userId))?.chips ?? 0;
-    const bankBefore = await store.bank();
+    const bankBefore = await store.bank("slots");
 
     for (let n = 0; n < 100; n += 1) {
       expect((await play(client, 250)).ok).toBe(true);
     }
 
     expect((await store.get(userId))?.chips).toBe(chipsBefore);
-    expect(await store.bank()).toBe(bankBefore);
+    expect(await store.bank("slots")).toBe(bankBefore);
   });
 
   it("plays without an account at all", async () => {
@@ -702,10 +702,10 @@ describe("buying fewer lines", () => {
     for (const lines of [1, 2, 3, 5, 9]) {
       for (let n = 0; n < 20; n += 1) {
         const chipsBefore = (await store.get(userId))?.chips ?? 0;
-        const bankBefore = await store.bank();
+        const bankBefore = await store.bank("slots");
         await spinLines(client, 90 * lines, lines);
         const chipsAfter = (await store.get(userId))?.chips ?? 0;
-        expect(chipsAfter - chipsBefore + ((await store.bank()) - bankBefore)).toBe(0);
+        expect(chipsAfter - chipsBefore + ((await store.bank("slots")) - bankBefore)).toBe(0);
       }
     }
   });
@@ -800,7 +800,7 @@ describe("the free spins", () => {
     });
     await spin(client, 10);
     const after = (await store.get(userId))?.chips ?? 0;
-    const bankAfter = await store.bank();
+    const bankAfter = await store.bank("slots");
 
     const free = await spin(client, 10);
 
@@ -811,7 +811,7 @@ describe("the free spins", () => {
     expect(free.wasFree).toBe(true);
     // The player is no poorer and the bank is no richer: nothing was staked.
     expect((await store.get(userId))?.chips).toBe(after + free.won);
-    expect(await store.bank()).toBe(bankAfter - free.won);
+    expect(await store.bank("slots")).toBe(bankAfter - free.won);
   });
 
   it("counts them down and stops", async () => {
@@ -916,12 +916,12 @@ describe("the free spins", () => {
       spinRandom: () => SEVENS,
     });
     for (let n = 0; n < 12; n += 1) {
-      const result = await spin(client, maxStake(await store.bank()));
+      const result = await spin(client, maxStake(await store.bank("slots")));
       if (!result.ok) {
         break;
       }
-      expect(await store.bank()).toBeGreaterThanOrEqual(0);
+      expect(await store.bank("slots")).toBeGreaterThanOrEqual(0);
     }
-    expect(await store.bank()).toBeGreaterThanOrEqual(0);
+    expect(await store.bank("slots")).toBeGreaterThanOrEqual(0);
   });
 });

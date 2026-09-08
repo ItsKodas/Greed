@@ -34,7 +34,18 @@ describe("public surface", () => {
   });
 });
 
-describe("cross-module invariants over all 46656 six-dice rolls", () => {
+/*
+ * Exhaustive, and slow because of it: every one of these walks all 46,656
+ * six-dice rolls and calls into the rules for each.
+ *
+ * The default five seconds is enough when this file runs alone and is not when
+ * the whole suite is competing for workers, which made it fail perhaps one run
+ * in three and pass every time it was looked at on its own. Raised rather than
+ * sampled: the value of an exhaustive check is that it is exhaustive, and a
+ * timeout that depends on what else is running is not a statement about the
+ * rules at all.
+ */
+describe("cross-module invariants over all 46656 six-dice rolls", { timeout: 30_000 }, () => {
   const rolls = allRolls(6);
 
   it("agrees between hasAnyScore and enumerateOptions", () => {
