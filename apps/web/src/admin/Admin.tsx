@@ -49,6 +49,7 @@ export function Admin() {
 
       {allowed === null ? null : allowed ? (
         <div className="profile">
+          <Bank />
           <Mint onMinted={load} />
           <section className="panel">
             <p className="panel__label">Codes</p>
@@ -80,6 +81,89 @@ export function Admin() {
         <p className="not-found">No such page.</p>
       )}
     </main>
+  );
+}
+
+/**
+ * The slot machine's bank.
+ *
+ * The only way chips enter that bank from outside play, which is why it sits
+ * behind the same allowlist as minting a code: it is the same power. It is a
+ * deliberate act rather than something automatic because an empty bank offers
+ * a stake of zero — the machine cannot open itself, and somebody has to strike
+ * the match.
+ */
+function Bank() {
+  const [held, setHeld] = useState<{ bank: number; maxStake: number } | null>(null);
+  const [amount, setAmount] = useState("50000");
+  const [said, setSaid] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    void fetch("/api/admin/bank", { credentials: "include" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { bank: number; maxStake: number } | null) => setHeld(body))
+      .catch(() => setHeld(null));
+  }, []);
+
+  useEffect(load, [load]);
+
+  const float = () => {
+    const chips = Number(amount);
+    if (!Number.isFinite(chips) || chips < 1) {
+      setSaid("Give it an amount.");
+      return;
+    }
+    void fetch("/api/admin/bank", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ amount: Math.floor(chips) }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { bank: number; maxStake: number } | null) => {
+        if (body === null) {
+          setSaid("That was refused.");
+          return;
+        }
+        setHeld(body);
+        setSaid(`Bank now holds ${fmt(body.bank)}.`);
+      })
+      .catch(() => setSaid("Could not reach the room."));
+  };
+
+  return (
+    <section className="panel">
+      <p className="panel__label">Slots bank</p>
+      {held === null ? (
+        <p className="panel__note">Could not read it.</p>
+      ) : (
+        <p className="bank__held">
+          <strong className="code__chips">{fmt(held.bank)}</strong>
+          <span className="panel__note">
+            {held.maxStake < 1
+              ? "Empty, so the machine will not take a spin at any stake."
+              : `Covers a stake of ${fmt(held.maxStake)} a spin.`}
+          </span>
+        </p>
+      )}
+      <label className="field">
+        <span className="field__label">Add a float</span>
+        <input
+          className="field__input"
+          value={amount}
+          inputMode="numeric"
+          onChange={(event) => setAmount(event.target.value)}
+        />
+      </label>
+      <button type="button" className="btn btn--wide" onClick={float}>
+        Put it in the bank
+      </button>
+      <p className="panel__note">
+        Players fill this from then on, chip for chip, and every win comes back out of it. This
+        is the only other way in.
+      </p>
+      {said === null ? null : <p className="panel__note">{said}</p>}
+    </section>
   );
 }
 

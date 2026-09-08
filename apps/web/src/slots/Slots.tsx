@@ -262,7 +262,7 @@ function BankSign({ bank, jackpot }: { bank: number; jackpot: number }) {
       <strong className="slots__bank-figure">{credits(jackpot)}</strong>
       <span className="slots__bank-note">
         {bank === 0
-          ? "The bank is empty. It fills as people play, and pays back out of what they staked."
+          ? "The bank has not been stocked yet, so the machine is shut."
           : `of ${credits(bank)} in the bank — every credit of it staked by somebody`}
       </span>
     </div>
@@ -345,7 +345,13 @@ function Controls({
       <div className="slots__stakes" role="radiogroup" aria-label="Credits per spin">
         {offered.length === 0 ? (
           <p className="slots__shut">
-            The bank is empty, so there is nothing to play for yet. It fills as people play.
+            {/*
+             * Not "it fills as people play" — nobody can play at zero, so that
+             * reads as a machine that will fix itself and never does. What is
+             * true is that it is waiting on the house to open it.
+             */}
+            Nothing to play for yet. This machine only ever pays out what players have put in,
+            so the house has to stock it once before the first spin.
           </p>
         ) : (
           offered.map((amount) => (

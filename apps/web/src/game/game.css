@@ -2317,3 +2317,14 @@
 .gate .panel__note a:hover {
   color: var(--gr-color-neon-hi);
 }
+
+/* What the slot machine's bank holds, on the admin desk. */
+.bank__held {
+  margin: 0 0 var(--gr-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xl);
+  font-variant-numeric: tabular-nums;
+}
