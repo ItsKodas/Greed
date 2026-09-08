@@ -234,12 +234,22 @@
  * The coin tray. Empty on purpose: it is the bottom edge of a machine, and a
  * machine that stops in a straight line reads as a panel.
  */
+/*
+ * The coin tray: the bottom edge of the cabinet, not a panel sitting near it.
+ *
+ * Inset on all four sides it read as a hole in the machine — a dark rounded
+ * box floating with cabinet showing all round it, which is a gap rather than a
+ * tray. Flush to the edges it becomes part of the cabinet: the body clips it
+ * to its own bottom radius, and the lit line along the top is the front lip of
+ * a recess, which is the whole of what makes it read as one.
+ */
 .cab__tray {
-  height: 26px;
-  margin: 0 var(--gr-space-4) var(--gr-space-3);
-  border-radius: 0 0 14px 14px;
-  background: linear-gradient(180deg, rgb(0 0 0 / 0.62), rgb(0 0 0 / 0.28));
-  box-shadow: inset 0 5px 9px rgb(0 0 0 / 0.6);
+  height: 18px;
+  border-top: 1px solid rgb(0 0 0 / 0.55);
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.72), rgb(0 0 0 / 0.34));
+  box-shadow:
+    inset 0 4px 8px rgb(0 0 0 / 0.55),
+    inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
 
 /* -------------------------------------------------------- the spin button */

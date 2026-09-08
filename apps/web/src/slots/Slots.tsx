@@ -968,7 +968,9 @@ export default function Slots() {
               </div>
 
               {/* Where the coins would land. Empty, and that is the point: it
-                  is the bottom edge of a machine rather than a panel. */}
+                  is the bottom edge of a machine rather than a panel — which
+                  is why it runs to the cabinet's edges rather than sitting
+                  inside them. */}
               <div className="cab__tray" aria-hidden="true" />
             </div>
 
