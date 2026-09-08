@@ -1,3 +1,6 @@
+import type { Face } from "@backroom/game-slots";
+import { FaceDefs, ReelFace } from "../slots/Symbols.js";
+
 /**
  * What a game keeps in the corner of its tile.
  *
@@ -135,88 +138,110 @@ export function ChipsArt() {
   );
 }
 
-/** A chip, seen face on. */
-function ChipFace({ y }: { y: number }) {
-  return (
-    <g transform={`translate(0 ${y})`}>
-      <circle cx="0" cy="0" r="15" fill="#e0b048" />
-      <circle cx="0" cy="0" r="15" fill="none" stroke="#171b22" strokeWidth="2.5" strokeDasharray="5 4" />
-      <circle cx="0" cy="0" r="7" fill="#171b22" opacity="0.45" />
-    </g>
-  );
-}
-
-/** The seven, drawn rather than typed: a glyph is only as good as its font. */
-function SevenFace({ y }: { y: number }) {
-  return (
-    <path
-      transform={`translate(0 ${y})`}
-      d="M-9 -14 L9 -14 L9 -9 L1 14 L-5 14 L3 -9 L-9 -9 Z"
-      fill="#ff86d4"
-    />
-  );
-}
-
-function BellFace({ y }: { y: number }) {
-  return (
-    <g transform={`translate(0 ${y})`}>
-      <path
-        d="M0 -15 C 7 -15, 11 -9, 11 -2 C 11 5, 13 8, 14 10 L -14 10 C -13 8, -11 5, -11 -2 C -11 -9, -7 -15, 0 -15 Z"
-        fill="#e8c168"
-      />
-      <circle cx="0" cy="13" r="3" fill="#e8c168" />
-    </g>
-  );
-}
-
 /**
  * The machine against the wall.
  *
- * Three reels behind a window, each carrying more faces than the window shows,
+ * Five reels behind a window, each carrying more faces than the window shows,
  * so the roll on hover has somewhere to come from and somewhere to go. Its
  * motion is in game.css beside the cabinet: a reel rolls, it does not fly out
  * of a corner like the furniture on a table game's tile.
+ *
+ * Five windows, and the faces the machine actually shows.
+ *
+ * Five because the machine has five, and a card advertising three was
+ * advertising a different game. They were drawn here as chips and bells until
+ * the reels were redrawn, and neither of those has been on the strip since —
+ * so the faces come from the machine now rather than being kept in step by
+ * somebody remembering to.
+ *
+ * `FaceDefs` comes with them because the drawings are painted with its
+ * gradients. Mounted inside this art rather than at the page, so a room that
+ * never lists a machine never carries them.
  */
+/*
+ * Laid out wide rather than square.
+ *
+ * The screen this sits in is about three times as wide as it is tall, and an
+ * SVG fits its drawing to whichever axis runs out first — so a 200x160 box
+ * scaled to the height and used half the width, leaving the reels small and
+ * marooned in the middle of a lit screen. Four hundred by a hundred and sixty
+ * is much closer to the shape it is drawn into, so the windows get the room.
+ *
+ * The rows stay forty apart whatever else moves here: the roll in game.css
+ * steps a reel by exactly one face, and it is written in these coordinates.
+ */
+const WINDOWS = [20, 98, 176, 254, 332];
+const WINDOW_W = 48;
+/** A face is drawn in a 60-unit box, and this is what fits it in a window. */
+const FACE_SCALE = 0.6;
+
+/**
+ * What each reel is showing, top to bottom.
+ *
+ * Five faces on a strip of three windows' worth, so there is always something
+ * arriving and something leaving as it rolls. Different down each reel: five
+ * identical strips would roll into a row of the same face, which is a jackpot
+ * on a card advertising a machine nobody has played.
+ */
+const STRIPS: Face[][] = [
+  ["seven", "tumbler", "cigar", "diamond", "spade"],
+  ["diamond", "seven", "dice", "tumbler", "cigar"],
+  ["cigar", "spade", "seven", "diamond", "dice"],
+  ["tumbler", "diamond", "spade", "seven", "cigar"],
+  ["dice", "cigar", "diamond", "spade", "seven"],
+];
+
 export function ReelsArt() {
-  const reels = [20, 76, 132];
   return (
-    <svg viewBox="0 0 200 160" role="img" aria-hidden="true" focusable="false">
+    <svg viewBox="0 0 400 160" role="img" aria-hidden="true" focusable="false">
       <defs>
-        {reels.map((x, index) => (
+        {WINDOWS.map((x, index) => (
           <clipPath key={x} id={`reel-window-${index}`}>
-            <rect x={x} y="18" width="48" height="124" rx="6" />
+            <rect x={x} y="18" width={WINDOW_W} height="124" rx="5" />
           </clipPath>
         ))}
       </defs>
-      {reels.map((x, index) => (
+      <FaceDefs />
+      {WINDOWS.map((x, index) => (
         <g key={x}>
-          <rect x={x} y="18" width="48" height="124" rx="6" fill="#0f0a14" />
+          <rect x={x} y="18" width={WINDOW_W} height="124" rx="5" fill="#0f0a14" />
           <g clipPath={`url(#reel-window-${index})`}>
             {/*
              * Two groups, not one. The stylesheet rolls the inner one with a
              * CSS transform, and a CSS transform *replaces* an element's
              * transform attribute rather than composing with it — so putting
              * this reel across on the same group would have the roll wipe out
-             * the placement and stack all three reels at x=0, outside their
-             * own windows.
+             * the placement and stack every reel at x=0, outside its own
+             * window.
              */}
-            <g transform={`translate(${x + 24} 0)`}>
+            <g transform={`translate(${x + WINDOW_W / 2} 0)`}>
               {/* Numbered so the stylesheet can roll each one a beat apart. */}
               <g className={`art__piece art__piece--${index + 1}`}>
-                <ChipFace y={40} />
-                <SevenFace y={80} />
-                <BellFace y={120} />
-                <ChipFace y={160} />
-                <SevenFace y={200} />
+                {(STRIPS[index] as Face[]).map((face, row) => (
+                  <g
+                    // Position is the identity here: a strip is a fixed run of
+                    // rows, and a face can repeat down one.
+                    // biome-ignore lint/suspicious/noArrayIndexKey: a strip is positional
+                    key={row}
+                    /*
+                     * A face is drawn into a 60-unit box with its middle at
+                     * (30, 30), so half of the scaled box comes back off both
+                     * axes to sit that middle on the row.
+                     */
+                    transform={`translate(${-30 * FACE_SCALE} ${40 + row * 40 - 30 * FACE_SCALE}) scale(${FACE_SCALE})`}
+                  >
+                    <ReelFace face={face} />
+                  </g>
+                ))}
               </g>
             </g>
           </g>
           <rect
             x={x}
             y="18"
-            width="48"
+            width={WINDOW_W}
             height="124"
-            rx="6"
+            rx="5"
             fill="none"
             stroke="#3a2749"
             strokeWidth="2"

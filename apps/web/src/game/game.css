@@ -1867,14 +1867,23 @@
 }
 
 /* A machine is upright, like a cabinet against a wall. It is not a table. */
+/*
+ * The machines, on the same grid as everything else.
+ *
+ * They used to be a narrow flex row — a cabinet is upright where a table is
+ * wide, and the shape said what kind of thing it was before the name was read.
+ * At a third of the width of every other card it read as a smaller offer
+ * rather than a different one, so the footprint matches now and the drawing
+ * inside it does the work instead.
+ */
 .room__machines {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: var(--gr-space-3);
-  flex-wrap: wrap;
 }
 
 .cabinet {
-  width: 148px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-2);
