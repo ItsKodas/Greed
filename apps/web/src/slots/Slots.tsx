@@ -121,12 +121,14 @@ export function holdsFor(grid: Face[][]): number[] {
   return [0, 1, 2, 3, 4].map((reel) => (reel >= 3 && reel <= best ? HOLD_MS : 0));
 }
 
-/** What the machine says it just did. */
-function sayWhat(jackpot: boolean, won: number): string | null {
-  if (jackpot) {
-    return `JACKPOT — ${exact(won)} chips`;
-  }
-  return won > 0 ? `${exact(won)} chips` : null;
+/**
+ * The figure the machine puts on its screen.
+ *
+ * Just the number: the screen labels it "Paid" or "Jackpot" above, so carrying
+ * the word down here would print it twice.
+ */
+function sayWhat(won: number): string | null {
+  return won > 0 ? exact(won) : null;
 }
 
 /** The tray, smallest first, because it reads left to right. */
@@ -218,6 +220,8 @@ export default function Slots() {
     null,
   );
   const [said, setSaid] = useState<string | null>(null);
+  /** Something refused. Separate from what a spin paid, and said straight away. */
+  const [problem, setProblem] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   /*
    * The stake, gone from the shown balance the moment it is pressed.
@@ -414,6 +418,7 @@ export default function Slots() {
     setLit(false);
     setWasJackpot(false);
     setSaid(null);
+    setProblem(null);
   };
 
   const pull = () => {
@@ -452,7 +457,7 @@ export default function Slots() {
       setSpinning(false);
       setSettling(false);
       setPending(0);
-      setSaid("The machine did not answer. Nothing was staked.");
+      setProblem("The machine did not answer. Nothing was staked.");
     }, PATIENCE_MS);
 
     socket.emit(
@@ -471,7 +476,7 @@ export default function Slots() {
         // and the machine stops making the noise of a spin.
         hush();
         setSettling(false);
-        setSaid(result.error);
+        setProblem(result.error);
         readSign();
         return;
       }
@@ -498,7 +503,7 @@ export default function Slots() {
           maxStake: maxStake(result.bank),
           jackpot: jackpotPay(result.bank),
         });
-        setSaid(sayWhat(result.jackpot, result.won));
+        setSaid(sayWhat(result.won));
         return;
       }
       /*
@@ -513,7 +518,7 @@ export default function Slots() {
         jackpot: jackpotPay(result.bank),
       });
       account.setChips(result.balance);
-      setSaid(sayWhat(result.jackpot, result.won));
+      setSaid(sayWhat(result.won));
     });
   };
 
@@ -570,7 +575,16 @@ export default function Slots() {
           <div className="cab">
             <div className="cab__body">
               <div className="cab__marquee">
-                <BankSign bank={shown?.bank ?? 0} jackpot={shown?.jackpot ?? 0} forFun={forFun} />
+                <Marquee
+                  bank={shown?.bank ?? 0}
+                  jackpot={shown?.jackpot ?? 0}
+                  forFun={forFun}
+                  said={said}
+                  problem={problem}
+                  lines={lines}
+                  wasJackpot={wasJackpot}
+                  showing={lit}
+                />
               </div>
 
               <div className="cab__glass">
@@ -592,14 +606,6 @@ export default function Slots() {
               </div>
 
               <div className="cab__belly">
-                <p
-                  className={`slots__said${said?.startsWith("JACKPOT") === true ? " slots__said--big" : ""}`}
-                  aria-live="polite"
-                >
-                  {said ?? " "}
-                </p>
-                {lit ? <WinBreakdown lines={lines} jackpot={wasJackpot} /> : null}
-
                 {canPlay ? (
                   <Controls
                     stake={stake}
@@ -782,32 +788,78 @@ function LinePicker({
   );
 }
 
-/** What the machine is playing for, which is the reason to play it. */
-function BankSign({
+/**
+ * The screen across the top of the machine.
+ *
+ * A status display rather than a jackpot sign. At rest it shows what there is
+ * to play for, because that is the reason anybody is standing here; the moment
+ * a spin says something it shows that instead, and goes back when the next
+ * pull starts.
+ *
+ * One screen doing both is how a real cabinet works, and it is also the only
+ * place on the machine a message can go without pushing the reels down the
+ * page every time somebody wins.
+ */
+export function Marquee({
   bank,
   jackpot,
   forFun,
+  said,
+  problem,
+  lines,
+  wasJackpot,
+  showing,
 }: {
   bank: number;
   jackpot: number;
   forFun: boolean;
+  /** What the last spin paid. Only ever shown once the reels have stopped. */
+  said: string | null;
+  /** Something refused, which may be said at any time. */
+  problem: string | null;
+  lines: SpinLine[];
+  wasJackpot: boolean;
+  /** Whether the reels have finished and the outcome may be shown. */
+  showing: boolean;
 }) {
+  const outcome = showing && (lines.length > 0 || wasJackpot);
+  /*
+   * Kept apart from the outcome on purpose. The answer is in long before the
+   * reels finish saying it, so a screen that printed the figure as soon as it
+   * arrived would give away what the last reel is still hiding — which is the
+   * one thing this machine must not do.
+   */
+  const message = problem !== null && !outcome;
+
   return (
-    <div className={`slots__bank${forFun ? " slots__bank--fun" : ""}`}>
-      <span className="slots__bank-label">Jackpot</span>
-      {/*
-        * In full, never shortened. This is the one number on the page somebody
-        * is here for, and "19.9K" is a rounder answer to "what am I playing
-        * for" than the question deserves.
-        */}
-      <strong className="slots__bank-figure">{exact(jackpot)}</strong>
-      <span className="slots__bank-note">
-        {forFun
-          ? `of ${exact(bank)} in the bank — play money, and none of it anybody's`
-          : bank === 0
-            ? "The bank has not been stocked yet, so the machine is shut."
-            : `of ${exact(bank)} in the bank — every chip of it staked by somebody`}
-      </span>
+    <div
+      className={`screen${forFun ? " screen--fun" : ""}${wasJackpot && showing ? " screen--jackpot" : ""}`}
+      aria-live="polite"
+    >
+      {outcome ? (
+        <>
+          <span className="screen__label">{wasJackpot ? "Jackpot" : "Paid"}</span>
+          <strong className="screen__figure">{said ?? ""}</strong>
+          <WinBreakdown lines={lines} jackpot={wasJackpot} />
+        </>
+      ) : message ? (
+        <>
+          <span className="screen__label">The machine says</span>
+          <p className="screen__note screen__note--said">{problem}</p>
+        </>
+      ) : (
+        <>
+          <span className="screen__label">Jackpot</span>
+          <strong className="screen__figure">{exact(jackpot)}</strong>
+          <p className="screen__note">
+            {forFun
+              ? `of ${exact(bank)} in the bank — play money, and none of it anybody's`
+              : bank === 0
+                ? "The bank has not been stocked yet, so the machine is shut."
+                : `of ${exact(bank)} in the bank — every chip of it staked by somebody`}
+          </p>
+        </>
+      )}
     </div>
   );
 }

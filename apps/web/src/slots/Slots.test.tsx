@@ -2,7 +2,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Face } from "@backroom/game-slots";
-import { HOLD_MS, holdsFor, PaylineOverlay } from "./Slots.js";
+import { HOLD_MS, holdsFor, Marquee, PaylineOverlay } from "./Slots.js";
 
 describe("a win", () => {
   it("lights every line that paid", () => {
@@ -127,6 +127,147 @@ describe("holding a reel back", () => {
     // A run that died on reel two: nothing after it is worth waiting for.
     const grid = g([s7, s7, s7], [s7, s7, s7], [d, d, d], [s7, s7, s7], [s7, s7, s7]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
+  });
+});
+
+/**
+ * The screen across the top of the machine.
+ *
+ * One panel doing two jobs: what there is to play for, and what the last pull
+ * came to. It is the only place on the cabinet a message can go without
+ * pushing the reels down the page every time somebody wins.
+ */
+describe("the machine's screen", () => {
+  const chipLine = (line: number) => ({ line, face: "chip" as const, length: 3, pay: 1000 });
+
+  it("shows what there is to play for when nothing has happened", () => {
+    const { container } = render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said={null}
+        problem={null}
+        lines={[]}
+        wasJackpot={false}
+        showing={false}
+      />,
+    );
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
+    expect(container.querySelector(".screen__figure")?.textContent).toBe("3,200,000");
+  });
+
+  it("shows the outcome once the reels have finished", () => {
+    const { container } = render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said="6,000"
+        problem={null}
+        lines={[chipLine(0), chipLine(1)]}
+        wasJackpot={false}
+        showing
+      />,
+    );
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Paid");
+    expect(container.querySelector(".screen__figure")?.textContent).toBe("6,000");
+  });
+
+  it("keeps the jackpot up until the reels have actually stopped", () => {
+    // The answer is in long before the reels finish saying it; putting the
+    // outcome up early would give away what the last reel is still hiding.
+    const { container } = render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said="6,000"
+        problem={null}
+        lines={[chipLine(0)]}
+        wasJackpot={false}
+        showing={false}
+      />,
+    );
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
+  });
+
+  it("groups identical wins rather than listing every line", () => {
+    /*
+     * Three chips across can light six paylines at once, and six rows saying
+     * the same thing filled the belly of the machine and said nothing the
+     * first row had not. The glass already shows which lines lit.
+     */
+    const { container } = render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said="6,000"
+        problem={null}
+        lines={[0, 1, 2, 3, 4, 5].map(chipLine)}
+        wasJackpot={false}
+        showing
+      />,
+    );
+    const rows = [...container.querySelectorAll(".won__row")];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.textContent).toContain("3 × chip");
+    expect(rows[0]?.textContent).toContain("on 6 lines");
+    // And the total across all six, not one of them.
+    expect(rows[0]?.textContent).toContain("6,000");
+  });
+
+  it("keeps different wins apart", () => {
+    const { container } = render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said="9,000"
+        problem={null}
+        lines={[chipLine(0), { line: 1, face: "bell", length: 5, pay: 8000 }]}
+        wasJackpot={false}
+        showing
+      />,
+    );
+    expect(container.querySelectorAll(".won__row")).toHaveLength(2);
+    // Biggest first: the thing worth looking at is at the top.
+    expect(container.querySelectorAll(".won__row")[0]?.textContent).toContain("5 × bell");
+  });
+
+  it("says the jackpot in its own words", () => {
+    const { container } = render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said="3,200,000"
+        problem={null}
+        lines={[]}
+        wasJackpot
+        showing
+      />,
+    );
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
+    expect(container.querySelector(".won__row--jackpot")?.textContent).toContain("Five sevens");
+    expect(container.querySelector(".screen--jackpot")).not.toBeNull();
+  });
+
+  it("puts a refusal on the screen rather than swallowing it", () => {
+    const { container } = render(
+      <Marquee
+        bank={0}
+        jackpot={0}
+        forFun={false}
+        said={null}
+        problem="The bank is empty."
+        lines={[]}
+        wasJackpot={false}
+        showing={false}
+      />,
+    );
+    expect(container.querySelector(".screen__note--said")?.textContent).toBe("The bank is empty.");
   });
 });
 
