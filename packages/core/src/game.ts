@@ -24,6 +24,23 @@ export interface PlayTable {
    */
   readonly maxSeats: number;
 
+  /**
+   * Whether standing up in the middle of a hand can be honoured there and then.
+   *
+   * A deliberate leave should take the seat away — whoever pressed it is not
+   * coming back — but at most tables it cannot happen until the hand is over.
+   * A blackjack stake is already on the felt and the hand has to play out and
+   * settle before anybody can be paid, so the seat is held and the player is
+   * treated as dropped. Poker is the exception, because leaving a poker table
+   * is a defined move rather than an interruption: you fold, what you have bet
+   * stays in the pot, and you take your stack with you.
+   *
+   * Left undefined it is false, which is the safe answer for a game that has
+   * not thought about it: a held seat is a delay, and a seat removed from a
+   * game that was not expecting it is a hand that never finishes.
+   */
+  readonly leavesMidHand?: boolean;
+
   join(id: string, name: string, identity: SeatIdentity | null): Seat;
   removeSeat(seatId: string): void;
   disconnect(seatId: string): void;
@@ -85,6 +102,24 @@ export interface GameAdapter<T extends PlayTable = PlayTable> {
    * Called once per finished table. A game that stakes nothing may do nothing.
    */
   settle(table: T, deps: GameDeps): Promise<void>;
+
+  /**
+   * Hands back chips owed to people who have left, if this game owes any.
+   *
+   * Not the same thing as `settle`, and the difference is why both exist.
+   * Settling is once per finished hand: `isSettled` describes a state a table
+   * is *in*, it stays true for as long as the result is on screen, and the
+   * server latches it so a hand cannot pay twice. What a cash game owes
+   * somebody who stood up is a queue instead — items arrive one at a time, and
+   * a latch on the table would pay whoever was first and swallow everybody
+   * behind them.
+   *
+   * So this is called on every broadcast and unlatched. A game that implements
+   * it must take its work off the queue before its first await, which is what
+   * makes calling it often exactly-once per item rather than a way to pay
+   * somebody twice.
+   */
+  payOut?(table: T, deps: GameDeps): Promise<void>;
 
   /** Whose turn is running out, for games with a clock. */
   clock?(table: T): Clock | null;

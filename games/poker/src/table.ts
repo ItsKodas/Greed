@@ -98,6 +98,21 @@ export class Table implements PlayTable {
    */
   readonly owedOut: Array<{ userId: string; name: string; chips: number }> = [];
 
+  /**
+   * What people who have left already put in this hand.
+   *
+   * Their seat goes with them, and their money does not: chips stop being
+   * yours the moment you bet them. Without this the pot is rebuilt from the
+   * seats still at the table, so somebody standing up takes what they had bet
+   * out of the middle — money the hand had already been played for, gone from
+   * a pot somebody else is about to win.
+   *
+   * Held as contributions rather than a single total because side pots are
+   * built from levels: dead money at one level is claimable by everybody at or
+   * above it, and a scalar cannot say which.
+   */
+  private ghosts: Contribution[] = [];
+
   private readonly seating: Seating;
   private deck: Deck | null = null;
   /** The largest raise made on this street, which sets the minimum for the next. */
@@ -144,6 +159,14 @@ export class Table implements PlayTable {
   get status(): TableStatus {
     return this.street === "waiting" ? "lobby" : "playing";
   }
+
+  /*
+   * Yes — `leave` below is written for exactly this. It folds them, leaves what
+   * they bet in the pot, moves the turn on if it was theirs and finishes the
+   * hand if that was the last decision in it. There is nothing about a live
+   * hand that a poker table needs somebody to stay for.
+   */
+  readonly leavesMidHand = true;
 
   watch(socketId: string): void {
     this.seating.watch(socketId);
@@ -235,14 +258,33 @@ export class Table implements PlayTable {
       return;
     }
     const wasIn = this.street !== "waiting" && !gone.folded && gone.hole.length > 0;
+    /*
+     * Standing up mid-hand is folding, not taking your money back off the
+     * table — otherwise the way to never lose a hand would be to close the tab
+     * whenever it was going badly.
+     *
+     * The hand moves on first, while they are still sitting there. It is the
+     * same order `disconnect` uses and it matters for the same reason: `award`
+     * builds the pot out of the seats at the table, so a seat taken away
+     * before the hand finished would take what it had bet with it.
+     */
     if (wasIn) {
       gone.folded = true;
+      if (this.toAct === id) {
+        this.moveOn(id);
+      }
+      this.settleIfDone();
     }
     /*
-     * Whatever is still in front of them comes off the table with them. Chips
-     * already in the pot do not: those stopped being theirs when they bet them,
-     * which is the whole of what a bet is.
+     * Whatever they bet in a hand that is still going stays in the middle
+     * after their seat has gone. Nothing is left to record when the hand ended
+     * just above: `award` empties the middle into the winner's stack and zeroes
+     * every `paid` on the way, so this reads as nothing owed to nobody.
      */
+    if (gone.paid > 0) {
+      this.ghosts.push({ seatId: gone.id, paid: gone.paid, contesting: false });
+    }
+    // What is still in front of them, though, comes off the table with them.
     const left = this.cashOut(id);
     if (left > 0 && gone.userId !== null) {
       this.owedOut.push({ userId: gone.userId, name: gone.name, chips: left });
@@ -250,14 +292,10 @@ export class Table implements PlayTable {
     this.seating.remove(id);
     this.lastEvent = `${gone.name} left`;
     /*
-     * Their chips stay in the pot. Standing up mid-hand is folding, not taking
-     * your money back off the table — otherwise the way to never lose a hand
-     * would be to close the tab whenever it was going badly.
+     * Asked again, because the hand may only now be down to one player: the
+     * seat that just went could have been the last one anybody was waiting on.
      */
-    if (wasIn) {
-      if (this.toAct === id) {
-        this.moveOn(id);
-      }
+    if (!wasIn) {
       this.settleIfDone();
     }
   }
@@ -637,11 +675,16 @@ export class Table implements PlayTable {
   /** Works out who won what, moves the chips, and ends the hand. */
   private award(): void {
     const contested = this.live;
-    const contributions: Contribution[] = this.inHand.map((seat) => ({
-      seatId: seat.id,
-      paid: seat.paid,
-      contesting: !seat.folded,
-    }));
+    const contributions: Contribution[] = [
+      ...this.inHand.map((seat) => ({
+        seatId: seat.id,
+        paid: seat.paid,
+        contesting: !seat.folded,
+      })),
+      // Money from seats that are no longer here. Nobody is contesting it, so
+      // it is claimable by whoever is still in at that level, same as a fold.
+      ...this.ghosts,
+    ];
 
     /*
      * A showdown only happens if more than one player is still in it. When
@@ -721,6 +764,7 @@ export class Table implements PlayTable {
       seat.committed = 0;
       seat.paid = 0;
     }
+    this.ghosts = [];
 
     const first = this.paid[0];
     this.lastEvent =
@@ -751,6 +795,9 @@ export class Table implements PlayTable {
 
   /** Everything in the middle: what has been swept in plus what is on the felt. */
   get pot(): number {
-    return this.seats.reduce((total, seat) => total + seat.paid, 0);
+    return (
+      this.seats.reduce((total, seat) => total + seat.paid, 0) +
+      this.ghosts.reduce((total, ghost) => total + ghost.paid, 0)
+    );
   }
 }

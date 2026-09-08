@@ -316,6 +316,56 @@ describe("leaving", () => {
     expect(made.seats).toHaveLength(2);
   });
 
+  it("leaves the money a departing seat had already bet in the pot", () => {
+    /*
+     * The seat goes; what it bet does not. Rebuilding the pot from the seats
+     * still at the table loses it — and the existing test above misses that,
+     * because the seat it walks out is the one to act, who preflop has put in
+     * nothing. This one walks out a blind.
+     */
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const potWas = made.pot;
+    const blind = made.seats.find((seat) => seat.paid > 0 && seat.id !== made.toAct);
+    made.leave((blind as { id: string }).id);
+
+    expect(made.pot).toBe(potWas);
+    expect(made.street).toBe("preflop");
+  });
+
+  it("neither mints nor loses a chip when somebody walks out mid-hand", () => {
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const before = chips(made);
+    const blind = made.seats.find((seat) => seat.paid > 0 && seat.id !== made.toAct);
+    made.leave((blind as { id: string }).id);
+
+    // What they took off the table, plus what is left on it, is what there was.
+    const took = made.owedOut.reduce((total, one) => total + one.chips, 0);
+    expect(chips(made) + took).toBe(before);
+  });
+
+  it("pays the dead money of somebody who left to whoever wins the hand", () => {
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const potWas = made.pot;
+    const blind = made.seats.find((seat) => seat.paid > 0 && seat.id !== made.toAct);
+    made.leave((blind as { id: string }).id);
+
+    // The other two fold it out, so the last one standing takes the lot —
+    // including the blind of somebody who is no longer at the table.
+    while (made.street === "preflop" && made.toAct !== null && made.seats.length > 1) {
+      const before = made.toAct;
+      made.act(before, "fold");
+      if (made.toAct === before) {
+        break;
+      }
+    }
+    expect(made.street).toBe("showdown");
+    const won = made.paid.reduce((total, one) => total + one.chips, 0);
+    expect(won).toBe(potWas);
+  });
+
   it("ends the hand when everybody but one has gone", () => {
     const made = table([1_000, 1_000, 1_000]);
     made.deal();

@@ -1146,6 +1146,21 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         .settle(seated.table, deps)
         .catch((error) => console.error("settling failed", error));
     }
+    /*
+     * And separately, anything owed to somebody who has already left.
+     *
+     * Deliberately outside the flag above. That guards a state — a hand stays
+     * settled for as long as its result is up, and without the flag it would
+     * pay every time anybody was sent anything. What this drains is a queue,
+     * so the guard against paying twice is that the game empties it before its
+     * first await, and the guard against never paying is that this is asked
+     * every time rather than once.
+     */
+    if (seated.game.payOut !== undefined) {
+      void seated.game
+        .payOut(seated.table, deps)
+        .catch((error) => console.error("paying out failed", error));
+    }
   }
 
 
@@ -1617,9 +1632,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         reapWhenEmpty(seat.code);
         return;
       }
-      // Deliberate, so the seat goes now rather than being held for a
-      // reconnection that is not coming.
-      if (room.table.status === "lobby") {
+      /*
+       * Deliberate, so the seat goes now rather than being held for a
+       * reconnection that is not coming.
+       *
+       * Mid-hand it usually cannot: a blackjack stake is on the felt and the
+       * hand has to play out before anybody can be paid, so the seat is held
+       * and the player is treated as dropped. A game that says it can be left
+       * mid-hand has somewhere for the chips to go, and holding the seat there
+       * would strand them — nothing schedules the grace reaper on this path,
+       * because nothing here is waiting for a reconnection.
+       */
+      if (room.table.status === "lobby" || room.table.leavesMidHand === true) {
         room.table.removeSeat(seat.seatId);
       } else {
         room.table.disconnect(seat.seatId);

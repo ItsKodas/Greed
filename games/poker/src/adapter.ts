@@ -92,19 +92,25 @@ export function pokerAdapter(
     },
 
     /*
-     * Not "the game is over" — a poker table never is, it deals another hand.
+     * Never, in the sense the room means it.
      *
-     * What this means here is "there are chips to move", which for poker is
-     * somebody having stood up with a stack in front of them. Reusing the
-     * room's settle-once machinery for it rather than adding a leave hook: the
-     * machinery already guarantees the one thing that matters, which is that
-     * it runs exactly once per thing owed.
+     * A poker table does not finish — it deals another hand, and the chips a
+     * hand moves never leave the table. What poker owes an account is what
+     * somebody took with them when they stood up, which is a queue rather than
+     * a state, and is paid through `payOut` below. Saying "settled" here
+     * instead would latch that queue: the room settles a table once and will
+     * not settle it again until it stops being settled, so the first person to
+     * stand up would be paid and the second would be swallowed.
      */
-    isSettled(table) {
-      return table.owedOut.length > 0;
+    isSettled() {
+      return false;
     },
 
-    async settle(table, deps) {
+    async settle() {
+      // Nothing: see above.
+    },
+
+    async payOut(table, deps) {
       /*
        * Drained rather than read, and drained before the first await. The
        * table carries on dealing while this yields, and somebody else standing
