@@ -73,7 +73,13 @@
  */
 .pk__felt {
   position: absolute;
-  inset: 6% 4.5% 7%;
+  /*
+   * How much timber shows, and it is the only thing setting that. Thinner than
+   * it was: the rail is the edge of the table rather than a feature of it, and
+   * every percent of it taken back is a percent of cloth — which is where the
+   * cards, the chips and the seats all have to fit.
+   */
+  inset: 3.4% 2.6% 4%;
   border-radius: 46% / 48%;
   background: radial-gradient(70% 70% at 50% 38%, #21523c 0%, #17392c 58%, #0d2119 100%);
   box-shadow:
