@@ -219,16 +219,25 @@
   animation: mk-flare 0.9s ease-in-out infinite;
 }
 
-.mock__face--won .mk-move--key {
-  animation: mk-turn 1.6s cubic-bezier(0.5, 0, 0.2, 1) infinite;
+.mock__face--won .mk-move--dice {
+  animation: mk-throw 1.4s cubic-bezier(0.3, 0, 0.35, 1) infinite;
 }
 
 .mock__face--won .mk-move--spade {
   animation: mk-turn-face 1.5s cubic-bezier(0.4, 0, 0.3, 1) infinite;
 }
 
-.mock__face--won .mk-move--chip {
-  animation: mk-spin 1.5s cubic-bezier(0.4, 0, 0.3, 1) infinite;
+.mock__face--won .mk-move--stack {
+  animation: mk-settle 1.5s cubic-bezier(0.2, 1.5, 0.4, 1) infinite;
+}
+
+/* Nothing at all until it wins: the chip being paid in does not exist yet. */
+.mk-drop {
+  opacity: 0;
+}
+
+.mock__face--won .mk-drop {
+  animation: mk-payin 1.5s cubic-bezier(0.3, 1.6, 0.5, 1) infinite;
 }
 
 .mock__face--won .mk-move--seven {
@@ -254,10 +263,13 @@
   45% { transform: scale(1.35); opacity: 1; }
 }
 
-/* A quarter turn and back, which is a key in a lock and nothing else. */
-@keyframes mk-turn {
-  0%, 55%, 100% { transform: rotate(0deg); }
-  25%, 35% { transform: rotate(90deg); }
+/* Thrown: up, over, and down onto the felt. */
+@keyframes mk-throw {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-7px) rotate(-120deg); }
+  50% { transform: translateY(-9px) rotate(-240deg); }
+  72% { transform: translateY(1px) rotate(-360deg); }
+  84% { transform: translateY(0) rotate(-360deg); }
 }
 
 /* Turning to catch the light, then back. A pip is a flat thing; leaning it
@@ -268,12 +280,19 @@
   65% { transform: rotate(9deg) scale(1.06); }
 }
 
-/* On its edge, the way a chip does on a table. */
-@keyframes mk-spin {
-  0%, 100% { transform: scaleX(1); }
-  25% { transform: scaleX(0.08); }
-  50% { transform: scaleX(1); }
-  75% { transform: scaleX(0.08); }
+/* Taking the weight of the one that just landed on it. */
+@keyframes mk-settle {
+  0%, 22%, 100% { transform: translateY(0) scaleY(1); }
+  32% { transform: translateY(1.5px) scaleY(0.9); }
+  48% { transform: translateY(0) scaleY(1.04); }
+}
+
+/* A chip paid onto the stack: in from above, and gone once it has landed. */
+@keyframes mk-payin {
+  0% { opacity: 0; transform: translateY(-26px); }
+  10% { opacity: 1; }
+  30%, 55% { opacity: 1; transform: translateY(0); }
+  70%, 100% { opacity: 0; transform: translateY(0); }
 }
 
 /* A tube coming up: two false starts, then it holds. Stepped, because a

@@ -8,24 +8,24 @@ import { ReelFace } from "../slots/Symbols.js";
  * can change what anybody is playing. It is here to be argued with.
  *
  * The set on the right is drawn from this building rather than from a fruit
- * machine — a tumbler, a cigar, the key to the room, an ace, a chip, the neon
- * seven that was already the best of the old lot, and a star for the bonus.
- * Every silhouette is different, which is what actually does the work at 57px
- * on a phone: a trapezoid, a diagonal, a long shaft, a rectangle, a disc, a
- * numeral, a burst.
+ * machine — a tumbler, a cigar, a thrown pair of dice, a spade, a stack of
+ * chips, the neon seven that was already the best of the old lot, and a star
+ * for the bonus. Every silhouette is different, which is what actually does
+ * the work at 57px on a phone: a trapezoid, a diagonal, a cluster of cubes, a
+ * pip, a squat stack, a numeral, a burst.
  *
  * Each one also carries its own win animation, and each says something about
- * the object rather than being the same pulse seven times: the key turns, the
- * card flips, the chip spins on its edge, the ember flares.
+ * the object rather than being the same pulse seven times: the dice tumble, a
+ * chip is paid onto the stack, the ember flares, the glass rattles.
  */
 
 /** Every proposed face, cheapest first, the way a paytable reads. */
 export const PROPOSED = [
   "tumbler",
   "cigar",
-  "key",
+  "dice",
   "spade",
-  "chip",
+  "stack",
   "seven",
   "bonus",
 ] as const;
@@ -35,9 +35,9 @@ export type Proposed = (typeof PROPOSED)[number];
 const LABEL: Record<Proposed, string> = {
   tumbler: "Tumbler",
   cigar: "Cigar",
-  key: "Key",
+  dice: "Dice",
   spade: "Spade",
-  chip: "Chip",
+  stack: "Chips",
   seven: "Seven",
   bonus: "Bonus",
 };
@@ -63,10 +63,10 @@ function Defs() {
           <stop offset="0%" stopColor="#8d6237" />
           <stop offset="100%" stopColor="#4e3319" />
         </linearGradient>
-        <linearGradient id="mk-brass" x1="0.1" y1="0" x2="0.9" y2="1">
-          <stop offset="0%" stopColor="#f4dc9a" />
-          <stop offset="50%" stopColor="#c8a03c" />
-          <stop offset="100%" stopColor="#7d5f18" />
+        <linearGradient id="mk-dice" x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="60%" stopColor="#eef1f6" />
+          <stop offset="100%" stopColor="#c3ccda" />
         </linearGradient>
         <linearGradient id="mk-spade" x1="0.2" y1="0" x2="0.8" y2="1">
           <stop offset="0%" stopColor="#a9c8ee" />
@@ -104,6 +104,51 @@ function Defs() {
         </radialGradient>
       </defs>
     </svg>
+  );
+}
+
+/**
+ * One die, with a top and a right face so it reads as a cube.
+ *
+ * `pips` are in units of the half-face, so the same list places them however
+ * big the die is drawn.
+ */
+function Die({
+  x,
+  y,
+  size,
+  rot,
+  pips,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  rot: number;
+  pips: [number, number][];
+}) {
+  const lean = size * 0.42;
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot})`}>
+      {/* The top, tilted away, and the right side falling off it. */}
+      <path
+        d={`M${-size} ${-size} L${-size + lean} ${-size - lean} L${size + lean} ${-size - lean} L${size} ${-size} Z`}
+        fill="#ffffff"
+      />
+      <path
+        d={`M${size} ${-size} L${size + lean} ${-size - lean} L${size + lean} ${size - lean} L${size} ${size} Z`}
+        fill="#b9c3d2"
+      />
+      <rect x={-size} y={-size} width={size * 2} height={size * 2} rx={size * 0.24} fill="url(#mk-dice)" />
+      {pips.map(([px, py]) => (
+        <circle
+          key={`${px},${py}`}
+          cx={px * size * 0.52}
+          cy={py * size * 0.52}
+          r={size * 0.19}
+          fill="#1b2028"
+        />
+      ))}
+    </g>
   );
 }
 
@@ -164,16 +209,29 @@ const ART: Record<Proposed, React.ReactNode> = {
       </g>
     </>
   ),
-  key: (
+  dice: (
     <>
-      <Ground rx={13} />
-      <g className="mk-move mk-move--key">
-        {/* The bow, the shaft, and two wards: a key is its silhouette. */}
-        <circle cx="0" cy="-11" r="9.5" fill="none" stroke="url(#mk-brass)" strokeWidth="5" />
-        <rect x="-2.5" y="-3" width="5" height="21" rx="2" fill="url(#mk-brass)" />
-        <rect x="2" y="8" width="7" height="4" rx="1.6" fill="url(#mk-brass)" />
-        <rect x="2" y="14" width="9" height="4" rx="1.6" fill="url(#mk-brass)" />
-        <circle cx="-3" cy="-14" r="2.6" fill="#fff" opacity="0.5" />
+      <Ground rx={17} cy={21} />
+      {/*
+       * A pair, and built with a top and a side rather than drawn flat on.
+       *
+       * A die seen square-on is a rounded rectangle with dots in it — the same
+       * shape as a card, a domino or a matchbook. The two extra faces are what
+       * make the outline unmistakable at 57px, and a pair reads as a throw
+       * rather than as an object sitting still.
+       */}
+      <g className="mk-move mk-move--dice">
+        <Die x={5} y={2} size={13} rot={12} pips={[[0, 0]]} />
+        <Die
+          x={-8}
+          y={-2}
+          size={11}
+          rot={-16}
+          pips={[
+            [-1, -1],
+            [1, 1],
+          ]}
+        />
       </g>
     </>
   ),
@@ -195,41 +253,65 @@ const ART: Record<Proposed, React.ReactNode> = {
       </g>
     </>
   ),
-  chip: (
+  stack: (
     <>
-      <Ground rx={19} cy={23} />
-      <g className="mk-move mk-move--chip">
-        {/*
-         * Seen from slightly above, which is the only way a disc reads as an
-         * object: an ellipse for the face, a wall under it for the thickness,
-         * and the flutes cut down that wall the way they are on a real chip.
-         * Drawn flat on, it is a circle with a pattern on it.
-         */}
-        <path d="M-19 -1 A 19 12 0 0 0 19 -1 L 19 5 A 19 12 0 0 1 -19 5 Z" fill="url(#mk-chip-wall)" />
-        {[-15, -9, -3, 3, 9, 15].map((x) => (
-          <rect key={x} x={x - 1.4} y={7 - Math.abs(x) * 0.28} width="2.8" height="6" rx="1.2" fill="#f7ecd6" opacity="0.85" />
+      <Ground rx={17} cy={22} />
+      {/*
+       * A stack rather than a chip.
+       *
+       * One disc is a circle with a pattern on it however it is shaded, and it
+       * has to sit in a row beside a glass, a cigar and a key — all objects
+       * with a height. Three of them stacked is money, reads at a glance from
+       * its outline alone, and gives the win something to actually do.
+       */}
+      <g className="mk-move mk-move--stack">
+        {[10, 3, -4].map((y, tier) => (
+          <g key={y}>
+            <path
+              d={`M-16 ${y} A 16 6.4 0 0 0 16 ${y} L 16 ${y + 5} A 16 6.4 0 0 1 -16 ${y + 5} Z`}
+              fill="url(#mk-chip-wall)"
+            />
+            {[-12, -6, 0, 6, 12].map((x) => (
+              <rect
+                key={x}
+                x={x - 1.2}
+                y={y + 1.4 - Math.abs(x) * 0.16}
+                width="2.4"
+                height="5"
+                rx="1"
+                fill="#f7ecd6"
+                opacity={tier === 2 ? 0.85 : 0.6}
+              />
+            ))}
+            <ellipse cx="0" cy={y} rx="16" ry="6.4" fill="url(#mk-chip)" />
+          </g>
         ))}
-        <ellipse cx="0" cy="-1" rx="19" ry="12" fill="url(#mk-chip)" />
-        {/* The inlays, squashed to the same perspective as the face. */}
+        {/* Only the top one shows a face; the rest are edges. */}
         <ellipse
           cx="0"
-          cy="-1"
-          rx="15"
-          ry="9.4"
+          cy="-4"
+          rx="12"
+          ry="4.6"
           fill="none"
           stroke="#f7ecd6"
-          strokeWidth="5"
-          strokeDasharray="7 6.5"
+          strokeWidth="3.4"
+          strokeDasharray="5.5 5"
         />
-        <ellipse cx="0" cy="-1" rx="8.5" ry="5.2" fill="#a97c22" opacity="0.4" />
-        <ellipse cx="0" cy="-1" rx="8.5" ry="5.2" fill="none" stroke="#f7ecd6" strokeWidth="1.4" />
-        <path
-          d="M-13 -6 A 16 10 0 0 1 -2 -12"
+        <ellipse cx="0" cy="-4" rx="5.4" ry="2.1" fill="#a97c22" opacity="0.45" />
+      </g>
+      {/* The one being paid in, which only exists while it is landing. */}
+      <g className="mk-drop">
+        <path d="M-16 -13 A 16 6.4 0 0 0 16 -13 L 16 -8 A 16 6.4 0 0 1 -16 -8 Z" fill="url(#mk-chip-wall)" />
+        <ellipse cx="0" cy="-13" rx="16" ry="6.4" fill="url(#mk-chip)" />
+        <ellipse
+          cx="0"
+          cy="-13"
+          rx="12"
+          ry="4.6"
           fill="none"
-          stroke="#fff"
-          strokeOpacity="0.55"
-          strokeWidth="2.4"
-          strokeLinecap="round"
+          stroke="#f7ecd6"
+          strokeWidth="3.4"
+          strokeDasharray="5.5 5"
         />
       </g>
     </>
@@ -325,7 +407,7 @@ export function SlotMockup() {
       </button>
 
       <p className="gallery__note">
-        The key turns in its lock, the spade turns to catch the light, the chip spins on its edge, the
+        The dice tumble, the spade turns to catch the light, a chip is paid onto the stack, the
         ember flares, the glass rattles, the tube flickers up to full, and the bonus pops out and
         grows — which is the one that has to be unmistakable, because it is the face a player is
         hunting for.
