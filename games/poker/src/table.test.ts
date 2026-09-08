@@ -27,7 +27,12 @@ function table(stacks: number[], seed = 1): Table {
   };
   const made = new Table("TEST", random, 50, 100, 10);
   stacks.forEach((stack, index) => {
-    made.join(`s${index}`, `P${index}`, `u${index}`, stack);
+    made.join(`s${index}`, `P${index}`, {
+      userId: `u${index}`,
+      avatar: null,
+      accentColor: null,
+    });
+    made.buyIn(`s${index}`, stack);
   });
   return made;
 }
@@ -80,7 +85,8 @@ describe("dealing a hand", () => {
   it("does not deal in somebody who sat down mid-hand", () => {
     const made = table([1_000, 1_000]);
     made.deal();
-    made.join("late", "Late", "ulate", 1_000);
+    made.join("late", "Late", { userId: "ulate", avatar: null, accentColor: null });
+    made.buyIn("late", 1_000);
     expect(made.seats.find((s) => s.id === "late")?.hole).toHaveLength(0);
     expect(made.seats.find((s) => s.id === "late")?.waiting).toBe(true);
   });

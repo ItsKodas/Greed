@@ -117,8 +117,14 @@ function Table({
             ))}
             {/* The street that has not come yet, so the board keeps its width
                 and nothing shuffles sideways when a card lands. */}
-            {Array.from({ length: 5 - board.length }, (_, at) => (
-              <span className="pk__gap" key={`gap-${at}`} />
+            {/*
+              * Named by the street the card would come on rather than by
+              * index. A board fills from the left, so the gaps that remain are
+              * always the last ones — sliced from where the board got to, so
+              * each gap keeps its own name right up until a card lands on it.
+              */}
+            {SLOTS.slice(board.length).map((slot) => (
+              <span className="pk__gap" key={slot} />
             ))}
           </div>
         </div>
@@ -241,6 +247,9 @@ const HEADS_UP: MockSeat[] = [
 ];
 
 const BOARD = [card("Ah"), card("Kc"), card("7d"), card("2s"), card("9h")];
+
+/** The five places a board card goes, in the order they are dealt. */
+const SLOTS = ["flop1", "flop2", "flop3", "turn", "river"];
 
 export function PokerMockup() {
   const [seats, setSeats] = useState(10);

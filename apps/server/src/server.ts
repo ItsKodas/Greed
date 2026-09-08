@@ -14,6 +14,7 @@ import {
   maxStake as blackjackMaxStake,
 } from "@backroom/game-blackjack";
 import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
+import { POKER, pokerAdapter } from "@backroom/game-poker";
 import {
   countScatters,
   drawGrid,
@@ -82,7 +83,7 @@ import { Avatars, Cards } from "./og.js";
  */
 const CATALOGUE = COMING.reduce(
   (catalogue, game) => catalogue.add(game),
-  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS),
+  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER),
 );
 
 
@@ -749,6 +750,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           add: (amount: number) => store.bankAdd("blackjack", amount),
           take: (amount: number) => store.bankTake("blackjack", amount),
         },
+      }) as GameAdapter<PlayTable>,
+    ],
+    [
+      POKER.id,
+      pokerAdapter({
+        /*
+         * The shuffle, from the same source the reels come from. A table hands
+         * every player cards it will later hand somebody else, and a shuffle
+         * anybody can predict is a game everybody else is losing on purpose.
+         */
+        random: spinRandom,
+        ...(turnMs === undefined ? {} : { turnMs }),
       }) as GameAdapter<PlayTable>,
     ],
   ]);
