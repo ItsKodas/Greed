@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { DiscordIcon } from "../blackjack/Icons.js";
 import { useAccount } from "../game/useAccount.js";
+import { compact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
 import { Reel, REEL_STAGGER_MS, SPIN_UP_MS } from "./Reel.js";
 import "@backroom/game-slots/theme.css";
@@ -29,7 +30,19 @@ import "./slots.css";
 export const CREDITS_PER_CHIP = 100;
 
 export function credits(chips: number): string {
-  return (chips * CREDITS_PER_CHIP).toLocaleString("en-GB");
+  return (chips * CREDITS_PER_CHIP).toLocaleString("en-US");
+}
+
+/**
+ * The same figure, short enough to glance at.
+ *
+ * Credits are a hundred to the chip, so every number on this cabinet is two
+ * digits longer than the one underneath it — a middling balance is already
+ * seven digits. The jackpot sign and the purse are glanced at; what a spin
+ * actually paid is read, and stays written out.
+ */
+export function creditsShort(chips: number): string {
+  return compact(chips * CREDITS_PER_CHIP);
 }
 
 /** How long after the last reel stops before the winning lines light. */
@@ -259,11 +272,13 @@ function BankSign({ bank, jackpot }: { bank: number; jackpot: number }) {
   return (
     <div className="slots__bank">
       <span className="slots__bank-label">Jackpot</span>
-      <strong className="slots__bank-figure">{credits(jackpot)}</strong>
+      <strong className="slots__bank-figure" title={`${credits(jackpot)} credits`}>
+        {creditsShort(jackpot)}
+      </strong>
       <span className="slots__bank-note">
         {bank === 0
           ? "The bank has not been stocked yet, so the machine is shut."
-          : `of ${credits(bank)} in the bank — every credit of it staked by somebody`}
+          : `of ${creditsShort(bank)} in the bank — every credit of it staked by somebody`}
       </span>
     </div>
   );
@@ -375,8 +390,8 @@ function Controls({
       </button>
 
       <p className="slots__purse">
-        <span>{credits(balance)} credits</span>
-        {cap > 0 ? <span className="slots__cap">Max {credits(cap)} a spin</span> : null}
+        <span title={`${credits(balance)} credits`}>{creditsShort(balance)} credits</span>
+        {cap > 0 ? <span className="slots__cap">Max {creditsShort(cap)} a spin</span> : null}
       </p>
     </div>
   );
