@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 import { MIN_STAKE, STAKE_DIVISOR, type Face } from "@backroom/game-slots";
 import { exact } from "../game/money.js";
 import {
+  AFTER_A_WIN_MS,
+  autoBeatMs,
+  BETWEEN_SPINS_MS,
   bonusRun,
   celebrationMs,
   Controls,
@@ -559,5 +562,39 @@ describe("the spin button", () => {
     const { container } = press({ cap: 0 });
     const said = container.querySelector(".slots__shut")?.textContent ?? "";
     expect(said).toContain(exact(MIN_STAKE * STAKE_DIVISOR));
+  });
+});
+
+/*
+ * What auto-spin does when a spin pays.
+ *
+ * It used to switch itself off, which enforced the right thing — a win the
+ * player did not see happen is a win that did not happen to them — by making
+ * them rearm the machine every time it did something good. Waiting says the
+ * same thing without the punishment.
+ */
+describe("the beat between spins the machine pulls itself", () => {
+  it("goes straight on after a spin that paid nothing", () => {
+    expect(autoBeatMs({ won: 0, awarded: 0 })).toBe(BETWEEN_SPINS_MS);
+  });
+
+  it("waits after a win, long enough to read it and stop", () => {
+    expect(autoBeatMs({ won: 4000, awarded: 0 })).toBe(AFTER_A_WIN_MS);
+    expect(AFTER_A_WIN_MS).toBeGreaterThanOrEqual(6000);
+  });
+
+  it("waits after free spins even though no chips came out", () => {
+    // The case reading `won` alone walks straight past, and it is one of the
+    // better things that happens on this machine.
+    expect(autoBeatMs({ won: 0, awarded: 8 })).toBe(AFTER_A_WIN_MS);
+  });
+
+  it("goes straight on when there is nothing to have missed", () => {
+    // No answer yet, or the first spin of a run.
+    expect(autoBeatMs(null)).toBe(BETWEEN_SPINS_MS);
+  });
+
+  it("always waits longer after something happened than after nothing", () => {
+    expect(autoBeatMs({ won: 1, awarded: 0 })).toBeGreaterThan(autoBeatMs({ won: 0, awarded: 0 }));
   });
 });

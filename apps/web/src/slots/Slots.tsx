@@ -47,6 +47,36 @@ import "./slots.css";
  * rest of the building counts in, so chips it is.
  */
 
+/**
+ * How long auto-spin waits after a spin that paid, on top of the celebration.
+ *
+ * Long enough to read what happened and decide to stop. Auto used to switch
+ * itself off instead, which enforced the same thing by making the player rearm
+ * the machine every time it did something good.
+ */
+export const AFTER_A_WIN_MS = 6000;
+
+/** The ordinary beat between two spins the machine pulls for itself. */
+export const BETWEEN_SPINS_MS = 500;
+
+/**
+ * How long auto-spin waits before pulling again.
+ *
+ * A beat between spins rather than straight into the next one — back to back,
+ * the reels never visibly stop and it stops being a game being played and
+ * becomes a screen doing something. Much longer after a spin that paid, on top
+ * of the celebration it has already sat through, so the player gets a look at
+ * it and a chance to stop.
+ *
+ * A spin that won free spins and no chips counts as paying. It is one of the
+ * better things that happens here, and reading `won` alone would walk straight
+ * past it.
+ */
+export function autoBeatMs(landed: { won: number; awarded: number } | null): number {
+  const paid = landed !== null && (landed.won > 0 || landed.awarded > 0);
+  return paid ? AFTER_A_WIN_MS : BETWEEN_SPINS_MS;
+}
+
 /** How long after the last reel stops before the winning lines light. */
 export const LINE_LIGHT_MS = 420;
 
@@ -579,10 +609,6 @@ export default function Slots() {
       return;
     }
 
-    // Something paid, so the machine stops pulling its own handle: a win the
-    // player did not see happen is a win that did not happen to them.
-    setAuto(false);
-
     const show = window.setTimeout(() => {
       setLit(true);
       /*
@@ -665,9 +691,14 @@ export default function Slots() {
   /*
    * The machine pulling its own handle.
    *
-   * A beat between spins rather than straight into the next one — back to
-   * back, the reels never visibly stop and it stops being a game being played
-   * and becomes a screen doing something.
+   * How long it waits is `autoBeatMs`: an ordinary beat between spins, and a
+   * long one after a spin that paid. It used to switch itself off after a win
+   * instead, which enforced the same thing — a win the player did not see
+   * happen is a win that did not happen to them — by making them rearm the
+   * machine every time it did something good.
+   *
+   * `landed` still holds what the last spin did: this effect wakes when the
+   * celebration ends, and nothing clears it until the next pull.
    *
    * It arms nothing on its own: any of the conditions that stop a person
    * spinning stop this too, because it goes through exactly the same canPull.
@@ -676,7 +707,7 @@ export default function Slots() {
     if (!auto || settling || !canPull) {
       return;
     }
-    const next = window.setTimeout(() => pullRef.current(), 500);
+    const next = window.setTimeout(() => pullRef.current(), autoBeatMs(landed.current));
     return () => window.clearTimeout(next);
   }, [auto, settling, canPull]);
 
@@ -737,13 +768,13 @@ export default function Slots() {
     /*
      * Under the whole spin, and stopped by whichever reel settles last.
      *
-     * Seven tenths of where the one-shots sit. It is a bed rather than an
-     * event: it runs for two solid seconds every pull, and anything loud
-     * enough to notice becomes the thing you hear instead of the five reel
-     * stops landing on top of it.
+     * A tenth. It is a bed rather than an event: it runs for two solid seconds
+     * every pull, and anything loud enough to notice becomes the thing you
+     * hear instead of what is landing on top of it — the five reel stops, and
+     * now the bonus notes, which are the ones carrying the news.
      */
     reelsLoop.current?.();
-    reelsLoop.current = startLoop("reels", 0.32);
+    reelsLoop.current = startLoop("reels", 0.1);
 
     /*
      * An answer that never comes. The house rule is that anything shown early
