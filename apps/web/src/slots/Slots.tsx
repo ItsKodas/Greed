@@ -21,6 +21,7 @@ import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
 import { Digits } from "./Digits.js";
+import { Fireworks } from "./Fireworks.js";
 import { Reel, REEL_STAGGER_MS } from "./Reel.js";
 import "@backroom/game-slots/theme.css";
 import "./slots.css";
@@ -188,6 +189,22 @@ export default function Slots() {
   const [news, setNews] = useState<SpinNews[]>([]);
   /** How long each reel is being held, which is only ever a reveal. */
   const [holds, setHolds] = useState<number[]>([0, 0, 0, 0, 0]);
+  /**
+   * Bumped once per win, and how big a show it earns.
+   *
+   * A counter rather than a flag: two wins running are two shows, and a
+   * boolean that was already true would light nothing the second time.
+   */
+  const [fired, setFired] = useState(0);
+  const [showSize, setShowSize] = useState(1);
+  /**
+   * The jackpot's own show, over the screen at the top.
+   *
+   * Its own counter rather than the same one: the glass gets fireworks for
+   * every win, and the marquee only ever for the one that matters. Sharing a
+   * counter would set the top of the machine off over three chips.
+   */
+  const [jackpotFired, setJackpotFired] = useState(0);
   /**
    * Whether the machine is pulling its own handle.
    *
@@ -429,6 +446,16 @@ export default function Slots() {
 
     const show = window.setTimeout(() => {
       setLit(true);
+      /*
+       * Sized to the win, so an ordinary line is a couple of shells and a
+       * jackpot is a barrage. The same show every time would make every win
+       * feel identical, which is the one thing a payout must not do.
+       */
+      setShowSize(result.jackpot ? 3 : result.won >= result.stake * 20 ? 2 : 1);
+      setFired((n) => n + 1);
+      if (result.jackpot) {
+        setJackpotFired((n) => n + 1);
+      }
 
       /*
        * How the money arrives, sized to how much of it there is. A handful of
@@ -672,6 +699,9 @@ export default function Slots() {
           <div className="cab">
             <div className="cab__body">
               <div className="cab__marquee">
+                {/* Only ever for the jackpot. The glass below celebrates every
+                    win; the top of the machine keeps its powder dry. */}
+                <Fireworks fire={jackpotFired} scale={3} />
                 <Marquee
                   bank={shown?.bank ?? 0}
                   jackpot={shown?.jackpot ?? 0}
@@ -685,6 +715,9 @@ export default function Slots() {
               </div>
 
               <div className="cab__glass">
+                {/* Over the glass, under nothing: it takes no pointer events
+                    and occupies no space in the layout. */}
+                <Fireworks fire={fired} scale={showSize} />
                 <div className="slots__glass">
                   {columns.map((column, reel) => (
                     <Reel
@@ -1178,18 +1211,20 @@ function Controls({
           <>
             <ChipStack amount={total} width={64} />
             <span className="slots__bet-total">{exact(total)}</span>
-            {/* An icon rather than a sentence: it sits in a row of chips and
-                a figure, and a line of underlined text in among them read as
-                something borrowed from a different page. */}
+            {/*
+              * A control rather than a line of underlined text, but with the
+              * word kept: on its own the arrow was a guess, and this is the
+              * one button here that undoes something.
+              */}
             <button
               type="button"
               className="take"
               onClick={onClear}
               disabled={busy}
               title="Take your chips back off the felt"
-              aria-label="Take your chips back off the felt"
             >
               <TakeBackIcon />
+              <span className="take__word">Take back</span>
             </button>
           </>
         ) : (

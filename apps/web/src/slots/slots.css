@@ -185,6 +185,7 @@
 
 /* The lit board across the top, where the number people came for lives. */
 .cab__marquee {
+  position: relative;
   padding: var(--gr-space-3) var(--gr-space-3) var(--gr-space-2);
   border-bottom: 1px solid rgb(0 0 0 / 0.5);
   background:
@@ -194,11 +195,32 @@
 
 /* The glass, recessed into the body rather than sitting on it. */
 .cab__glass {
+  position: relative;
   padding: var(--gr-space-3);
   background: rgb(0 0 0 / 0.28);
   box-shadow:
     inset 0 6px 12px rgb(0 0 0 / 0.5),
     inset 0 -6px 12px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * The show, over the reels.
+ *
+ * Takes no pointer events and no space in the layout: it is drawn on top of
+ * the glass and can be turned off without a pixel moving. Clipped to the
+ * window so sparks do not rain down the page.
+ */
+.fireworks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.fireworks canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .cab__belly {
@@ -1039,10 +1061,11 @@
  */
 .take {
   margin-left: auto;
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  height: 44px;
+  padding: 0 var(--gr-space-3);
   flex: none;
   border: 1px solid rgb(0 0 0 / 0.6);
   border-radius: 9px;
@@ -1071,9 +1094,15 @@
 }
 
 .take__icon {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   display: block;
+  flex: none;
+}
+
+.take__word {
+  font-size: var(--gr-text-sm);
+  white-space: nowrap;
 }
 
 }
