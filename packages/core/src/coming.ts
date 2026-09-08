@@ -13,11 +13,13 @@ import type { GameListing } from "./catalogue.js";
  * to be a game; when one of these grows rules it gets its own, and its listing
  * moves in there beside them, the way the three real ones already have.
  *
- * Every one of them will have to earn the same things Slots and Blackjack did
- * before it can take a chip: a bank players fill, a cap derived from its own
+ * Most of them will have to earn the same things Slots and Blackjack did
+ * before they can take a chip: a bank players fill, a cap derived from its own
  * worst outcome, and a cryptographic source for whatever it turns over.
- * Roulette and Baccarat and Craps are all house games, so none of them can be
- * built without that argument being made again.
+ * Roulette and Baccarat and Craps are house games, so none of those can be
+ * built without that argument being made again. Poker and Liar's Dice are not
+ * — the stake goes into a pot and one of the players takes it, so the chips
+ * never leave the table and there is nothing for a bank to do.
  */
 export const COMING: readonly GameListing[] = [
   {
@@ -36,6 +38,26 @@ export const COMING: readonly GameListing[] = [
     open: false,
     mark: { text: "POKER", accentAt: 0 },
     theme: { wall: "#141a17", felt: "#1c3a2c", accent: "#3f9d6a", accentHi: "#7fe0a8" },
+  },
+  {
+    id: "liars-dice",
+    name: "Liar's Dice",
+    blurb: "Everybody's dice are hidden. Raise the bid, or call the lie.",
+    shape: "table",
+    /*
+     * Two at the very least, because the game is the lie: a bid nobody can
+     * doubt is just a number said out loud.
+     */
+    minSeats: 2,
+    maxSeats: 6,
+    /*
+     * The other one here that needs no bank. Players stake against each other
+     * and one of them takes it, so the chips never leave the table — which
+     * puts it beside Poker as the cheap half of this list to make honest.
+     */
+    open: false,
+    mark: { text: "LIAR'S DICE", accentAt: 0 },
+    theme: { wall: "#13181a", felt: "#1d3336", accent: "#2f8f92", accentHi: "#7fdde0" },
   },
   {
     id: "roulette",
