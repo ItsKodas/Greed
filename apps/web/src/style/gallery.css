@@ -237,10 +237,22 @@
   animation: mk-flare 1.6s ease-in-out infinite;
 }
 
-/* Pivoted on the bottom edge, because that is what a domino falls about. */
-.mock__face--won .mk-move--domino {
-  transform-origin: 50% 100%;
-  animation: mk-topple 1.9s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+/*
+ * The pair flies apart and comes back. Two elements, one motion each, and
+ * neither is a .mk-move: the origin has to be the die's own middle, which is
+ * its group's own nought, not a point measured from the corner of the box.
+ */
+.mock__face--won .mk-die {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+
+.mock__face--won .mk-die--back {
+  animation: mk-burst-back 1.6s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+}
+
+.mock__face--won .mk-die--front {
+  animation: mk-burst-front 1.6s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
 }
 
 .mock__face--won .mk-move--spade {
@@ -311,14 +323,21 @@
   45% { transform: scale(1.12); opacity: 1; }
 }
 
-/* A rock back, the fall, and it stands itself up again to do it once more. */
-@keyframes mk-topple {
-  0%, 8% { transform: rotate(0deg); }
-  24% { transform: rotate(-9deg); }
-  48% { transform: rotate(78deg); }
-  55% { transform: rotate(71deg); }
-  62%, 72% { transform: rotate(76deg); }
-  94%, 100% { transform: rotate(0deg); }
+/*
+ * Thrown apart, held at the top of the arc, and back down together. They go
+ * opposite ways and spin opposite ways, which is what stops two dice moving
+ * at once reading as one object being dragged.
+ */
+@keyframes mk-burst-back {
+  0%, 10% { transform: translate(0, 0) rotate(0deg); }
+  44%, 62% { transform: translate(-8px, -6px) rotate(-168deg); }
+  95%, 100% { transform: translate(0, 0) rotate(-360deg); }
+}
+
+@keyframes mk-burst-front {
+  0%, 10% { transform: translate(0, 0) rotate(0deg); }
+  44%, 62% { transform: translate(8px, 6px) rotate(192deg); }
+  95%, 100% { transform: translate(0, 0) rotate(360deg); }
 }
 
 /* Turning to catch the light, then back. A pip is a flat thing; leaning it
@@ -366,6 +385,7 @@
 @media (prefers-reduced-motion: reduce) {
   .mock__face--won .mk-move,
   .mock__face--won .mk-move--diamond,
+  .mock__face--won .mk-die,
   .mock__face--won .mk-ember,
   .mock__face--won .mk-shine {
     animation: none;

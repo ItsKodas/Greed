@@ -8,27 +8,27 @@ import { ReelFace } from "../slots/Symbols.js";
  * can change what anybody is playing. It is here to be argued with.
  *
  * The set on the right is drawn from this building rather than from a fruit
- * machine — a tumbler, a cigar, a domino stood on end, a spade, a cut stone,
+ * machine — a tumbler, a cigar, a thrown pair of dice, a spade, a cut stone,
  * the neon seven that was already the best of the old lot, and a star for the
  * bonus. Every silhouette is different, which is what actually does the work
- * at 57px on a phone: a trapezoid, a diagonal, an upright slab, a pip, a
+ * at 57px on a phone: a trapezoid, a diagonal, a pair of squares, a pip, a
  * pointed gem, a numeral, a burst.
  *
  * Each face is one object seen face-on, lit from the top left. Not one drawn
- * in perspective: a tile with a visible thickness down its side, or a gem
- * built out of a dozen shaded planes, reads as a render of a thing rather than
- * as a symbol of it, and at 57px the extra geometry is mud.
+ * in perspective: a die with a top and a side, or a gem built out of a dozen
+ * shaded planes, reads as a render of a thing rather than as a symbol of it,
+ * and at 57px the extra geometry is mud.
  *
  * Each one also carries its own win animation, and each says something about
- * the object rather than being the same pulse seven times: the domino falls,
- * the stone takes the light, the ember flares.
+ * the object rather than being the same pulse seven times: the dice fly
+ * apart, the stone takes the light, the ember flares.
  */
 
 /** Every proposed face, cheapest first, the way a paytable reads. */
 export const PROPOSED = [
   "tumbler",
   "cigar",
-  "domino",
+  "dice",
   "spade",
   "diamond",
   "seven",
@@ -40,7 +40,7 @@ export type Proposed = (typeof PROPOSED)[number];
 const LABEL: Record<Proposed, string> = {
   tumbler: "Tumbler",
   cigar: "Cigar",
-  domino: "Domino",
+  dice: "Dice",
   spade: "Spade",
   diamond: "Diamond",
   seven: "Seven",
@@ -70,11 +70,6 @@ function Defs() {
         <linearGradient id="mk-leaf" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stopColor="#8d6237" />
           <stop offset="100%" stopColor="#4e3319" />
-        </linearGradient>
-        <linearGradient id="mk-ivory" x1="0.15" y1="0" x2="0.85" y2="1">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="60%" stopColor="#eef1f6" />
-          <stop offset="100%" stopColor="#c3ccda" />
         </linearGradient>
         <linearGradient id="mk-spade" x1="0.2" y1="0" x2="0.8" y2="1">
           <stop offset="0%" stopColor="#a9c8ee" />
@@ -116,6 +111,34 @@ function Defs() {
         </clipPath>
       </defs>
     </svg>
+  );
+}
+
+/**
+ * One die, face-on.
+ *
+ * `pips` are in corner units — -1, 0 or 1 on each axis — so a face is written
+ * as the pattern it looks like rather than as five pairs of coordinates. The
+ * outline is what lets two of these overlap and still read as two.
+ */
+function Die({ pips }: { pips: [number, number][] }) {
+  const HALF = 11;
+  return (
+    <>
+      <rect
+        x={-HALF}
+        y={-HALF}
+        width={HALF * 2}
+        height={HALF * 2}
+        rx="3.6"
+        fill="#eef1f6"
+        stroke="#141a22"
+        strokeWidth="2"
+      />
+      {pips.map(([px, py]) => (
+        <circle key={`${px},${py}`} cx={px * 5.6} cy={py * 5.6} r="2.1" fill="#1b2028" />
+      ))}
+    </>
   );
 }
 
@@ -191,30 +214,29 @@ const ART: Record<Proposed, React.ReactNode> = {
       </g>
     </>
   ),
-  domino: (
+  dice: (
     <>
-      <Ground rx={10} cy={17} />
+      <Ground rx={19} cy={21} />
       {/*
-       * Stood on its end, which is the only way a domino is interesting: lying
-       * flat it is a rectangle, standing it is a thing about to fall. Face-on,
-       * with no thickness down the side. Twice as tall as it is wide, which
-       * is a domino's own proportion — and no taller, because the fall pivots
-       * on the bottom edge and a tile longer than half the box lands with its
-       * far corner outside it.
+       * Two, overlapping, and showing different faces — which is the whole
+       * reason for two: a pair reads as dice at a glance where one square
+       * reads as a square. Each sits in its own pair of groups, the outer one
+       * placing it and the inner one giving it its tilt, so the animation
+       * between them has a clean origin and an untilted direction to fly in.
        */}
-      <g className="mk-move mk-move--domino">
-        <rect x="-8" y="-14" width="16" height="28" rx="2.5" fill="url(#mk-ivory)" />
-        <rect x="-6.4" y="-0.8" width="12.8" height="1.6" rx="0.8" fill="#9aa5b5" />
-        {/* Three over two: a face that reads at a glance and is not a die. */}
-        {[
-          [-3.6, -10.6],
-          [0, -7],
-          [3.6, -3.4],
-          [-3.6, 3.4],
-          [3.6, 10.6],
-        ].map(([x, y]) => (
-          <circle key={`${x},${y}`} cx={x} cy={y} r="2" fill="#1b2028" />
-        ))}
+      <g transform="translate(-6 -4)">
+        <g className="mk-die mk-die--back">
+          <g transform="rotate(-13)">
+            <Die pips={[[-1, -1], [0, 0], [1, 1]]} />
+          </g>
+        </g>
+      </g>
+      <g transform="translate(6 4)">
+        <g className="mk-die mk-die--front">
+          <g transform="rotate(9)">
+            <Die pips={[[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]]} />
+          </g>
+        </g>
       </g>
     </>
   ),
@@ -370,7 +392,7 @@ export function SlotMockup() {
       </button>
 
       <p className="gallery__note">
-        The domino topples and stands back up, the stone swells as the light crosses it, the cigar rocks
+        The dice fly apart and come back together, the stone swells as the light crosses it, the cigar rocks
         while its ember breathes, the spade turns to catch it, the glass rattles, the tube flickers
         up to full, and the bonus pops out and grows — which is the one that has to be unmistakable,
         because it is the face a player is hunting for.
