@@ -1170,9 +1170,26 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * A game that does not say who won gets no settlement at all rather than a
    * guess, and its pools stay staked until the table closes.
    */
-  async function payTaunts(code: string, seated: Seated): Promise<void> {
-    const winners = seated.game.winners?.(seated.table);
-    if (winners === undefined) {
+  async function payTaunts(
+    code: string,
+    seated: Seated,
+    /**
+     * The seats that won, read off the table *before* it was settled.
+     *
+     * Passed in rather than asked for here, and that is the whole of a bug
+     * this had in production. Settling talks to the economy, so it yields; a
+     * table that deals itself does not stand still while it does, and by the
+     * time the last write came back the felt had been cleared for the next
+     * hand. Asking then got "nobody won", so every pool was burned — no chips
+     * to the person who had been mocked, and no emote thrown back at whoever
+     * mocked them.
+     *
+     * Null for a game that does not say who won; its pools wait for the table
+     * to close rather than being guessed at.
+     */
+    winners: readonly string[] | null,
+  ): Promise<void> {
+    if (winners === null) {
       return;
     }
     const { paid } = taunts.resolve(code, winners);
@@ -1232,6 +1249,14 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       settled.delete(code);
     } else if (!settled.has(code)) {
       settled.add(code);
+      /*
+       * Read before settling, never after. `settle` in the games themselves
+       * carries the same warning about the same hazard: the moment it awaits,
+       * the table is free to move on, and a continuous table clears its felt
+       * on a timer. What the hand came to is a fact now, not somewhere to go
+       * looking once the money has finished moving.
+       */
+      const won = seated.game.winners?.(seated.table) ?? null;
       void seated.game
         .settle(seated.table, deps)
         /*
@@ -1241,7 +1266,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
          * settle and then the pool come in, rather than the two arriving
          * interleaved and neither explaining the other.
          */
-        .then(() => payTaunts(code, seated))
+        .then(() => payTaunts(code, seated, won))
         .catch((error) => console.error("settling failed", error));
     }
   }
