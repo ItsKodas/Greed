@@ -15,6 +15,8 @@ import { useAccount } from "../game/useAccount.js";
 import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
+import { TauntPicker } from "../taunt/TauntPicker.js";
+import { TauntStage } from "../taunt/TauntStage.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { SeatCount } from "../table/SeatCount.js";
 import { useTablePeek } from "../table/useTablePeek.js";
@@ -115,7 +117,32 @@ export function Blackjack() {
       ) : (
         <>
           <Felt table={table} state={state} seatId={seatId} chips={account.profile?.chips ?? null} />
-          <Chat log={table.chat} seatId={seatId} onSay={table.say} />
+          <div className="play__talk">
+            <Chat log={table.chat} seatId={seatId} onSay={table.say} />
+            <TauntPicker
+              seats={state.seats}
+              seatId={seatId}
+              chips={account.profile?.chips ?? null}
+              stakes={table.stakes}
+              onThrow={(emote, at) => {
+                // The cost leaves the corner on the press: it is the player's
+                // own number, so showing it at once invents nothing.
+                if (account.profile !== null) {
+                  account.setChips(account.profile.chips - emote.cost);
+                }
+                table.taunt(emote.id, at, (result) => {
+                  if (result.ok) {
+                    account.setChips(result.chips);
+                  } else {
+                    account.refresh();
+                  }
+                });
+              }}
+            />
+          </div>
+          {/* Over the felt, because a taunt belongs to the table and not to
+              the cards. */}
+          <TauntStage landed={table.landed} />
         </>
       )}
     </main>

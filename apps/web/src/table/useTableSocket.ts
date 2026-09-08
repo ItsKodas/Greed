@@ -5,6 +5,9 @@ import type {
   ClientToServer,
   ServerToClient,
   TableState,
+  TauntAck,
+  TauntPlay,
+  TauntStake,
 } from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -85,6 +88,23 @@ export interface TableSocketHook<TView> {
   leave: () => void;
   /** Sends a move. What is in it is between the caller and the game. */
   act: (action: Record<string, unknown>, done?: () => void) => void;
+  /**
+   * Taunts thrown at this table, oldest first, for whatever is animating them.
+   *
+   * A log rather than "the current one": two can land in the same second and
+   * the second must not cut the first short. Each carries its own id, so the
+   * stage keys on that and each throw is animated exactly once.
+   */
+  landed: TauntPlay[];
+  /** What is riding on each seat, from the taunts thrown at them this hand. */
+  stakes: TauntStake[];
+  /**
+   * Throws a paid-for emote at somebody.
+   *
+   * The reply carries the sender's balance, so a picker that showed the cost
+   * leaving on the press has something truthful to settle to.
+   */
+  taunt: (emoteId: string, seatId: string, done?: (result: TauntAck) => void) => void;
 }
 
 /**
@@ -114,6 +134,8 @@ export function useTableSocket<TView>(
   const [chat, setChat] = useState<ChatMessage[]>([]);
   /** The room's fact about the table rather than part of the game's view. */
   const [listed, setListedHere] = useState(true);
+  const [landed, setLanded] = useState<TauntPlay[]>([]);
+  const [stakes, setStakes] = useState<TauntStake[]>([]);
 
   useEffect(() => {
     // No transports named on purpose: naming one makes it the only one tried,
@@ -141,6 +163,9 @@ export function useTableSocket<TView>(
         return;
       }
       setListedHere(raw.listed);
+      // Absent from a server that predates taunts, which is nothing riding on
+      // anybody rather than a reason to render nothing at all.
+      setStakes(raw.taunts ?? []);
       setState(raw as unknown as TView);
     });
     socket.on("room:error", (message: string) => setError(message));
@@ -148,6 +173,11 @@ export function useTableSocket<TView>(
     // Capped, because a long night at a table should not grow without limit.
     socket.on("chat:message", (message: ChatMessage) =>
       setChat((log) => [...log, message].slice(-60)),
+    );
+    // Capped for the same reason, and shorter: nothing needs to look further
+    // back than the handful still on screen.
+    socket.on("taunt:play", (one: TauntPlay) =>
+      setLanded((log) => [...log, one].slice(-12)),
     );
 
     return () => {
@@ -247,11 +277,32 @@ export function useTableSocket<TView>(
     socketRef.current?.emit("chat:send", { text: trimmed });
   }, []);
 
+  const taunt = useCallback(
+    (emoteId: string, at: string, done?: (result: TauntAck) => void) => {
+      const socket = socketRef.current;
+      if (socket === null) {
+        return;
+      }
+      socket.emit("taunt:send", { emoteId, seatId: at }, (result: TauntAck) => {
+        // A refusal is worth saying out loud: somebody just spent chips, or
+        // thought they had.
+        if (!result.ok) {
+          setError(result.error);
+        }
+        done?.(result);
+      });
+    },
+    [],
+  );
+
   return {
     state,
     listed,
     seatId,
     error,
+    landed,
+    stakes,
+    taunt,
     connected,
     busy,
     chat,

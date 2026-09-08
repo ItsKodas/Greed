@@ -68,6 +68,19 @@ export const chatSchema = z.object({
   text: z.string().trim().min(1).max(200),
 });
 
+/**
+ * Throwing an emote at somebody.
+ *
+ * Both ids are bounded strings and nothing more. What an emote costs is not in
+ * here on purpose: a price the client sends is a price the client chooses, and
+ * this one debits an account. The server reads the cost off the emote.
+ */
+export const tauntSchema = z.object({
+  /** A UUID as minted by the store, but only ever compared, never parsed. */
+  emoteId: z.string().min(1).max(64),
+  seatId: z.string().min(1).max(64),
+});
+
 /** Only the fields a host is allowed to move, and only within sane bounds. */
 export const setRulesSchema = z.object({
   targetScore: z.number().int().min(1000).max(100_000).optional(),

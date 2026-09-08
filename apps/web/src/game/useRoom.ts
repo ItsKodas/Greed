@@ -1,4 +1,13 @@
-import type { ChatMessage, ClientToServer, HouseRules, RoomView, ServerToClient } from "@backroom/shared";
+import type {
+  ChatMessage,
+  ClientToServer,
+  HouseRules,
+  RoomView,
+  ServerToClient,
+  TauntAck,
+  TauntPlay,
+  TauntStake,
+} from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
@@ -84,6 +93,8 @@ export interface RoomActions {
   setBuyIn: (amount: number) => void;
   /** Whether the table shows up on the public list. The host's call. */
   setListed: (listed: boolean) => void;
+  /** Throws a paid-for emote at somebody else at this table. */
+  taunt: (emoteId: string, seatId: string, done?: (result: TauntAck) => void) => void;
   leave: () => void;
 }
 
@@ -103,6 +114,10 @@ export interface RoomHook {
   error: string | null;
   connected: boolean;
   busy: boolean;
+  /** Taunts thrown at this table, oldest first, for whatever is animating them. */
+  landed: TauntPlay[];
+  /** What is riding on each seat, from the taunts thrown at them. */
+  stakes: TauntStake[];
   actions: RoomActions;
 }
 
@@ -117,6 +132,8 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
   const chipsRef = useRef(onChips);
   chipsRef.current = onChips;
   const [room, setRoom] = useState<RoomView | null>(null);
+  const [landed, setLanded] = useState<TauntPlay[]>([]);
+  const [stakes, setStakes] = useState<TauntStake[]>([]);
   /** Whether the table is on the public list. Not part of the game's view. */
   const [listed, setListedHere] = useState(true);
   const [seatId, setSeatId] = useState<string | null>(null);
@@ -189,6 +206,9 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
       // Whether the table is on the public list is the room's fact about it
       // rather than part of the game's view, so it is unpacked separately.
       setListedHere(raw.listed);
+      // Absent from a server older than taunts, which is nothing riding on
+      // anybody rather than a reason to render nothing.
+      setStakes(raw.taunts ?? []);
       const state = raw as unknown as RoomView;
       setRoom(state);
       setPendingRoll((waiting) => {
@@ -214,6 +234,11 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
     // every roll, and shipping the backlog each time would be waste.
     socket.on("chat:message", (message) => {
       setChat((log) => [...log.slice(-60), message]);
+    });
+    // Capped like the chat, and shorter: nothing looks further back than the
+    // handful still on screen.
+    socket.on("taunt:play", (one) => {
+      setLanded((log) => [...log, one].slice(-12));
     });
     socket.on("connect_error", () => setError("Cannot reach the server. Is it running?"));
 
@@ -297,6 +322,19 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
       socketRef.current?.emit("chat:send", { text });
     }
   }, []);
+  const taunt = useCallback(
+    (emoteId: string, at: string, done?: (result: TauntAck) => void) => {
+      socketRef.current?.emit("taunt:send", { emoteId, seatId: at }, (result: TauntAck) => {
+        // Somebody just spent chips, or thought they had; a refusal is worth
+        // saying out loud rather than swallowing.
+        if (!result.ok) {
+          setError(result.error);
+        }
+        done?.(result);
+      });
+    },
+    [],
+  );
   const setRules = useCallback(
     (changes: Partial<HouseRules>) => socketRef.current?.emit("lobby:setRules", changes),
     [],
@@ -373,6 +411,8 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
   return {
     room,
     listed,
+    landed,
+    stakes,
     heldLocally,
     pendingRoll,
     chat,
@@ -390,6 +430,7 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
       setBuyIn,
       setListed,
       say,
+      taunt,
       start,
       playAgain,
       roll,
