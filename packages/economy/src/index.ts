@@ -21,10 +21,20 @@ export type {
   GameRecord,
   Profile,
   ProfileStats,
+  PublicPlayer,
   StatBump,
   Store,
 } from "./store.js";
 export { MongoStore } from "./mongo-store.js";
+export {
+  DAILY_SEND_CAP,
+  MIN_SEND,
+  SEND_REFUSALS,
+  SEND_WINDOW_MS,
+  judgeSend,
+  leftToSend,
+} from "./transfers.js";
+export type { SendFailure, SendResult, Transfer } from "./transfers.js";
 export { CODE_ALPHABET, CODE_LENGTH, judgeCode, mintCodeText, normaliseCode } from "./codes.js";
 export type { CodeRecord, RedeemFailure, RedeemResult } from "./codes.js";
 export {

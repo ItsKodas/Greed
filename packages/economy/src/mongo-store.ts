@@ -10,7 +10,9 @@ import type {
   NewEmote,
   SoundMime,
 } from "./emotes.js";
-import type { BankName } from "./store.js";
+import { judgeSend, leftToSend, SEND_WINDOW_MS } from "./transfers.js";
+import type { SendResult, Transfer } from "./transfers.js";
+import type { BankName, PublicPlayer } from "./store.js";
 import type { Model } from "mongoose";
 import {
   DAILY_FLOOR,
@@ -245,6 +247,34 @@ export function bytesOf(value: unknown): Uint8Array {
   );
 }
 
+/** One transfer, written down and never edited. */
+interface TransferDoc {
+  _id: string;
+  fromId: string;
+  fromName: string;
+  toId: string;
+  toName: string;
+  amount: number;
+  at: number;
+}
+
+const transferSchema = new mongoose.Schema<TransferDoc>(
+  {
+    _id: { type: String, required: true },
+    fromId: { type: String, required: true },
+    fromName: { type: String, required: true },
+    toId: { type: String, required: true },
+    toName: { type: String, required: true },
+    amount: { type: Number, required: true },
+    at: { type: Number, required: true },
+  },
+  { timestamps: false },
+);
+/* The two questions ever asked of it: what one account has sent lately, and
+   everything either end of an account's transfers. */
+transferSchema.index({ fromId: 1, at: -1 });
+transferSchema.index({ toId: 1, at: -1 });
+
 function toEmote(doc: EmoteDoc): EmoteRecord {
   return {
     id: doc._id,
@@ -293,6 +323,7 @@ export class MongoStore implements Store {
   private readonly redemptions: Model<RedemptionDoc>;
   private readonly house: Model<HouseDoc>;
   private readonly emotes: Model<EmoteDoc>;
+  private readonly ledger: Model<TransferDoc>;
 
   private constructor(private readonly connection: mongoose.Connection) {
     this.users = connection.model<UserDoc>("User", userSchema);
@@ -301,6 +332,7 @@ export class MongoStore implements Store {
     this.redemptions = connection.model<RedemptionDoc>("Redemption", redemptionSchema);
     this.house = connection.model<HouseDoc>("House", houseSchema);
     this.emotes = connection.model<EmoteDoc>("Emote", emoteSchema);
+    this.ledger = connection.model<TransferDoc>("Transfer", transferSchema);
   }
 
   /**
@@ -598,6 +630,115 @@ export class MongoStore implements Store {
     await this.adjustChips(userId, record.chips);
     const after = await this.get(userId);
     return { ok: true, chips: record.chips, balance: after?.chips ?? record.chips };
+  }
+
+  async findPlayers(prefix: string, limit: number): Promise<PublicPlayer[]> {
+    const wanted = prefix.trim();
+    if (wanted.length === 0) {
+      return [];
+    }
+    /*
+     * Anchored, and the input escaped before it is ever a pattern. A name is
+     * whatever somebody typed into Discord, and a name containing regex
+     * punctuation must be a name to search for rather than a pattern to run.
+     */
+    const safe = wanted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const docs = await this.users
+      .find({ name: new RegExp(`^${safe}`, "i") })
+      .select("name avatar accentColor")
+      .limit(limit)
+      .lean<Array<UserDoc & { _id: mongoose.Types.ObjectId }>>();
+    return docs.map((doc) => ({
+      id: doc._id.toString(),
+      name: doc.name,
+      avatar: doc.avatar,
+      accentColor: doc.accentColor,
+    }));
+  }
+
+  async sentSince(userId: string, since: number): Promise<number> {
+    const [summed] = await this.ledger.aggregate<{ total: number }>([
+      { $match: { fromId: userId, at: { $gte: since } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+    return summed?.total ?? 0;
+  }
+
+  async transfers(userId: string, limit: number): Promise<Transfer[]> {
+    const docs = await this.ledger
+      .find({ $or: [{ fromId: userId }, { toId: userId }] })
+      .sort({ at: -1 })
+      .limit(limit)
+      .lean<TransferDoc[]>();
+    return docs.map((doc) => ({
+      id: doc._id,
+      fromId: doc.fromId,
+      fromName: doc.fromName,
+      toId: doc.toId,
+      toName: doc.toName,
+      amount: doc.amount,
+      at: doc.at,
+    }));
+  }
+
+  /**
+   * The order here is the whole safety argument and must not be rearranged.
+   *
+   * The debit goes first and is conditional — `adjustChips` refuses rather
+   * than overdrawing — so by the time anything is owed to the recipient the
+   * chips have already left the sender. Crediting first would mean a failed
+   * debit had handed out chips nobody paid for, which is the one thing this
+   * building must not contain.
+   *
+   * If the credit then fails, the debit is put back. That leaves the pair
+   * either wholly done or wholly undone, which is the most that can be
+   * promised without a transaction — and a refund that itself failed would be
+   * chips destroyed rather than created, which is the safer direction to fail
+   * in.
+   */
+  async send(fromId: string, toId: string, amount: number): Promise<SendResult> {
+    const [from, to] = await Promise.all([this.get(fromId), this.get(toId)]);
+    const sentToday = await this.sentSince(fromId, Date.now() - SEND_WINDOW_MS);
+    const left = leftToSend(sentToday);
+    if (from === null || to === null) {
+      return { ok: false, reason: "no-recipient", leftToday: left };
+    }
+    if (fromId === toId) {
+      return { ok: false, reason: "to-yourself", leftToday: left };
+    }
+    const judged = judgeSend({ amount, balance: from.chips, sentToday });
+    if (!judged.ok) {
+      return { ok: false, reason: judged.reason, leftToday: left };
+    }
+
+    if (!(await this.adjustChips(fromId, -amount))) {
+      // Somebody else spent it between the read above and here.
+      return { ok: false, reason: "not-enough", leftToday: left };
+    }
+    try {
+      await this.adjustChips(toId, amount);
+    } catch (error) {
+      await this.adjustChips(fromId, amount);
+      throw error;
+    }
+
+    await this.ledger.create({
+      _id: randomUUID(),
+      fromId,
+      fromName: from.name,
+      toId,
+      toName: to.name,
+      amount,
+      at: Date.now(),
+    });
+    const after = await this.get(fromId);
+    return {
+      ok: true,
+      balance: after?.chips ?? from.chips - amount,
+      amount,
+      leftToday: left - amount,
+      to: { id: to.id, name: to.name },
+    };
   }
 
   async addEmote(input: NewEmote): Promise<EmoteRecord> {
