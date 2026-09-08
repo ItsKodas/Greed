@@ -1,9 +1,11 @@
 import type { Face } from "@backroom/game-slots";
-import { jackpotPay, maxStake } from "@backroom/game-slots";
+import { CHIPS, FUN_BANK, FUN_PURSE, jackpotPay, maxStake, MIN_STAKE } from "@backroom/game-slots";
 import type { SpinLine, SpinResult } from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { DiscordIcon } from "../blackjack/Icons.js";
+import { Chip } from "../chips/Chip.js";
+import { ChipStack } from "../chips/ChipStack.js";
 import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
@@ -52,13 +54,16 @@ const ATTRACT: Face[][] = [
   ["dice", "spade", "chip"],
 ];
 
-/**
- * The stakes on offer, before the bank's own ceiling is applied.
- *
- * In chips, so these are the amounts that actually leave the account. What the
- * bank can cover cuts the list short — an empty one offers nothing at all.
- */
-const STAKES = [1, 2, 5, 10, 25, 50, 100, 250, 500] as const;
+/** What the machine says it just did. */
+function sayWhat(jackpot: boolean, won: number): string | null {
+  if (jackpot) {
+    return `JACKPOT — ${exact(won)} chips`;
+  }
+  return won > 0 ? `${exact(won)} chips` : null;
+}
+
+/** The tray, smallest first, because it reads left to right. */
+const TRAY = [...CHIPS].reverse();
 
 interface MachineSign {
   bank: number;
@@ -66,7 +71,22 @@ interface MachineSign {
   jackpot: number;
 }
 
-type SpinSocket = Socket<Record<string, never>, { "slots:spin": (payload: { stake: number }, ack: (result: SpinResult) => void) => void }>;
+type SpinSocket = Socket<
+  Record<string, never>,
+  {
+    "slots:spin": (
+      payload: { stake: number; forFun?: boolean },
+      ack: (result: SpinResult) => void,
+    ) => void;
+  }
+>;
+
+/** What a machine playing for nothing shows before its first pull. */
+const FUN_SIGN: MachineSign = {
+  bank: FUN_BANK,
+  maxStake: maxStake(FUN_BANK),
+  jackpot: jackpotPay(FUN_BANK),
+};
 
 export default function Slots() {
   const account = useAccount();
@@ -87,7 +107,12 @@ export default function Slots() {
   const [lines, setLines] = useState<SpinLine[]>([]);
   const [lit, setLit] = useState(false);
   const [spinning, setSpinning] = useState(false);
-  const [stake, setStake] = useState(5);
+  const [stake, setStake] = useState(0);
+  /** Which machine: the one that pays chips, or the one that pays nothing. */
+  const [forFun, setForFun] = useState(false);
+  /** The play purse, which lives at the machine and never sees an account. */
+  const [funPurse, setFunPurse] = useState(FUN_PURSE);
+  const [funSign, setFunSign] = useState<MachineSign>(FUN_SIGN);
   const [said, setSaid] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   /*
@@ -133,11 +158,36 @@ export default function Slots() {
     return () => window.clearInterval(timer);
   }, [readSign]);
 
-  const cap = sign?.maxStake ?? 0;
-  const offered = STAKES.filter((amount) => amount <= cap);
-  const balance = account.profile === null ? null : account.profile.chips - pending;
-  const affordable = balance === null ? false : stake <= balance + pending && stake <= balance;
-  const canPull = connected && !spinning && stake > 0 && stake <= cap && affordable;
+  const shown = forFun ? funSign : sign;
+  const cap = shown?.maxStake ?? 0;
+  const balance = forFun
+    ? funPurse - pending
+    : account.profile === null
+      ? null
+      : account.profile.chips - pending;
+  const canPull =
+    connected && !spinning && stake >= MIN_STAKE && stake <= cap && balance !== null && stake <= balance;
+
+  /** Whether one more of this chip could go on: the bank's ceiling and yours. */
+  const canAdd = (amount: number) =>
+    !spinning && stake + amount <= cap && balance !== null && stake + amount <= balance;
+
+  const changeMachine = (next: boolean) => {
+    if (next === forFun || spinning) {
+      return;
+    }
+    /*
+     * A clean start at the other machine. Carrying the reels across would show
+     * a result from a game that was not this one, and carrying the stake would
+     * put chips on the felt of a machine the player has only just walked up to.
+     */
+    setForFun(next);
+    setStake(0);
+    setGrid(undefined);
+    setLines([]);
+    setLit(false);
+    setSaid(null);
+  };
 
   const pull = () => {
     const socket = socketRef.current;
@@ -156,7 +206,7 @@ export default function Slots() {
     setSaid(null);
     setPending(stake);
 
-    socket.emit("slots:spin", { stake }, (result) => {
+    socket.emit("slots:spin", { stake, ...(forFun ? { forFun: true } : {}) }, (result) => {
       setSpinning(false);
       setPending(0);
       if (!result.ok) {
@@ -168,6 +218,16 @@ export default function Slots() {
       }
       setGrid(result.grid as Face[][]);
       setLines(result.lines);
+      if (forFun) {
+        setFunPurse(result.balance);
+        setFunSign({
+          bank: result.bank,
+          maxStake: maxStake(result.bank),
+          jackpot: jackpotPay(result.bank),
+        });
+        setSaid(sayWhat(result.jackpot, result.won));
+        return;
+      }
       /*
        * Recomputed here from the arithmetic the server used rather than
        * hard-coded, so the sign cannot drift from the cap. The server is still
@@ -180,13 +240,7 @@ export default function Slots() {
         jackpot: jackpotPay(result.bank),
       });
       account.setChips(result.balance);
-      setSaid(
-        result.jackpot
-          ? `JACKPOT — ${exact(result.won)} chips`
-          : result.won > 0
-            ? `${exact(result.won)} chips`
-            : null,
-      );
+      setSaid(sayWhat(result.jackpot, result.won));
     });
   };
 
@@ -204,6 +258,8 @@ export default function Slots() {
   }, [lines]);
 
   const columns: (Face[] | undefined)[] = [0, 1, 2, 3, 4].map((reel) => grid?.[reel]);
+  // Signed in, or playing for nothing — either way there is a machine to play.
+  const canPlay = forFun || account.profile !== null;
 
   return (
     <main className="slots" data-game="slots">
@@ -218,7 +274,8 @@ export default function Slots() {
       />
 
       <div className="slots__cabinet">
-        <BankSign bank={sign?.bank ?? 0} jackpot={sign?.jackpot ?? 0} />
+        <ModeSwitch forFun={forFun} onChange={changeMachine} busy={spinning} />
+        <BankSign bank={shown?.bank ?? 0} jackpot={shown?.jackpot ?? 0} forFun={forFun} />
 
         <div className="slots__glass">
           {columns.map((column, reel) => (
@@ -238,19 +295,21 @@ export default function Slots() {
           {said ?? " "}
         </p>
 
-        {account.profile === null ? (
-          <SignInToPlay available={account.available} />
-        ) : (
+        {canPlay ? (
           <Controls
-            offered={offered}
             stake={stake}
-            onStake={setStake}
+            onAdd={(amount) => setStake((on) => on + amount)}
+            onClear={() => setStake(0)}
+            canAdd={canAdd}
             onPull={pull}
             canPull={canPull}
             spinning={spinning}
             balance={balance ?? 0}
             cap={cap}
+            forFun={forFun}
           />
+        ) : (
+          <SignInToPlay available={account.available} />
         )}
       </div>
     </main>
@@ -258,9 +317,17 @@ export default function Slots() {
 }
 
 /** What the machine is playing for, which is the reason to play it. */
-function BankSign({ bank, jackpot }: { bank: number; jackpot: number }) {
+function BankSign({
+  bank,
+  jackpot,
+  forFun,
+}: {
+  bank: number;
+  jackpot: number;
+  forFun: boolean;
+}) {
   return (
-    <div className="slots__bank">
+    <div className={`slots__bank${forFun ? " slots__bank--fun" : ""}`}>
       <span className="slots__bank-label">Jackpot</span>
       {/*
         * In full, never shortened. This is the one number on the page somebody
@@ -269,9 +336,11 @@ function BankSign({ bank, jackpot }: { bank: number; jackpot: number }) {
         */}
       <strong className="slots__bank-figure">{exact(jackpot)}</strong>
       <span className="slots__bank-note">
-        {bank === 0
-          ? "The bank has not been stocked yet, so the machine is shut."
-          : `of ${exact(bank)} in the bank — every chip of it staked by somebody`}
+        {forFun
+          ? `of ${exact(bank)} in the bank — play money, and none of it anybody's`
+          : bank === 0
+            ? "The bank has not been stocked yet, so the machine is shut."
+            : `of ${exact(bank)} in the bank — every chip of it staked by somebody`}
       </span>
     </div>
   );
@@ -329,62 +398,131 @@ function pointsFor(line: SpinLine): string {
     .join(" ");
 }
 
+/** Which machine you are standing at. */
+function ModeSwitch({
+  forFun,
+  onChange,
+  busy,
+}: {
+  forFun: boolean;
+  onChange: (forFun: boolean) => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="slots__modes" role="radiogroup" aria-label="What this machine plays for">
+      {[false, true].map((fun) => (
+        <button
+          key={fun ? "fun" : "chips"}
+          type="button"
+          role="radio"
+          aria-checked={forFun === fun}
+          className={`slots__mode${forFun === fun ? " slots__mode--on" : ""}`}
+          // Not mid-spin: the reels are answering a question this would change.
+          disabled={busy}
+          onClick={() => onChange(fun)}
+        >
+          {fun ? "For fun" : "For chips"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The tray, the bet, and the lever.
+ *
+ * Chips are built up rather than picked from, the way they are at a card
+ * table: press the hundred four times and four hundred is on. It is the same
+ * gesture in both rooms, and it is the one that lets somebody make a stake the
+ * house never thought to offer.
+ *
+ * A stake stays put between spins, because a slot machine keeps your bet.
+ */
 function Controls({
-  offered,
   stake,
-  onStake,
+  onAdd,
+  onClear,
+  canAdd,
   onPull,
   canPull,
   spinning,
   balance,
   cap,
+  forFun,
 }: {
-  offered: readonly number[];
   stake: number;
-  onStake: (amount: number) => void;
+  onAdd: (amount: number) => void;
+  onClear: () => void;
+  canAdd: (amount: number) => boolean;
   onPull: () => void;
   canPull: boolean;
   spinning: boolean;
   balance: number;
   cap: number;
+  forFun: boolean;
 }) {
+  if (cap < MIN_STAKE) {
+    return (
+      <p className="slots__shut">
+        The bank cannot cover a {exact(MIN_STAKE)} spin yet. It needs{" "}
+        {exact(MIN_STAKE * 1296)} in it before the smallest chip goes on.
+      </p>
+    );
+  }
+
   return (
     <div className="slots__controls">
-      <div className="slots__stakes" role="radiogroup" aria-label="Chips per spin">
-        {offered.length === 0 ? (
-          <p className="slots__shut">
-            {/*
-             * Not "it fills as people play" — nobody can play at zero, so that
-             * reads as a machine that will fix itself and never does. What is
-             * true is that it is waiting on the house to open it.
-             */}
-            Nothing to play for yet. This machine only ever pays out what players have put in,
-            so the house has to stock it once before the first spin.
-          </p>
-        ) : (
-          offered.map((amount) => (
-            <button
-              key={amount}
-              type="button"
-              role="radio"
-              aria-checked={stake === amount}
-              className={`btn btn--small${stake === amount ? "" : " btn--ghost"}`}
-              onClick={() => onStake(amount)}
-              disabled={amount > balance}
-            >
-              {exact(amount)}
+      <div className="slots__tray" data-quiet>
+        {TRAY.map((amount) => (
+          <button
+            key={amount}
+            type="button"
+            className="slots__chip"
+            disabled={!canAdd(amount)}
+            title={
+              amount > cap
+                ? `The bank cannot cover ${exact(amount)} yet`
+                : `Add ${exact(amount)}`
+            }
+            onClick={() => onAdd(amount)}
+          >
+            <Chip amount={amount} size={54} />
+          </button>
+        ))}
+      </div>
+
+      {/* The pile you have built, beside the figure. The number is the exact
+          answer; the stack is the one you can read without counting. */}
+      <div className={`slots__bet${stake > 0 ? " slots__bet--on" : ""}`}>
+        {stake > 0 ? (
+          <>
+            <ChipStack amount={stake} width={64} />
+            <span className="slots__bet-total">{exact(stake)}</span>
+            <button type="button" className="slots__take" onClick={onClear} disabled={spinning}>
+              Take it back
             </button>
-          ))
+          </>
+        ) : (
+          <span className="slots__bet-empty">
+            nothing on yet — {exact(MIN_STAKE)} minimum
+          </span>
         )}
       </div>
 
-      <button type="button" className="btn btn--wide slots__lever" onClick={onPull} disabled={!canPull}>
-        {spinning ? "Spinning" : "Spin"}
+      <button
+        type="button"
+        className={`slots__lever${spinning ? " slots__lever--going" : ""}`}
+        onClick={onPull}
+        disabled={!canPull}
+      >
+        <span className="slots__lever-face">{spinning ? "Spinning" : "Spin"}</span>
       </button>
 
       <p className="slots__purse">
-        <span>{exact(balance)} chips</span>
-        {cap > 0 ? <span className="slots__cap">Max {exact(cap)} a spin</span> : null}
+        <span>
+          {exact(balance)} {forFun ? "play chips" : "chips"}
+        </span>
+        <span className="slots__cap">Max {exact(cap)} a spin</span>
       </p>
     </div>
   );

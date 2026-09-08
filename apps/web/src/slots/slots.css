@@ -201,17 +201,242 @@
 
 /* ---------------------------------------------------------- the controls */
 
+/* Which machine you are at. Two states, so a segmented pair rather than a
+   switch: a switch says on and off, and neither of these is off. */
+.slots__modes {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: var(--gr-edge-soft);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.3);
+  align-self: center;
+}
+
+.slots__mode {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px var(--gr-space-4);
+  min-height: 36px;
+  background: transparent;
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.slots__mode--on {
+  background: color-mix(in srgb, var(--gr-color-neon) 22%, transparent);
+  color: var(--gr-color-ink-lit);
+}
+
+.slots__mode:disabled {
+  cursor: default;
+}
+
+/* Play money says so on the sign rather than only in a caption. */
+.slots__bank--fun .slots__bank-figure {
+  color: var(--gr-color-ink-lit);
+  text-shadow: none;
+}
+
 .slots__controls {
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-3);
 }
 
-.slots__stakes {
-  display: flex;
-  flex-wrap: wrap;
+/* ---- the tray */
+
+.slots__tray {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   justify-content: center;
   gap: var(--gr-space-2);
+}
+
+/*
+ * The chip is drawn, not styled — see Chip.tsx. What is left here is how it
+ * behaves under a thumb, so the button is a hit area with no box of its own
+ * showing through the round shape inside it.
+ */
+.slots__chip {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  transition: transform 140ms cubic-bezier(0.16, 1.06, 0.28, 1);
+}
+
+.slots__chip:hover:not(:disabled) {
+  transform: translateY(-3px);
+}
+
+.slots__chip:active:not(:disabled) {
+  transform: translateY(-1px) scale(0.96);
+}
+
+.slots__chip:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.slots__chip:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+.slots__chip svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 54px;
+}
+
+/* ---- what is on */
+
+.slots__bet {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-3);
+  min-height: 52px;
+  padding: 0 var(--gr-space-2);
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-ink-faint);
+}
+
+.slots__bet-total {
+  font-size: var(--gr-text-lg);
+  color: var(--gr-color-chip);
+}
+
+.slots__bet-empty {
+  font-size: var(--gr-text-sm);
+}
+
+/* Pushed to the far end, so it is never next to the thumb that is stacking. */
+.slots__take {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: var(--gr-space-2);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.slots__take:hover {
+  color: var(--gr-color-ink);
+}
+
+/* ---- the lever */
+
+/*
+ * The one control used during a spin, so it is the biggest thing on the page
+ * and within a thumb's reach at the bottom.
+ *
+ * Three states worth telling apart at a glance: nothing on it and nothing to
+ * do; a stake on and waiting for you, which breathes; and turning, which
+ * sweeps. Each is one motion, and none of them runs at the same time.
+ */
+.slots__lever {
+  position: relative;
+  overflow: hidden;
+  min-height: 60px;
+  border: 1px solid color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
+  border-radius: var(--gr-radius-md);
+  background: linear-gradient(180deg, var(--gr-color-neon-dim), var(--gr-color-neon-deep));
+  color: var(--gr-color-ink-lit);
+  font-family: var(--gr-font-display);
+  font-size: var(--gr-text-lg);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition:
+    transform 120ms cubic-bezier(0.16, 1.06, 0.28, 1),
+    box-shadow 200ms ease,
+    filter 160ms ease;
+  animation: lever-ready 2.4s ease-in-out infinite;
+}
+
+.slots__lever-face {
+  position: relative;
+  z-index: 1;
+}
+
+/* Waiting on you, which is the only reason anything in this building glows. */
+@keyframes lever-ready {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(201 67 158 / 0);
+  }
+  50% {
+    box-shadow: 0 0 22px 2px rgb(201 67 158 / 0.4);
+  }
+}
+
+.slots__lever:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+/* It gives, like a lever. */
+.slots__lever:active:not(:disabled) {
+  transform: translateY(2px) scale(0.995);
+  filter: brightness(0.95);
+}
+
+.slots__lever:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 3px;
+}
+
+/* Nothing on it and nothing to do: flat, and it stops asking. */
+.slots__lever:disabled {
+  animation: none;
+  box-shadow: none;
+  border-color: var(--gr-color-smoke);
+  background: var(--gr-color-smoke);
+  color: var(--gr-color-ink-faint);
+  cursor: default;
+}
+
+/*
+ * Turning. A band of light crossing the face, which is the same thing the
+ * reels are doing and reads as the machine working rather than as a spinner
+ * bolted onto a button.
+ */
+.slots__lever--going {
+  animation: none;
+}
+
+.slots__lever--going::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgb(255 255 255 / 0.22) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: lever-sweep 900ms linear infinite;
+}
+
+@keyframes lever-sweep {
+  to {
+    transform: translateX(100%);
+  }
 }
 
 .slots__shut {
@@ -219,13 +444,6 @@
   text-align: center;
   font-size: var(--gr-text-sm);
   color: var(--gr-color-ink-dim);
-}
-
-/* Big enough to hit with a thumb, and the only control used during a spin. */
-.slots__lever {
-  min-height: 54px;
-  font-size: var(--gr-text-lg);
-  letter-spacing: 0.06em;
 }
 
 .slots__purse {
@@ -251,8 +469,15 @@
 @media (prefers-reduced-motion: reduce) {
   .reel--spinning .reel__blur,
   .payline,
-  .slots__said--big {
+  .slots__said--big,
+  .slots__lever,
+  .slots__lever--going::after {
     animation: none;
+  }
+
+  .slots__chip,
+  .slots__lever {
+    transition: none;
   }
 
   /* The lines still have to be visible; they just arrive rather than sweep. */
