@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MIN_STAKE, STAKE_DIVISOR, type Face } from "@backroom/game-slots";
 import { exact } from "../game/money.js";
+import { REEL_STAGGER_MS } from "./Reel.js";
 import {
   AFTER_A_WIN_MS,
   DEFAULT_LINES,
@@ -13,7 +14,10 @@ import {
   celebrationMs,
   Controls,
   HOLD_MS,
+  HOLD_STEP_MS,
+  HOLD_TOP_MS,
   holdsFor,
+  teaseMs,
   Marquee,
   PaylineOverlay,
   winningCells,
@@ -113,29 +117,65 @@ describe("holding a reel back", () => {
 
   it("holds the fourth reel when three sevens are already up", () => {
     const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [c, c, c], [c, c, c]);
-    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, 0]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS + HOLD_TOP_MS, 0]);
   });
 
   it("holds the last reel too once four are up", () => {
     const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [c, c, c]);
-    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
+    expect(holdsFor(grid)).toEqual([
+      0,
+      0,
+      0,
+      HOLD_MS + HOLD_TOP_MS,
+      HOLD_MS + HOLD_STEP_MS + HOLD_TOP_MS,
+    ]);
   });
 
   it("holds for four of anything, however cheap", () => {
     // Four across is one reel from a five of anything, which is worth the wait
     // whatever the face turns out to be.
     const grid = g([t, t, t], [t, t, t], [t, t, t], [t, t, t], [c, c, c]);
-    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS + HOLD_STEP_MS]);
   });
 
   it("draws out the whole way on a five of a kind", () => {
     const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7]);
-    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
+    expect(holdsFor(grid)).toEqual([
+      0,
+      0,
+      0,
+      HOLD_MS + HOLD_TOP_MS,
+      HOLD_MS + HOLD_STEP_MS + HOLD_TOP_MS,
+    ]);
   });
 
   it("holds for bells as well as sevens", () => {
     const grid = g([d, d, d], [d, d, d], [d, d, d], [c, c, c], [c, c, c]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, 0]);
+  });
+
+  /*
+   * The tease has to get worse rather than merely continue. Two reels held for
+   * the same length is a machine that has slowed down; each taking longer than
+   * the last is a machine drawing it out.
+   */
+  it("takes longer over each held reel than the one before it", () => {
+    const grid = g([t, t, t], [t, t, t], [t, t, t], [t, t, t], [c, c, c]);
+    const holds = holdsFor(grid);
+    expect(holds[4]).toBeGreaterThan(holds[3] as number);
+  });
+
+  /* One reel from the jackpot is the longest wait the machine ever asks for. */
+  it("draws out a live run of sevens longer than the same run of anything else", () => {
+    const sevens = holdsFor(g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [t, t, t], [c, c, c]));
+    const bells = holdsFor(g([d, d, d], [d, d, d], [d, d, d], [t, t, t], [c, c, c]));
+    expect(sevens[3]).toBeGreaterThan(bells[3] as number);
+  });
+
+  it("makes the biggest moment the longest one", () => {
+    const jackpot = holdsFor(g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [c, c, c]));
+    const ordinary = holdsFor(g([d, d, d], [d, d, d], [d, d, d], [c, c, c], [c, c, c]));
+    expect(Math.max(...jackpot)).toBeGreaterThan(Math.max(...ordinary));
   });
 
   it("never holds a reel the answer no longer rides on", () => {
@@ -618,5 +658,64 @@ describe("the lines a machine opens with", () => {
     // Nine trebles what a spin costs against three. A machine that arrives
     // with the most expensive option bought has chosen for the player.
     expect(DEFAULT_LINES).toBeLessThan(Math.max(...LINE_CHOICES));
+  });
+});
+
+/**
+ * How long the rising note has left to climb.
+ *
+ * This was the half of the tease that was quietly broken: the note was handed
+ * the next reel's hold, which is a total measured from the start of the spin
+ * rather than a gap between two landings. So it finished its sweep early and
+ * sat at the top droning through the very moment it existed to build up to.
+ */
+const FOUR_SEVENS: Face[][] = [
+  ["seven", "seven", "seven"],
+  ["seven", "seven", "seven"],
+  ["seven", "seven", "seven"],
+  ["seven", "seven", "seven"],
+  ["cigar", "cigar", "cigar"],
+];
+const FOUR_CHEAP: Face[][] = [
+  ["tumbler", "tumbler", "tumbler"],
+  ["tumbler", "tumbler", "tumbler"],
+  ["tumbler", "tumbler", "tumbler"],
+  ["tumbler", "tumbler", "tumbler"],
+  ["cigar", "cigar", "cigar"],
+];
+
+describe("how long there is left to tease", () => {
+  it("is nothing when no reel after this one is being held", () => {
+    expect(teaseMs([0, 0, 0, 0, 0], 2)).toBe(0);
+    expect(teaseMs([0, 0, 0, HOLD_MS, 0], 3)).toBe(0);
+  });
+
+  it("reaches to the last held reel, not merely the next one", () => {
+    const holds = [0, 0, 0, HOLD_MS, HOLD_MS + HOLD_STEP_MS];
+    /*
+     * Reel two lands with no hold; reel four lands two staggers later plus its
+     * own hold. Anything shorter leaves the note flat while the reel that
+     * decides it is still turning.
+     */
+    expect(teaseMs(holds, 2)).toBe(2 * REEL_STAGGER_MS + HOLD_MS + HOLD_STEP_MS);
+  });
+
+  it("counts only what is left, from a reel that was itself held", () => {
+    const holds = [0, 0, 0, HOLD_MS, HOLD_MS + HOLD_STEP_MS];
+    // The wait already served does not get played twice.
+    expect(teaseMs(holds, 3)).toBe(REEL_STAGGER_MS + HOLD_STEP_MS);
+  });
+
+  /* The bug, stated as an assertion: it must not stop at the next reel. */
+  it("is longer with two reels held than with one", () => {
+    const one = teaseMs([0, 0, 0, HOLD_MS, 0], 2);
+    const two = teaseMs([0, 0, 0, HOLD_MS, HOLD_MS + HOLD_STEP_MS], 2);
+    expect(two).toBeGreaterThan(one);
+  });
+
+  it("lasts longer for the jackpot run than for an ordinary one", () => {
+    const ordinary = teaseMs(holdsFor(FOUR_CHEAP), 2);
+    const jackpot = teaseMs(holdsFor(FOUR_SEVENS), 2);
+    expect(jackpot).toBeGreaterThan(ordinary);
   });
 });
