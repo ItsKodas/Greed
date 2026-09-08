@@ -37,6 +37,36 @@
 
 .pk {
   container-type: inline-size;
+  margin-inline: auto;
+}
+
+/*
+ * The felt takes the width it is given, and never more height than the screen
+ * can spare.
+ *
+ * Its height comes from its width and its aspect, so on a wide monitor it grew
+ * until the buttons went off the bottom — and the buttons are the one part of
+ * this screen somebody has to be able to reach. So the width is capped by what
+ * is left of the viewport once everything that is not the table has had its
+ * share: the bar and the last event above it, and the amount, the sizes and
+ * the three buttons below.
+ *
+ * `dvh` rather than `vh` because a phone's address bar is part of that budget,
+ * and 1.6 because that is the felt's own aspect — this is its height written
+ * as a width. Everything on it is measured against this box, so the whole
+ * drawing shrinks together rather than the cards outgrowing the table.
+ */
+@media (min-width: 561px) {
+  .pk {
+    /*
+     * Floored above the width at which this felt becomes the phone one. That
+     * layout is square and stacks its controls taller, so shrinking a wide
+     * screen's table into it makes the very thing this cap exists to prevent:
+     * a short window would cross the breakpoint and push the buttons further
+     * off the bottom than leaving it alone would have.
+     */
+    max-width: max(580px, calc((100dvh - 470px) * 1.6));
+  }
 }
 
 /*
