@@ -103,6 +103,18 @@ export function greedAdapter(
     return room.status === "over";
   },
 
+  /**
+   * Who reached the target, which the room has already worked out.
+   *
+   * Answered for a friendly as readily as for a game played for chips. `settle`
+   * writes no record of a friendly, deliberately, but somebody still won it —
+   * and a taunt staked on a player costs real chips whatever the table plays
+   * for, so it has to come good on a result the history never mentions.
+   */
+  winners(room) {
+    return room.winnerIds;
+  },
+
   /** The pot to the winners, split evenly, remainder to the earliest seated. */
   async settle(room, deps) {
     const winners = room.seats.filter((seat) => room.winnerIds.includes(seat.id));

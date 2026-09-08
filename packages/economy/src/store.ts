@@ -1,6 +1,8 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { judgeCode, mintCodeText, normaliseCode } from "./codes.js";
 import type { CodeRecord, RedeemResult } from "./codes.js";
+import { judgeEmote } from "./emotes.js";
+import type { EmoteAsset, EmoteRecord, NewEmote } from "./emotes.js";
 /**
  * Where profiles, chips and finished games live.
  *
@@ -155,6 +157,34 @@ export interface Store {
    */
   redeem(code: string, userId: string): Promise<RedeemResult>;
   recentGames(userId: string, limit: number): Promise<GameRecord[]>;
+
+  /**
+   * The emotes players may throw at each other, and the files behind them.
+   *
+   * Uploaded by an admin, which puts them behind the same allowlist as minting
+   * a code — not because an emote is chips, but because it is the one thing in
+   * this building that a person supplies and every other person's browser then
+   * loads. What may be uploaded is decided in `emotes.ts`, off the bytes.
+   *
+   * Note that a store which keeps nothing keeps no emotes either, so a room
+   * with no database has none to offer. That is the same bargain profiles,
+   * chips and codes already make, and the alternative — a picture that lives
+   * until the next restart — is worse than not offering one.
+   */
+  addEmote(input: NewEmote): Promise<EmoteRecord>;
+  /** Newest first. `all` includes retired ones, for the admin's list. */
+  listEmotes(all: boolean): Promise<EmoteRecord[]>;
+  /**
+   * One emote's picture or sound, or null when there is none.
+   *
+   * Answers for a retired emote too: it may still be waiting in a bonus pool
+   * to be replayed at whoever threw it, and a replay that renders as a broken
+   * image is worse than one that should not have been offered.
+   */
+  emoteAsset(id: string, which: "image" | "sound"): Promise<EmoteAsset | null>;
+  /** Stops an emote being offered, without deleting what it was. */
+  retireEmote(id: string): Promise<boolean>;
+
   close(): Promise<void>;
 }
 
@@ -199,6 +229,18 @@ export class MemoryStore implements Store {
   private readonly games: GameRecord[] = [];
   /** Each game's bank. Numbers, because that is all they ever are. */
   private readonly house = new Map<BankName, number>();
+  private readonly emotes = new Map<string, EmoteRecord>();
+  /**
+   * The files, apart from the records that describe them.
+   *
+   * Two maps rather than one, for the same reason the record carries no bytes:
+   * listing the emotes is a common thing to do and copying a couple of
+   * megabytes each time to answer it is not.
+   */
+  private readonly emoteFiles = new Map<
+    string,
+    { image: EmoteAsset; sound: EmoteAsset | null }
+  >();
 
   async bank(which: BankName): Promise<number> {
     return this.house.get(which) ?? 0;
@@ -366,6 +408,69 @@ export class MemoryStore implements Store {
     record.redemptions += 1;
     profile.chips += record.chips;
     return { ok: true, chips: record.chips, balance: profile.chips };
+  }
+
+  async addEmote(input: NewEmote): Promise<EmoteRecord> {
+    /*
+     * Judged here as well as at the route, and not as a belt-and-braces
+     * gesture: this is the last point before bytes become something every
+     * player's browser will load, and a caller that forgot to check is the
+     * exact way an unchecked file gets in. Throwing is right — a store handed
+     * a file it must not keep has been asked to do something impossible.
+     */
+    const judged = judgeEmote(input);
+    if (!judged.ok) {
+      throw new Error(judged.reason);
+    }
+    const record: EmoteRecord = {
+      id: randomUUID(),
+      name: judged.emote.name,
+      cost: judged.emote.cost,
+      imageMime: judged.emote.imageMime,
+      soundMime: judged.emote.soundMime,
+      imageBytes: input.image.length,
+      soundBytes: judged.emote.soundMime === null ? null : (input.sound?.length ?? null),
+      createdBy: input.createdBy,
+      createdAt: Date.now(),
+      retired: false,
+    };
+    this.emotes.set(record.id, record);
+    /*
+     * Copied rather than kept by reference. The caller owns the buffer it
+     * decoded and is free to reuse it; a store that held on to it would serve
+     * whatever that buffer happened to contain later.
+     */
+    this.emoteFiles.set(record.id, {
+      image: { mime: judged.emote.imageMime, bytes: Uint8Array.from(input.image) },
+      sound:
+        judged.emote.soundMime === null || input.sound === null
+          ? null
+          : { mime: judged.emote.soundMime, bytes: Uint8Array.from(input.sound) },
+    });
+    return record;
+  }
+
+  async listEmotes(all: boolean): Promise<EmoteRecord[]> {
+    return [...this.emotes.values()]
+      .filter((emote) => all || !emote.retired)
+      .sort((left, right) => right.createdAt - left.createdAt);
+  }
+
+  async emoteAsset(id: string, which: "image" | "sound"): Promise<EmoteAsset | null> {
+    const files = this.emoteFiles.get(id);
+    if (files === undefined) {
+      return null;
+    }
+    return which === "image" ? files.image : files.sound;
+  }
+
+  async retireEmote(id: string): Promise<boolean> {
+    const emote = this.emotes.get(id);
+    if (emote === undefined || emote.retired) {
+      return false;
+    }
+    emote.retired = true;
+    return true;
   }
 
   async close(): Promise<void> {

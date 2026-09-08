@@ -10,6 +10,11 @@ import "./global.css";
  * and nothing could be seen.
  */
 import "./game/game.css";
+/*
+ * Here for the same reason: taunts are the building's furniture rather than
+ * any one game's, and every table can carry them.
+ */
+import "./taunt/taunt.css";
 
 const container = document.getElementById("root");
 if (container === null) {

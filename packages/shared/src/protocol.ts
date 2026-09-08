@@ -72,6 +72,20 @@ export interface TurnView {
 export interface TableEnvelope {
   game: string;
   listed: boolean;
+  /**
+   * What is riding on each seat, from taunts thrown at them this hand.
+   *
+   * Here beside `listed` rather than inside a game's view for the same reason:
+   * it is the room's fact about the table, not the game's. A game does not
+   * know taunts exist, and every game gets them anyway.
+   */
+  taunts: TauntStake[];
+}
+
+/** Chips staked on one seat winning, by the people who mocked them. */
+export interface TauntStake {
+  seatId: string;
+  chips: number;
 }
 
 /** Any game's view of a table, wrapped in what the room knows about it. */
@@ -152,6 +166,21 @@ export interface ClientToServer {
    */
   "game:action": (payload: { type: string; [key: string]: unknown }, ack?: () => void) => void;
   "chat:send": (payload: { text: string }) => void;
+  /**
+   * Throw a paid-for emote at somebody at this table.
+   *
+   * Not a `game:action`, and the distinction is the same one the slot machine
+   * draws: a game validates its own actions and this is not one. No game knows
+   * what a taunt is, none of them should have to, and a taunt at a card table
+   * means exactly what it means at a dice table.
+   *
+   * The ack carries the sender's balance so the picker can settle to the
+   * truth, rather than trusting the number it optimistically decremented.
+   */
+  "taunt:send": (
+    payload: { emoteId: string; seatId: string },
+    ack: (result: TauntAck) => void,
+  ) => void;
   /**
    * One pull of the lever at the slot machine.
    *
@@ -288,6 +317,62 @@ export interface ServerToClient {
    * sockets signed in as that account, so it is never anybody else's business.
    */
   "me:chips": (chips: number) => void;
+  /**
+   * Somebody was taunted, and everybody at the table sees it.
+   *
+   * Sent to the room rather than to the two people involved. A taunt is a
+   * public act — that is what makes it a taunt rather than a private message —
+   * and the chips riding on it are about to change what the table is playing
+   * for.
+   */
+  "taunt:play": (taunt: TauntPlay) => void;
+}
+
+/** What the server says about a throw. */
+export type TauntAck =
+  | { ok: true; chips: number }
+  | { ok: false; error: string };
+
+/**
+ * An emote as the room offers it, with no bytes in it.
+ *
+ * The URLs are absolute paths on this same server rather than data the client
+ * assembles, so where the files are served from can move without every client
+ * having to agree about it.
+ */
+export interface EmoteView {
+  id: string;
+  name: string;
+  cost: number;
+  image: string;
+  /** Null for an emote that is seen and not heard. */
+  sound: string | null;
+}
+
+/** One taunt landing, as everybody at the table sees it. */
+export interface TauntPlay {
+  /** Unique per throw, so the client can key an animation without an index. */
+  id: string;
+  emoteId: string;
+  /** The emote's own name and files, so a client that has never fetched the
+      catalogue can still show what landed. */
+  name: string;
+  image: string;
+  sound: string | null;
+  fromSeatId: string;
+  fromName: string;
+  atSeatId: string;
+  atName: string;
+  /** What it cost, which is what went into the pool. */
+  chips: number;
+  /**
+   * True when this is the pool coming back.
+   *
+   * The same emote, played at the person who originally threw it, because the
+   * person they aimed it at went on to win. The client shows it differently:
+   * it is not a new taunt and nobody paid for it a second time.
+   */
+  revenge: boolean;
 }
 
 export interface ChatMessage {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Emotes } from "./Emotes.js";
 import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
 
@@ -53,6 +54,7 @@ export function Admin() {
             <Bank key={bank.game} game={bank.game} label={bank.label} per={bank.per} />
           ))}
           <Mint onMinted={load} />
+          <Emotes />
           <section className="panel">
             <p className="panel__label">Codes</p>
             {codes === null || codes.length === 0 ? (

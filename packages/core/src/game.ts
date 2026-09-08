@@ -86,6 +86,19 @@ export interface GameAdapter<T extends PlayTable = PlayTable> {
    */
   settle(table: T, deps: GameDeps): Promise<void>;
 
+  /**
+   * The seats that just won, asked once a table is settled.
+   *
+   * Distinct from the winners inside a {@link FinishedGame}, which is a record
+   * of a game played for chips and is not written at all for a friendly. This
+   * is asked of every settled table whatever it was played for, because things
+   * outside the game ride on who won — a taunt staked on somebody comes good
+   * when they win a friendly hand exactly as it does when they win a paid one.
+   *
+   * Seat ids, because a table deals in seats: the same person is a different
+   * seat at a different table, and a guest has no account to be named by.
+   */
+  winners?(table: T): readonly string[];
   /** Whose turn is running out, for games with a clock. */
   clock?(table: T): Clock | null;
   /** What to do when it does. */
