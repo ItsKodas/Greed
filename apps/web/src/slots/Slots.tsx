@@ -848,6 +848,23 @@ function WinBreakdown({ lines, jackpot }: { lines: SpinLine[]; jackpot: boolean 
   );
 }
 
+/** An arrow curving back on itself: chips coming off the felt. */
+function TakeBackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="take__icon">
+      <title>Take back</title>
+      <path
+        d="M20 17a7 7 0 0 0-7-7H5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <path d="M9 5.5 4 10l5 4.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** Two arrows chasing each other: the machine going round again. */
 function RepeatIcon() {
   return (
@@ -1161,8 +1178,18 @@ function Controls({
           <>
             <ChipStack amount={total} width={64} />
             <span className="slots__bet-total">{exact(total)}</span>
-            <button type="button" className="slots__take" onClick={onClear} disabled={busy}>
-              Take it back
+            {/* An icon rather than a sentence: it sits in a row of chips and
+                a figure, and a line of underlined text in among them read as
+                something borrowed from a different page. */}
+            <button
+              type="button"
+              className="take"
+              onClick={onClear}
+              disabled={busy}
+              title="Take your chips back off the felt"
+              aria-label="Take your chips back off the felt"
+            >
+              <TakeBackIcon />
             </button>
           </>
         ) : (
