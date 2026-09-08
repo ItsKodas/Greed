@@ -26,12 +26,20 @@ export type Cue =
   | "bet"
   | "payout"
   /* The interface itself: any press, anywhere. */
-  | "tap";
+  | "tap"
+  /* The machine: the lever, a reel settling, and what it pays. */
+  | "lever"
+  | "reelStop"
+  | "spinWin"
+  | "jackpot"
+  | "bonus"
+  | "coin";
 
 interface Manifest {
   dice?: string[];
   cards?: string[];
   chips?: string[];
+  slots?: string[];
   ui?: string[];
   stingers?: string[];
   ambience?: string[];
@@ -455,6 +463,74 @@ export function play(cue: Cue): void {
       break;
 
     /*
+     * The machine.
+     *
+     * Every one of these is a recorded sample first, because a slot machine is
+     * a physical object and synthesis does not do sprung metal. The fallbacks
+     * exist so the game is still legible with the audio folder empty, not
+     * because they are as good.
+     */
+    case "lever":
+      void sample(pickNamed("slots", "lever"), 0.75).then((played) => {
+        if (!played) {
+          noise(0.09, 320, 0.2, 0.6);
+          tone({ frequency: 180, to: 90, duration: 0.16, type: "square", gain: 0.1 });
+        }
+      });
+      break;
+    case "reelStop":
+      /*
+       * Quieter than it wants to be. This fires five times a spin and a player
+       * will hear it a few hundred times an evening — at full weight it stops
+       * being punctuation and becomes a drum.
+       */
+      void sample(pickNamed("slots", "spinner_stop"), 0.5).then((played) => {
+        if (!played) {
+          noise(0.035, 900, 0.14, 0.8);
+        }
+      });
+      break;
+    case "spinWin":
+      void sample(pickNamed("slots", "win_sequence"), 0.8).then((played) => {
+        if (!played) {
+          [523, 659, 784, 1046].forEach((frequency, step) => {
+            tone({ frequency, duration: 0.3, type: "triangle", gain: 0.13, delay: step * 0.09 });
+          });
+        }
+      });
+      break;
+    case "jackpot":
+      // The win sequence and the coins together: the machine celebrating and
+      // the money arriving are two different sounds, and both belong here.
+      void sample(pickNamed("slots", "win_sequence"), 0.9).then((played) => {
+        if (!played) {
+          [523, 659, 784, 1046, 1318, 1568].forEach((frequency, step) => {
+            tone({ frequency, duration: 0.5, type: "triangle", gain: 0.15, delay: step * 0.1 });
+          });
+        }
+      });
+      void sample(pickNamed("slots", "coin_payout_1"), 0.8);
+      break;
+    case "coin":
+      // One coin hitting the tray. Played a few times over, unevenly, so a
+      // payout sounds counted rather than issued.
+      void sample(pickNamed("slots", "single_coin"), 0.55).then((played) => {
+        if (!played) {
+          tone({ frequency: 1200 + Math.random() * 400, duration: 0.07, gain: 0.08 });
+        }
+      });
+      break;
+    case "bonus":
+      void sample(pickNamed("slots", "bonus"), 0.85).then((played) => {
+        if (!played) {
+          [659, 784, 988, 1318].forEach((frequency, step) => {
+            tone({ frequency, duration: 0.4, type: "triangle", gain: 0.14, delay: step * 0.12 });
+          });
+        }
+      });
+      break;
+
+    /*
      * A whole hand going out, rather than one card.
      *
      * Six cards played from a single sample would machine-gun even with the
@@ -525,4 +601,126 @@ export function play(cue: Cue): void {
       });
       break;
   }
+}
+
+/** A sound that runs until it is told to stop. */
+export type LoopCue = "reels" | "coins";
+
+const LOOP_FILES: Record<LoopCue, string> = {
+  // "spinning_loop" and not "spin": the folder also holds spinner_stop, and a
+  // looping stop-click is a fault nobody would think to look for.
+  reels: "spinning_loop",
+  coins: "coin_payout_loop",
+};
+
+/**
+ * Starts a looping sample and hands back the way to stop it.
+ *
+ * A handle rather than a second cue, because the thing that starts a loop is
+ * always the thing that has to end it — and a `stop` cue in the same enum as
+ * `play` is an invitation to leave one running when a component unmounts
+ * mid-spin.
+ *
+ * Silent and harmless when there is no such file, no context yet, or the sound
+ * is off: the reels are visibly turning either way.
+ */
+export function startLoop(cue: LoopCue, gain = 0.45): () => void {
+  let stopped = false;
+  let node: AudioBufferSourceNode | null = null;
+  let level: GainNode | null = null;
+
+  void (async () => {
+    const url = pickNamed("slots", LOOP_FILES[cue]);
+    if (url === null || !ready || context === null || master === null) {
+      return;
+    }
+    const audio = await buffer(url);
+    // Checked again: the spin can easily be over by the time this decodes.
+    if (audio === null || stopped || context === null || master === null) {
+      return;
+    }
+    const source = context.createBufferSource();
+    source.buffer = audio;
+    source.loop = true;
+    const gainNode = context.createGain();
+    gainNode.gain.value = gain;
+    source.connect(gainNode).connect(master);
+    source.start();
+    node = source;
+    level = gainNode;
+  })();
+
+  return () => {
+    stopped = true;
+    if (node === null || context === null) {
+      return;
+    }
+    /*
+     * Faded rather than cut. A looping sample stopped dead leaves a click,
+     * which after five reels is the sound the player remembers.
+     */
+    const now = context.currentTime;
+    const stopAt = now + 0.08;
+    if (level !== null) {
+      level.gain.setValueAtTime(level.gain.value, now);
+      level.gain.exponentialRampToValueAtTime(0.0001, stopAt);
+    }
+    try {
+      node.stop(stopAt);
+    } catch {
+      // Already stopped, which is not worth a fuss.
+    }
+    node = null;
+    level = null;
+  };
+}
+
+/**
+ * The rising note under a spin that might be about to pay.
+ *
+ * Synthesised rather than sampled on purpose: its length is not known when it
+ * starts — it lasts exactly as long as the reels are held — and a sample would
+ * either be cut off or have to be chosen from a set of fixed lengths.
+ *
+ * Two voices a fifth apart, sliding up together under a slow swell, so it
+ * reads as pressure building rather than as an alarm. Returns the way to end
+ * it, which fades out over a beat rather than stopping dead.
+ */
+export function riser(seconds: number): () => void {
+  if (context === null || master === null || muted || volume === 0) {
+    return () => {};
+  }
+  const start = context.currentTime;
+  const level = context.createGain();
+  level.gain.setValueAtTime(0.0001, start);
+  level.gain.exponentialRampToValueAtTime(0.09, start + seconds * 0.85);
+  level.connect(master);
+
+  const voices = [1, 1.5].map((interval, index) => {
+    const osc = (context as AudioContext).createOscillator();
+    osc.type = index === 0 ? "triangle" : "sine";
+    osc.frequency.setValueAtTime(180 * interval, start);
+    osc.frequency.exponentialRampToValueAtTime(760 * interval, start + seconds);
+    osc.connect(level);
+    osc.start(start);
+    return osc;
+  });
+
+  return () => {
+    if (context === null) {
+      return;
+    }
+    const now = context.currentTime;
+    const end = now + 0.12;
+    level.gain.cancelScheduledValues(now);
+    level.gain.setValueAtTime(Math.max(0.0001, level.gain.value), now);
+    level.gain.exponentialRampToValueAtTime(0.0001, end);
+    for (const osc of voices) {
+      try {
+        osc.stop(end + 0.02);
+      } catch {
+        // Already stopped.
+      }
+    }
+  };
 }

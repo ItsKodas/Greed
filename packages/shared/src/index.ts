@@ -18,6 +18,7 @@ export {
   type SeatView,
   type ServerToClient,
   type SpinFace,
+  type SpinNews,
   type SpinLine,
   type SpinResult,
   type TurnView,

@@ -160,6 +160,14 @@ export interface ClientToServer {
    * catalogue.ts already says that forcing one through a table would bend both
    * out of shape.
    */
+  /**
+   * Stand at the machine, so you are sent what other people are winning.
+   *
+   * Separate from spinning, because most of the people who should see the
+   * feed are not spinning at that moment — that is rather the point of it.
+   */
+  "slots:watch": (payload: Record<string, never>, ack: (recent: SpinNews[]) => void) => void;
+  "slots:away": () => void;
   "slots:spin": (
     /**
      * `forFun` plays the machine for nothing: a purse and a bank that live at
@@ -199,6 +207,23 @@ export interface SpinLine {
   pay: number;
 }
 
+/**
+ * One spin, as everybody else at the machine sees it.
+ *
+ * Only spins played for chips. A for-fun machine's purse was never anybody's,
+ * so putting its wins on the wall would advertise a room busier than it is.
+ */
+export interface SpinNews {
+  /** Unique per spin, so the client can key a list without an index. */
+  id: string;
+  name: string;
+  avatar: string | null;
+  stake: number;
+  won: number;
+  jackpot: boolean;
+  at: number;
+}
+
 /** What the machine did with a pull of the lever. */
 export type SpinResult =
   | {
@@ -217,6 +242,8 @@ export type SpinResult =
   | { ok: false; error: string };
 
 export interface ServerToClient {
+  /** Somebody at the machine just pulled the lever. */
+  "slots:spun": (news: SpinNews) => void;
   /**
    * The table, as this seat may see it.
    *

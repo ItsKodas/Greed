@@ -37,6 +37,8 @@ export function Reel({
   spinning,
   index,
   resting,
+  holdMs = 0,
+  onStop,
 }: {
   /** What the server said is on this reel, or nothing while it is still out. */
   column: Face[] | undefined;
@@ -52,6 +54,16 @@ export function Reel({
    * before you have touched it looks like it is already running.
    */
   resting?: Face[];
+  /**
+   * Longer on the brake, for a reel the answer is still riding on.
+   *
+   * The server has already said what every reel holds, so this invents
+   * nothing — it only chooses how long to take saying it. Which is what a
+   * machine does when the first three reels have come up sevens.
+   */
+  holdMs?: number;
+  /** Called the moment this reel actually settles, for the sound. */
+  onStop?: () => void;
 }) {
   /*
    * What is on the glass, which is not the same as what the server has said.
@@ -64,6 +76,12 @@ export function Reel({
   const wasSpinning = useRef(spinning);
   /** Whether this reel has ever been asked to turn, which ends the rest state. */
   const everSpun = useRef(false);
+  /*
+   * Held in a ref so a caller that rebuilds the callback each render does not
+   * restart the timer underneath a spin that is already in the air.
+   */
+  const stopped = useRef(onStop);
+  stopped.current = onStop;
 
   useEffect(() => {
     if (spinning && !wasSpinning.current) {
@@ -84,11 +102,14 @@ export function Reel({
      * answer that took longer than the floor stops the reel at once rather
      * than adding a wait nobody asked for.
      */
-    const floor = SPIN_UP_MS + index * REEL_STAGGER_MS;
+    const floor = SPIN_UP_MS + index * REEL_STAGGER_MS + holdMs;
     const left = Math.max(0, floor - (Date.now() - startedAt.current));
-    const timer = window.setTimeout(() => setShown(column), left);
+    const timer = window.setTimeout(() => {
+      setShown(column);
+      stopped.current?.();
+    }, left);
     return () => window.clearTimeout(timer);
-  }, [column, shown, index]);
+  }, [column, shown, index, holdMs]);
 
   /*
    * At rest only before the first pull. After that an empty reel means one

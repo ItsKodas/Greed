@@ -1,7 +1,7 @@
 import type { AddressInfo } from "node:net";
 import { MemoryStore } from "@backroom/economy";
 import { FUN_PURSE } from "@backroom/game-slots";
-import type { ClientToServer, ServerToClient, SpinResult } from "@backroom/shared";
+import type { ClientToServer, ServerToClient, SpinNews, SpinResult } from "@backroom/shared";
 import type { Socket } from "socket.io-client";
 import { io as connect } from "socket.io-client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -550,6 +550,98 @@ describe("the machine played for nothing", () => {
     const profile = await store.get(userId);
     expect(profile?.byGame["slots"]).toBeUndefined();
     expect(profile?.stats.games).toBe(0);
+  });
+});
+
+function watch(client: Client): Promise<SpinNews[]> {
+  return new Promise((resolve) => client.emit("slots:watch", {}, resolve));
+}
+
+describe("the wall at the machine", () => {
+  it("tells everybody standing there what somebody just won", async () => {
+    const { client, base } = await openMachine({ bank: 500_000, chips: 100_000 });
+    const bystander = await another(base);
+    await watch(bystander);
+
+    const heard = new Promise<SpinNews>((resolve) =>
+      bystander.on("slots:spun", (spun) => resolve(spun)),
+    );
+    await spin(client, 100);
+    const spun = await heard;
+
+    expect(spun.stake).toBe(100);
+    expect(spun.name).toBe("Ada");
+    expect(typeof spun.id).toBe("string");
+  });
+
+  it("says nothing to somebody who is not at the machine", async () => {
+    /*
+     * A room they never walked into. Broadcasting to every socket on the
+     * server would put the slot machine's noise on the blackjack felt.
+     */
+    const { client, base } = await openMachine({ bank: 500_000, chips: 100_000 });
+    const elsewhere = await another(base);
+
+    let heard = 0;
+    elsewhere.on("slots:spun", () => {
+      heard += 1;
+    });
+    await spin(client, 100);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(heard).toBe(0);
+  });
+
+  it("keeps quiet about play money", async () => {
+    /*
+     * A for-fun purse was never anybody's. Putting its wins on the wall would
+     * advertise a machine busier than it is, which is the one thing a wall
+     * like this must not do.
+     */
+    const { client, base } = await openMachine({ bank: 500_000, chips: 100_000 });
+    const bystander = await another(base);
+    await watch(bystander);
+
+    let heard = 0;
+    bystander.on("slots:spun", () => {
+      heard += 1;
+    });
+    await play(client, 500);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(heard).toBe(0);
+  });
+
+  it("hands somebody who has just walked up what they missed", async () => {
+    // So a machine that has been played does not look untouched.
+    const { client, base } = await openMachine({ bank: 500_000, chips: 100_000 });
+    await spin(client, 100);
+    await spin(client, 250);
+
+    const latecomer = await another(base);
+    const backlog = await watch(latecomer);
+
+    expect(backlog).toHaveLength(2);
+    // Newest first, so the top of the wall is the thing that just happened.
+    expect(backlog[0]?.stake).toBe(250);
+    expect(backlog[1]?.stake).toBe(100);
+  });
+
+  it("stops telling somebody who has walked away", async () => {
+    const { client, base } = await openMachine({ bank: 500_000, chips: 100_000 });
+    const leaver = await another(base);
+    await watch(leaver);
+    leaver.emit("slots:away");
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    let heard = 0;
+    leaver.on("slots:spun", () => {
+      heard += 1;
+    });
+    await spin(client, 100);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(heard).toBe(0);
   });
 });
 

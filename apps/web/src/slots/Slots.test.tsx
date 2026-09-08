@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { PaylineOverlay } from "./Slots.js";
+import type { Face } from "@backroom/game-slots";
+import { HOLD_MS, holdsFor, PaylineOverlay } from "./Slots.js";
 
 describe("a win", () => {
   it("lights every line that paid", () => {
@@ -64,3 +65,68 @@ describe("a win", () => {
     expect(container.querySelectorAll(".payline")).toHaveLength(0);
   });
 });
+
+/**
+ * How long the machine takes to say what it already knows.
+ *
+ * The server sends the whole grid at once, so none of this guesses at
+ * anything — it only decides which reels are worth drawing out. Getting it
+ * wrong is not a wrong answer, it is a machine that shrugs through a line of
+ * sevens or makes a meal of three chips.
+ */
+describe("holding a reel back", () => {
+  const g = (...columns: Face[][]) => columns;
+  const c: Face = "chip";
+  const d: Face = "dice";
+  const s7: Face = "seven";
+  const b: Face = "bell";
+
+  it("does not hold anything on an ordinary spin", () => {
+    // Alternating reels drawn from two faces that never meet, so no payline
+    // can start a run at all. Writing this by eye is how the first version of
+    // this test ended up with three bells down the peak line.
+    const grid = g([c, c, c], [d, d, d], [c, c, c], [d, d, d], [c, c, c]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("does not make a meal of three small ones", () => {
+    // Three chips pays, but it is not a moment, and treating it as one makes
+    // every spin feel the same.
+    const grid = g([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("holds the fourth reel when three sevens are already up", () => {
+    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [d, d, d], [d, d, d]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, 0]);
+  });
+
+  it("holds the last reel too once four are up", () => {
+    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [d, d, d]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
+  });
+
+  it("holds for four of anything, however cheap", () => {
+    // Four across is one reel from a five of anything, which is worth the wait
+    // whatever the face turns out to be.
+    const grid = g([c, c, c], [c, c, c], [c, c, c], [c, c, c], [d, d, d]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
+  });
+
+  it("draws out the whole way on a five of a kind", () => {
+    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
+  });
+
+  it("holds for bells as well as sevens", () => {
+    const grid = g([b, b, b], [b, b, b], [b, b, b], [d, d, d], [d, d, d]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, 0]);
+  });
+
+  it("never holds a reel the answer no longer rides on", () => {
+    // A run that died on reel two: nothing after it is worth waiting for.
+    const grid = g([s7, s7, s7], [s7, s7, s7], [d, d, d], [s7, s7, s7], [s7, s7, s7]);
+    expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
+  });
+});
+

@@ -26,6 +26,7 @@ import type {
   Ack,
   ClientToServer,
   ServerToClient,
+  SpinNews,
   SpinResult,
   TableOnOffer,
 } from "@backroom/shared";
@@ -257,6 +258,15 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * game with no table to keep it at.
    */
   const funMachines = new Map<string, { purse: number; bank: number }>();
+  /** Everybody standing at the slot machine, whether or not they are spinning. */
+  const SLOTS_ROOM = "slots:floor";
+  /*
+   * The last few spins, so somebody who has just walked up sees a machine
+   * that has been played rather than one that has never been touched. Kept in
+   * memory and lost on restart, which is right: this is atmosphere, not a
+   * record, and the history has its own home.
+   */
+  const recentSpins: SpinNews[] = [];
   const turnClocks = new Map<string, NodeJS.Timeout>();
   /** What each table is waiting on, and the timer that ends the wait. */
   const pauses = new Map<string, { key: string; timer: NodeJS.Timeout }>();
@@ -1596,6 +1606,17 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
      * to pay it is already there — including the jackpot's share, which is a
      * share of the bank as it stands with the stake in it.
      */
+    socket.on("slots:watch", (_payload, ack) => {
+      void socket.join(SLOTS_ROOM);
+      // The backlog goes back with the ack rather than as a second event, so
+      // a machine that has just been opened is never briefly blank.
+      ack(recentSpins.slice(0, 12));
+    });
+
+    socket.on("slots:away", () => {
+      void socket.leave(SLOTS_ROOM);
+    });
+
     socket.on("slots:spin", (payload, ack) => {
       void (async () => {
         const parsed = spinSchema.safeParse(payload);
@@ -1658,6 +1679,24 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         if (won > 0) {
           await deps.give(userId, won);
         }
+
+        /*
+         * Told to everybody at the machine, spinner included. Only chips
+         * spins: a for-fun purse was never anybody's, and putting its wins on
+         * the wall would advertise a room busier than it is.
+         */
+        const news: SpinNews = {
+          id: `${socket.id}-${Date.now()}-${recentSpins.length}`,
+          name: socket.data.name ?? "Someone",
+          avatar: socket.data.identity?.avatar ?? null,
+          stake,
+          won,
+          jackpot,
+          at: Date.now(),
+        };
+        recentSpins.unshift(news);
+        recentSpins.length = Math.min(recentSpins.length, 24);
+        io.to(SLOTS_ROOM).emit("slots:spun", news);
 
         await deps.record(userId, {
           shared: { games: 1, wins: won > stake ? 1 : 0, chipsWon: won - stake },

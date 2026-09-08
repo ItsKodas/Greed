@@ -1,9 +1,20 @@
 import type { Face } from "@backroom/game-slots";
-import { CHIPS, FUN_BANK, FUN_PURSE, jackpotPay, maxStake, MIN_STAKE } from "@backroom/game-slots";
-import type { SpinLine, SpinResult } from "@backroom/shared";
+import {
+  CHIPS,
+  FUN_BANK,
+  FUN_PURSE,
+  jackpotPay,
+  maxStake,
+  MIN_STAKE,
+  PAYLINES,
+  runOn,
+} from "@backroom/game-slots";
+import type { SpinLine, SpinNews, SpinResult } from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { DiscordIcon } from "../blackjack/Icons.js";
+import { play, riser, startLoop } from "../game/audio.js";
+import { Avatar } from "../game/Avatar.js";
 import { Chip } from "../chips/Chip.js";
 import { ChipStack } from "../chips/ChipStack.js";
 import { useAccount } from "../game/useAccount.js";
@@ -54,6 +65,33 @@ const ATTRACT: Face[][] = [
   ["dice", "spade", "chip"],
 ];
 
+/** How much longer a reel is held when the answer is still riding on it. */
+export const HOLD_MS = 900;
+
+/**
+ * Which reels to take your time over.
+ *
+ * The server has already said what every reel holds, so nothing here is
+ * guessed — this only chooses how long the machine takes to say it, which is
+ * exactly what a real one does when the first three have come up sevens.
+ *
+ * Worth holding for: a big face already three across, or anything four across
+ * with one reel left. Small faces three across are a win but not a moment.
+ */
+export function holdsFor(grid: Face[][]): number[] {
+  let best = 0;
+  for (const line of PAYLINES) {
+    const { face, length } = runOn(grid, line);
+    const worth = length >= 4 || (length >= 3 && (face === "seven" || face === "bell"));
+    if (worth) {
+      best = Math.max(best, length);
+    }
+  }
+  // The deciding reel is the one the run has reached; hold it, and reel four
+  // as well once the run is long enough to still be alive when it lands.
+  return [0, 1, 2, 3, 4].map((reel) => (reel >= 3 && reel <= best ? HOLD_MS : 0));
+}
+
 /** What the machine says it just did. */
 function sayWhat(jackpot: boolean, won: number): string | null {
   if (jackpot) {
@@ -72,12 +110,14 @@ interface MachineSign {
 }
 
 type SpinSocket = Socket<
-  Record<string, never>,
+  { "slots:spun": (news: SpinNews) => void },
   {
     "slots:spin": (
       payload: { stake: number; forFun?: boolean },
       ack: (result: SpinResult) => void,
     ) => void;
+    "slots:watch": (payload: Record<string, never>, ack: (recent: SpinNews[]) => void) => void;
+    "slots:away": () => void;
   }
 >;
 
@@ -113,6 +153,15 @@ export default function Slots() {
   /** The play purse, which lives at the machine and never sees an account. */
   const [funPurse, setFunPurse] = useState(FUN_PURSE);
   const [funSign, setFunSign] = useState<MachineSign>(FUN_SIGN);
+  /** What everybody else at the machine has been doing. */
+  const [news, setNews] = useState<SpinNews[]>([]);
+  /** How long each reel is being held, which is only ever a reveal. */
+  const [holds, setHolds] = useState<number[]>([0, 0, 0, 0, 0]);
+  /** The spin loop and the rising note, so whatever started them can end them. */
+  const reelsLoop = useRef<(() => void) | null>(null);
+  const rising = useRef<(() => void) | null>(null);
+  /** The result, kept for the moment the last reel finally settles. */
+  const landed = useRef<{ won: number; jackpot: boolean; stake: number } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
   /*
@@ -128,9 +177,18 @@ export default function Slots() {
   useEffect(() => {
     const socket = io("", { withCredentials: true }) as SpinSocket;
     socketRef.current = socket;
-    socket.on("connect", () => setConnected(true));
+    socket.on("connect", () => {
+      setConnected(true);
+      // Stand at the machine. The backlog comes back with the ack, so the
+      // wall is never briefly blank for somebody who has just walked up.
+      socket.emit("slots:watch", {}, (recent) => setNews(recent));
+    });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("slots:spun", (spun) => {
+      setNews((seen) => [spun, ...seen].slice(0, 24));
+    });
     return () => {
+      socket.emit("slots:away");
       socket.close();
       socketRef.current = null;
     };
@@ -172,6 +230,87 @@ export default function Slots() {
   const canAdd = (amount: number) =>
     !spinning && stake + amount <= cap && balance !== null && stake + amount <= balance;
 
+  /**
+   * Everything the machine is making a noise about, stopped.
+   *
+   * One place, called from every way a spin can end — settled, refused, mode
+   * changed, page left. A loop is the one sound that does not stop itself, so
+   * every exit has to go through here or the machine spins forever in the
+   * dark.
+   */
+  const hush = useCallback(() => {
+    reelsLoop.current?.();
+    reelsLoop.current = null;
+    rising.current?.();
+    rising.current = null;
+  }, []);
+
+  // Whatever is running, it does not outlive the page.
+  useEffect(() => hush, [hush]);
+
+  /**
+   * Coins into the tray for a moment, then quiet.
+   *
+   * A loop rather than a burst of one-shots because a payout is one continuous
+   * sound, and stopped on a timer because how long it runs is a question about
+   * the size of the win rather than the length of the file.
+   */
+  const payingOut = useCallback((ms: number) => {
+    const stop = startLoop("coins", 0.5);
+    window.setTimeout(stop, ms);
+  }, []);
+
+  /** One reel has settled. */
+  const reelStopped = useCallback(
+    (index: number) => {
+      play("reelStop");
+
+      // The next reel is being held, which means the answer still rides on it.
+      const next = holds[index + 1] ?? 0;
+      if (next > 0 && rising.current === null) {
+        rising.current = riser((next + REEL_STAGGER_MS) / 1000);
+      }
+
+      if (index < 4) {
+        return;
+      }
+
+      // The last one. Everything that was running stops, and the machine says
+      // what it did.
+      hush();
+      const result = landed.current;
+      landed.current = null;
+      if (result === null || result.won <= 0) {
+        return;
+      }
+
+      /*
+       * How the money arrives, sized to how much of it there is. A handful of
+       * coins for an ordinary line, a run of them for something worth
+       * looking up at — the same sound at the same length for both would make
+       * every win feel identical, which is the one thing a payout must not do.
+       */
+      if (result.jackpot) {
+        play("jackpot");
+        play("bonus");
+        payingOut(2400);
+        return;
+      }
+      play("spinWin");
+      if (result.won >= result.stake * 20) {
+        // Not a bonus round — the machine has none. A flourish for a win big
+        // enough to deserve one.
+        play("bonus");
+        payingOut(1400);
+        return;
+      }
+      for (let coin = 0; coin < 3; coin += 1) {
+        window.setTimeout(() => play("coin"), coin * 130 + Math.random() * 60);
+      }
+    },
+    [holds, hush, payingOut],
+  );
+
   const changeMachine = (next: boolean) => {
     if (next === forFun || spinning) {
       return;
@@ -181,6 +320,7 @@ export default function Slots() {
      * a result from a game that was not this one, and carrying the stake would
      * put chips on the felt of a machine the player has only just walked up to.
      */
+    hush();
     setForFun(next);
     setStake(0);
     setGrid(undefined);
@@ -205,19 +345,36 @@ export default function Slots() {
     setLit(false);
     setSaid(null);
     setPending(stake);
+    setHolds([0, 0, 0, 0, 0]);
+    landed.current = null;
+
+    play("lever");
+    // Under the whole spin, and stopped by whichever reel settles last.
+    reelsLoop.current?.();
+    reelsLoop.current = startLoop("reels");
 
     socket.emit("slots:spin", { stake, ...(forFun ? { forFun: true } : {}) }, (result) => {
       setSpinning(false);
       setPending(0);
       if (!result.ok) {
         // Refused: the stake was never taken, so the glass goes back to what
-        // it was showing rather than sitting on a spin that did not happen.
+        // it was showing rather than sitting on a spin that did not happen —
+        // and the machine stops making the noise of a spin.
+        hush();
         setSaid(result.error);
         readSign();
         return;
       }
-      setGrid(result.grid as Face[][]);
+      const grid = result.grid as Face[][];
+      setGrid(grid);
       setLines(result.lines);
+      /*
+       * Set with the grid, in the same render, so the reels read their hold
+       * before they schedule anything. A hold arriving a render later would be
+       * a reel that had already decided when to stop.
+       */
+      setHolds(holdsFor(grid));
+      landed.current = { won: result.won, jackpot: result.jackpot, stake };
       if (forFun) {
         setFunPurse(result.balance);
         setFunSign({
@@ -273,7 +430,15 @@ export default function Slots() {
         connected={connected}
       />
 
-      <div className="slots__cabinet">
+      <div className="slots__floor">
+        <SpinFeed
+          title="At the machine"
+          empty="Nobody has pulled it yet."
+          news={news}
+          side="left"
+        />
+
+        <div className="slots__cabinet">
         <ModeSwitch forFun={forFun} onChange={changeMachine} busy={spinning} />
         <BankSign bank={shown?.bank ?? 0} jackpot={shown?.jackpot ?? 0} forFun={forFun} />
 
@@ -286,6 +451,8 @@ export default function Slots() {
               spinning={spinning}
               index={reel}
               resting={ATTRACT[reel]}
+              holdMs={holds[reel] ?? 0}
+              onStop={() => reelStopped(reel)}
             />
           ))}
           <PaylineOverlay lines={lit ? lines : []} />
@@ -311,8 +478,67 @@ export default function Slots() {
         ) : (
           <SignInToPlay available={account.available} />
         )}
+        </div>
+
+        <SpinFeed
+          title="Paying out"
+          empty="No wins yet."
+          news={news.filter((spun) => spun.won > 0)}
+          side="right"
+        />
       </div>
     </main>
+  );
+}
+
+/**
+ * What other people are doing at the machine.
+ *
+ * Only chips spins reach here, so the wall is an honest picture of the room:
+ * a for-fun purse was never anybody's, and counting it would advertise a
+ * machine busier than it is.
+ *
+ * Two of these, either side. The left is everything as it happens and the
+ * right is only what paid, so a quiet room still has one column with
+ * something in it and a busy one reads twice over.
+ */
+function SpinFeed({
+  title,
+  empty,
+  news,
+  side,
+}: {
+  title: string;
+  empty: string;
+  news: SpinNews[];
+  side: "left" | "right";
+}) {
+  return (
+    <aside className={`feed feed--${side}`} aria-label={title}>
+      <p className="feed__label">{title}</p>
+      {news.length === 0 ? (
+        <p className="feed__empty">{empty}</p>
+      ) : (
+        <ul className="feed__list">
+          {news.slice(0, 8).map((spun) => (
+            <li
+              key={spun.id}
+              className={`feed__row${spun.jackpot ? " feed__row--jackpot" : ""}`}
+            >
+              <Avatar name={spun.name} avatar={spun.avatar} accentColor={null} className="feed__face" />
+              <span className="feed__who">{spun.name}</span>
+              <span className="feed__sum">
+                {spun.won > 0 ? (
+                  <b className="feed__won">+{exact(spun.won - spun.stake)}</b>
+                ) : (
+                  <span className="feed__lost">-{exact(spun.stake)}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </aside>
   );
 }
 

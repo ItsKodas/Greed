@@ -24,12 +24,134 @@
   padding: var(--gr-space-4) var(--gr-space-5) var(--gr-space-6);
 }
 
+/*
+ * The machine, with the room either side of it.
+ *
+ * Three tracks so the cabinet stays centred whatever the feeds are doing: two
+ * equal outer columns that collapse to nothing before the middle one gives up
+ * a pixel. On a phone there is no room beside anything, so the feeds go below
+ * — a machine you cannot reach the lever of is worse than one with no wall.
+ */
+.slots__floor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--gr-space-4);
+}
+
 .slots__cabinet {
-  width: min(560px, 100%);
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-3);
+}
+
+/* ------------------------------------------------------------- the wall */
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  min-width: 0;
+  padding-top: var(--gr-space-6);
+}
+
+.feed__label {
+  margin: 0;
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gr-color-ink-faint);
+}
+
+.feed__empty {
+  margin: 0;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-faint);
+}
+
+.feed__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feed__row {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  min-width: 0;
+  padding: 6px var(--gr-space-2);
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-sm);
+  background: rgb(0 0 0 / 0.24);
+  font-size: var(--gr-text-sm);
+  /* Arriving, not appearing: this is the one thing on the page that says
+     somebody else is here. */
+  animation: feed-in 320ms cubic-bezier(0.16, 1.06, 0.28, 1) both;
+}
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
+.feed__row--jackpot {
+  border-color: var(--gr-color-neon);
+  background: color-mix(in srgb, var(--gr-color-neon) 16%, transparent);
+}
+
+.feed__face {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+/* Takes what is left and gives it up first: a long name must not push the
+   figure off the end of the row. */
+.feed__who {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gr-color-ink-dim);
+}
+
+.feed__sum {
+  margin-left: auto;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.feed__won {
+  color: var(--gr-color-good);
+  font-weight: 600;
+}
+
+.feed__lost {
+  color: var(--gr-color-ink-faint);
+}
+
+/*
+ * No room beside anything on a phone, so the wall goes under the machine and
+ * the two columns sit side by side down there instead.
+ */
+@media (max-width: 900px) {
+  .slots__floor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .slots__cabinet {
+    grid-column: 1 / -1;
+  }
+
+  .feed {
+    padding-top: var(--gr-space-2);
+  }
 }
 
 /* ------------------------------------------------------------- the sign */
@@ -478,6 +600,10 @@
   .slots__chip,
   .slots__lever {
     transition: none;
+  }
+
+  .feed__row {
+    animation: none;
   }
 
   /* The lines still have to be visible; they just arrive rather than sweep. */
