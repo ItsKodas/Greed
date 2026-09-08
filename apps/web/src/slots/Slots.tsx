@@ -20,7 +20,7 @@ import { ChipStack } from "../chips/ChipStack.js";
 import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
-import { Reel, REEL_STAGGER_MS, SPIN_UP_MS } from "./Reel.js";
+import { Reel, REEL_STAGGER_MS } from "./Reel.js";
 import "@backroom/game-slots/theme.css";
 import "./slots.css";
 
@@ -64,6 +64,16 @@ const ATTRACT: Face[][] = [
   ["seven", "horseshoe", "bell"],
   ["dice", "spade", "chip"],
 ];
+
+/**
+ * How long the machine waits for an answer before giving up on it.
+ *
+ * Generous, because a slow reply is still a reply and throwing away a spin
+ * that was about to land is worse than a long wait. But not forever: without
+ * this the lever stays down and the machine is dead until the page is
+ * reloaded, which is the one failure a player cannot work around.
+ */
+const PATIENCE_MS = 10_000;
 
 /** How much longer a reel is held when the answer is still riding on it. */
 export const HOLD_MS = 900;
@@ -157,6 +167,20 @@ export default function Slots() {
   const [news, setNews] = useState<SpinNews[]>([]);
   /** How long each reel is being held, which is only ever a reveal. */
   const [holds, setHolds] = useState<number[]>([0, 0, 0, 0, 0]);
+  /**
+   * Whether a pull is still playing out.
+   *
+   * Not the same as waiting on the server, and that difference is the whole
+   * point of it: the answer lands long before the reels finish saying it, so a
+   * lever that came back the moment the socket replied was live for two
+   * seconds while the machine was visibly still spinning.
+   *
+   * Runs from the press to the last reel settling, and is what the lever and
+   * the winning lines both wait on.
+   */
+  const [settling, setSettling] = useState(false);
+  /** Gives up on an answer that never comes, so the machine cannot lock. */
+  const patience = useRef<number | null>(null);
   /** The spin loop and the rising note, so whatever started them can end them. */
   const reelsLoop = useRef<(() => void) | null>(null);
   const rising = useRef<(() => void) | null>(null);
@@ -224,11 +248,16 @@ export default function Slots() {
       ? null
       : account.profile.chips - pending;
   const canPull =
-    connected && !spinning && stake >= MIN_STAKE && stake <= cap && balance !== null && stake <= balance;
+    connected &&
+    !settling &&
+    stake >= MIN_STAKE &&
+    stake <= cap &&
+    balance !== null &&
+    stake <= balance;
 
   /** Whether one more of this chip could go on: the bank's ceiling and yours. */
   const canAdd = (amount: number) =>
-    !spinning && stake + amount <= cap && balance !== null && stake + amount <= balance;
+    !settling && stake + amount <= cap && balance !== null && stake + amount <= balance;
 
   /**
    * Everything the machine is making a noise about, stopped.
@@ -243,6 +272,10 @@ export default function Slots() {
     reelsLoop.current = null;
     rising.current?.();
     rising.current = null;
+    if (patience.current !== null) {
+      window.clearTimeout(patience.current);
+      patience.current = null;
+    }
   }, []);
 
   // Whatever is running, it does not outlive the page.
@@ -274,6 +307,8 @@ export default function Slots() {
       if (index < 4) {
         return;
       }
+      // The pull is over: the lever comes back and the lines may light.
+      setSettling(false);
 
       // The last one. Everything that was running stops, and the machine says
       // what it did.
@@ -321,6 +356,7 @@ export default function Slots() {
      * put chips on the felt of a machine the player has only just walked up to.
      */
     hush();
+    setSettling(false);
     setForFun(next);
     setStake(0);
     setGrid(undefined);
@@ -346,6 +382,7 @@ export default function Slots() {
     setSaid(null);
     setPending(stake);
     setHolds([0, 0, 0, 0, 0]);
+    setSettling(true);
     landed.current = null;
 
     play("lever");
@@ -353,7 +390,25 @@ export default function Slots() {
     reelsLoop.current?.();
     reelsLoop.current = startLoop("reels");
 
+    /*
+     * An answer that never comes. The house rule is that anything shown early
+     * is given up on if the table never speaks — so the reels stop turning,
+     * the stake goes back on the glass, and the lever comes up.
+     */
+    patience.current = window.setTimeout(() => {
+      patience.current = null;
+      hush();
+      setSpinning(false);
+      setSettling(false);
+      setPending(0);
+      setSaid("The machine did not answer. Nothing was staked.");
+    }, PATIENCE_MS);
+
     socket.emit("slots:spin", { stake, ...(forFun ? { forFun: true } : {}) }, (result) => {
+      if (patience.current !== null) {
+        window.clearTimeout(patience.current);
+        patience.current = null;
+      }
       setSpinning(false);
       setPending(0);
       if (!result.ok) {
@@ -361,6 +416,7 @@ export default function Slots() {
         // it was showing rather than sitting on a spin that did not happen —
         // and the machine stops making the noise of a spin.
         hush();
+        setSettling(false);
         setSaid(result.error);
         readSign();
         return;
@@ -404,15 +460,19 @@ export default function Slots() {
   /*
    * The lines light after the last reel has settled, not with it. A win drawn
    * across reels that are still turning is a win the player cannot read.
+   *
+   * Hung off the reel actually stopping rather than off a sum of the timings.
+   * The sum stopped being true the moment a reel could be held back: on a spin
+   * with sevens up, the lines were lighting while the last reel was still
+   * turning — giving away the answer the hold exists to withhold.
    */
   useEffect(() => {
-    if (lines.length === 0) {
+    if (settling || lines.length === 0) {
       return;
     }
-    const settles = SPIN_UP_MS + REEL_STAGGER_MS * 4 + LINE_LIGHT_MS;
-    const timer = window.setTimeout(() => setLit(true), settles);
+    const timer = window.setTimeout(() => setLit(true), LINE_LIGHT_MS);
     return () => window.clearTimeout(timer);
-  }, [lines]);
+  }, [settling, lines]);
 
   const columns: (Face[] | undefined)[] = [0, 1, 2, 3, 4].map((reel) => grid?.[reel]);
   // Signed in, or playing for nothing — either way there is a machine to play.

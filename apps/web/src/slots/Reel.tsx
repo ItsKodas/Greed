@@ -18,10 +18,25 @@ import { FACE_SIZE, ReelFace } from "./Symbols.js";
  * the last reel is the one worth holding your breath for.
  */
 
-/** The shortest a reel may spin, however quickly the answer lands. */
-export const SPIN_UP_MS = 300;
-/** How much longer each reel spins than the one to its left. */
-export const REEL_STAGGER_MS = 120;
+/**
+ * The shortest a reel may spin, however quickly the answer lands.
+ *
+ * Just under a second. It was three hundred milliseconds, which is long
+ * enough to see and far too short to feel: the row had settled before the
+ * player's hand was off the lever, and a machine that answers that fast reads
+ * as one that had the answer ready — which it did, but it should not look
+ * like it.
+ */
+export const SPIN_UP_MS = 950;
+
+/**
+ * How much longer each reel spins than the one to its left.
+ *
+ * Wide enough that the reels land as five separate events rather than one
+ * ripple. Five reels at this spacing put the last one a shade over two
+ * seconds after the lever, which is about where a real cabinet sits.
+ */
+export const REEL_STAGGER_MS = 280;
 
 /**
  * The window the cabinet shows, named rather than counted.
