@@ -13,10 +13,14 @@ export { evaluate, PAYS } from "./paytable.js";
 export type { WinningLine } from "./paytable.js";
 export { jackpotOdds, LINE_RTP, lineRtp } from "./rtp.js";
 export {
+  CHIPS,
+  FUN_BANK,
+  FUN_PURSE,
   JACKPOT_SHARE,
   jackpotPay,
   MAX_LINE_PAY,
   maxStake,
+  MIN_STAKE,
   STAKE_DIVISOR,
   worstCase,
 } from "./bank.js";

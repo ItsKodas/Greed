@@ -124,6 +124,8 @@ export type ActionPayload = z.infer<typeof actionSchema>;
  */
 export const spinSchema = z.object({
   stake: z.number().int().min(1).max(1_000_000),
+  /** Play money. Absent means chips, so nothing plays for free by accident. */
+  forFun: z.boolean().optional(),
 });
 
 export type SpinPayload = z.infer<typeof spinSchema>;

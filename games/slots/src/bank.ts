@@ -74,3 +74,35 @@ export function worstCase(bank: number, stake: number): number {
   const withJackpot = jackpotPay(bank + stake) + (LINE_COUNT - 1) * topLine;
   return Math.max(allFixed, withJackpot);
 }
+
+/**
+ * What a machine playing for nothing starts with.
+ *
+ * A for-fun machine keeps its own purse *and* its own bank, both living at the
+ * machine and gone when the player walks away. That is what lets every other
+ * number in this package stay exactly as it is: the same paytable, the same
+ * cap, the same share of the bank — run against figures that were never
+ * anybody's.
+ *
+ * The bank is seeded past 1296 x the largest chip on the tray, so the whole
+ * tray is playable from the first pull rather than greying out until an
+ * imaginary bank has filled.
+ */
+export const FUN_PURSE = 25_000;
+export const FUN_BANK = 8_000_000;
+
+/**
+ * The chips this machine takes, largest first.
+ *
+ * The same denominations the card tables mint, because they are the same
+ * chips: a player who has learned that purple is five hundred should not have
+ * to learn it again twenty feet away. The artwork lives with the chips in the
+ * client; what belongs here is which of them this game accepts.
+ *
+ * Every one of these needs a bank of 1296 times it before the machine will
+ * take it, so the tray fills up as the bank does rather than all at once.
+ */
+export const CHIPS = [5000, 1000, 500, 250, 100] as const;
+
+/** The smallest thing anybody can put in. */
+export const MIN_STAKE = CHIPS[CHIPS.length - 1];

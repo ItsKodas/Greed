@@ -160,7 +160,14 @@ export interface ClientToServer {
    * catalogue.ts already says that forcing one through a table would bend both
    * out of shape.
    */
-  "slots:spin": (payload: { stake: number }, ack: (result: SpinResult) => void) => void;
+  "slots:spin": (
+    /**
+     * `forFun` plays the machine for nothing: a purse and a bank that live at
+     * the machine, touch no account and are gone when you walk away.
+     */
+    payload: { stake: number; forFun?: boolean },
+    ack: (result: SpinResult) => void,
+  ) => void;
 }
 
 /**

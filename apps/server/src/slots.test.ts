@@ -1,5 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { MemoryStore } from "@backroom/economy";
+import { FUN_PURSE } from "@backroom/game-slots";
 import type { ClientToServer, ServerToClient, SpinResult } from "@backroom/shared";
 import type { Socket } from "socket.io-client";
 import { io as connect } from "socket.io-client";
@@ -99,8 +100,35 @@ async function openMachine(
   return { base: `http://localhost:${port}`, store, userId: player.id, client };
 }
 
+/** A second player at the same server, for anything about two of them. */
+async function another(base: string): Promise<Client> {
+  const socket: Client = connect(base, { transports: ["websocket"], forceNew: true });
+  open.push(socket);
+  await new Promise<void>((resolve) => socket.on("connect", () => resolve()));
+  return socket;
+}
+
+/**
+ * Reels that cannot pay.
+ *
+ * Stop 0 shows three chips and stop 29 shows three sevens, so alternating them
+ * puts a chip reel beside a seven reel all the way across. Every payline reads
+ * one face and then a different one, which is a run of one on all nine.
+ */
+function losing(): () => number {
+  let call = 0;
+  return () => {
+    call += 1;
+    return call % 2 === 1 ? 0 : 29 / 32;
+  };
+}
+
 function spin(client: Client, stake: number): Promise<SpinResult> {
   return new Promise((resolve) => client.emit("slots:spin", { stake }, resolve));
+}
+
+function play(client: Client, stake: number): Promise<SpinResult> {
+  return new Promise((resolve) => client.emit("slots:spin", { stake, forFun: true }, resolve));
 }
 
 async function post(url: string, body: unknown) {
@@ -405,6 +433,123 @@ describe("the sign on the machine", () => {
     const { base } = await openMachine({ bank: 250_000 });
     const body = (await (await fetch(`${base}/api/slots`)).json()) as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(["bank", "jackpot", "maxStake"]);
+  });
+});
+
+describe("the machine played for nothing", () => {
+  it("never touches the account or the house bank", async () => {
+    /*
+     * The whole point of the mode, and the rule it has to keep: play money
+     * never touches an account. A hundred spins of it must leave the player's
+     * chips and the house bank exactly where they were — win, lose or jackpot.
+     */
+    const { client, store, userId } = await openMachine({ bank: 500_000, chips: 10_000 });
+    const chipsBefore = (await store.get(userId))?.chips ?? 0;
+    const bankBefore = await store.bank();
+
+    for (let n = 0; n < 100; n += 1) {
+      expect((await play(client, 250)).ok).toBe(true);
+    }
+
+    expect((await store.get(userId))?.chips).toBe(chipsBefore);
+    expect(await store.bank()).toBe(bankBefore);
+  });
+
+  it("plays without an account at all", async () => {
+    // Nobody signs in to play for nothing.
+    const { client } = await openMachine({ bank: 0, signedIn: false });
+    expect((await play(client, 100)).ok).toBe(true);
+  });
+
+  it("takes the whole tray from the first pull", async () => {
+    // Its bank is seeded past 1296 x the largest chip, so nothing on the tray
+    // is greyed out waiting for an imaginary bank to fill.
+    const { client } = await openMachine({ bank: 0, signedIn: false });
+    for (const stake of [100, 250, 500, 1000, 5000]) {
+      expect((await play(client, stake)).ok, `${stake} was refused`).toBe(true);
+    }
+  });
+
+  it("moves play money between its own purse and its own bank", async () => {
+    const { client } = await openMachine({ bank: 0, signedIn: false });
+    let purse: number | null = null;
+    let bank: number | null = null;
+    for (let n = 0; n < 60; n += 1) {
+      const result = await play(client, 100);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      if (purse !== null && bank !== null) {
+        // Same closed loop as the real machine: nothing appears, nothing goes.
+        expect(result.balance - purse + (result.bank - bank)).toBe(0);
+      }
+      purse = result.balance;
+      bank = result.bank;
+    }
+  });
+
+  it("refuses a stake the purse cannot cover rather than inventing it", async () => {
+    // Play money still has to add up. Running low means smaller spins, the
+    // same as anywhere else — it is only running *out* that is forgiven.
+    const { client } = await openMachine({ bank: 0, signedIn: false, spinRandom: losing() });
+    // 25,000 in the purse, so the fifth of these is the last it can cover.
+    for (let n = 0; n < 4; n += 1) {
+      expect((await play(client, 5000)).ok).toBe(true);
+    }
+    const broke = await play(client, 5000);
+    expect(broke.ok).toBe(true);
+    // That last one emptied it, so it was topped back up.
+    expect(broke.ok && broke.balance).toBe(FUN_PURSE);
+  });
+
+  it("tops a dry purse back up rather than ending the evening", async () => {
+    /*
+     * There is nothing to protect at a machine playing for nothing, so running
+     * out ends a spin rather than the session — the same way a for-fun table
+     * already refills a seat that cannot cover the minimum.
+     *
+     * Driven dry on a scripted reel rather than hoped for: at 90% return a
+     * purse wanders down slowly, and a test that waited for luck would be a
+     * test that failed one run in twenty.
+     */
+    const { client } = await openMachine({ bank: 0, signedIn: false, spinRandom: losing() });
+    let sawItRefill = false;
+    let previous = FUN_PURSE;
+    for (let n = 0; n < 20; n += 1) {
+      const result = await play(client, 5000);
+      if (!result.ok) {
+        throw new Error(result.error);
+      }
+      expect(result.won).toBe(0); // the scripted reels never pay
+      if (result.balance > previous) {
+        sawItRefill = true;
+      }
+      previous = result.balance;
+      expect(result.balance).toBeGreaterThan(0);
+    }
+    expect(sawItRefill).toBe(true);
+  });
+
+  it("keeps one player's play money away from another's", async () => {
+    const first = await openMachine({ bank: 0, signedIn: false });
+    const second = await another(first.base);
+
+    const a = await play(first.client, 5000);
+    const b = await play(second, 100);
+
+    // Two machines, two purses. The second player has just arrived.
+    expect(a.ok && b.ok).toBe(true);
+    if (a.ok && b.ok) {
+      expect(a.balance).not.toBe(b.balance);
+    }
+  });
+
+  it("records nothing, because nothing happened", async () => {
+    const { client, store, userId } = await openMachine({ bank: 500_000, chips: 10_000 });
+    await play(client, 250);
+    const profile = await store.get(userId);
+    expect(profile?.byGame["slots"]).toBeUndefined();
+    expect(profile?.stats.games).toBe(0);
   });
 });
 

@@ -10,10 +10,25 @@ import type { Store } from "@backroom/economy";
 import { judgeDaily, MemoryStore } from "@backroom/economy";
 import { BLACKJACK, blackjackAdapter } from "@backroom/game-blackjack";
 import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
-import { drawGrid, evaluate, jackpotPay, maxStake, SLOTS } from "@backroom/game-slots";
+import {
+  drawGrid,
+  evaluate,
+  FUN_BANK,
+  FUN_PURSE,
+  jackpotPay,
+  maxStake,
+  MIN_STAKE,
+  SLOTS,
+} from "@backroom/game-slots";
 import type { Die } from "@backroom/rules";
 
-import type { Ack, ClientToServer, ServerToClient, TableOnOffer } from "@backroom/shared";
+import type {
+  Ack,
+  ClientToServer,
+  ServerToClient,
+  SpinResult,
+  TableOnOffer,
+} from "@backroom/shared";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 // From the subpath, not the barrel: the client imports the barrel, and pulling
 // zod in through it would ship a validation library to every browser.
@@ -233,6 +248,15 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * watching: at the table, in the room, sent every state, holding nothing.
    */
   const sockets = new Map<string, { code: string; seatId: string | null }>();
+  /**
+   * A machine somebody is playing for nothing, one per socket.
+   *
+   * Its purse and its bank both live here and are gone when the socket is: no
+   * account is touched, nothing is recorded, and the house bank never hears
+   * about it. That is what "play money never touches an account" means for a
+   * game with no table to keep it at.
+   */
+  const funMachines = new Map<string, { purse: number; bank: number }>();
   const turnClocks = new Map<string, NodeJS.Timeout>();
   /** What each table is waiting on, and the timer that ends the wait. */
   const pauses = new Map<string, { key: string; timer: NodeJS.Timeout }>();
@@ -1236,6 +1260,63 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       });
   });
 
+  /**
+   * A pull on a machine playing for nothing.
+   *
+   * Deliberately the same arithmetic as the real one — same strip, same
+   * paytable, same cap, same share of the bank — run against a purse and a
+   * bank that were never anybody's. Sharing the arithmetic is the point: a
+   * for-fun machine that played differently would teach the wrong game.
+   *
+   * Nothing here touches the store, the house bank, or anybody's record. A
+   * player who runs dry is topped back up rather than shown the door, the way
+   * a for-fun table already does it: there is nothing to protect at a machine
+   * playing for nothing.
+   */
+  function spinForFun(
+    socketId: string,
+    stake: number,
+    ack: (result: SpinResult) => void,
+  ): void {
+    const machine = funMachines.get(socketId) ?? { purse: FUN_PURSE, bank: FUN_BANK };
+    funMachines.set(socketId, machine);
+
+    const cap = maxStake(machine.bank);
+    if (stake > cap) {
+      ack({ ok: false, error: `The bank covers ${cap} a spin at the moment.` });
+      return;
+    }
+    if (stake > machine.purse) {
+      ack({ ok: false, error: "Not enough play money." });
+      return;
+    }
+
+    machine.purse -= stake;
+    machine.bank += stake;
+
+    const grid = drawGrid(spinRandom);
+    const { lines, fixed, jackpot } = evaluate(grid, stake);
+    const won = fixed + (jackpot ? jackpotPay(machine.bank) : 0);
+    machine.bank -= won;
+    machine.purse += won;
+
+    // Topped back up rather than shown the door: losing play money costs
+    // nothing, so running out should end a spin, not the evening.
+    if (machine.purse < MIN_STAKE) {
+      machine.purse = FUN_PURSE;
+    }
+
+    ack({
+      ok: true,
+      grid,
+      lines,
+      won,
+      jackpot,
+      bank: machine.bank,
+      balance: machine.purse,
+    });
+  }
+
   io.on("connection", (socket) => {
     socket.on("lobby:create", (payload, ack) => {
       const parsed = createSchema.safeParse(payload);
@@ -1517,17 +1598,28 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
      */
     socket.on("slots:spin", (payload, ack) => {
       void (async () => {
-        const userId = socket.data.identity?.userId ?? null;
-        if (userId === null) {
-          ack({ ok: false, error: "Sign in to play for chips." });
-          return;
-        }
         const parsed = spinSchema.safeParse(payload);
         if (!parsed.success) {
           ack({ ok: false, error: "That is not a stake." });
           return;
         }
         const stake = parsed.data.stake;
+
+        /*
+         * Before the sign-in check, not after: nobody signs in to play for
+         * nothing. This mode touches no account, so requiring one would be
+         * asking for a name to write on a receipt that is never issued.
+         */
+        if (parsed.data.forFun === true) {
+          spinForFun(socket.id, stake, ack);
+          return;
+        }
+
+        const userId = socket.data.identity?.userId ?? null;
+        if (userId === null) {
+          ack({ ok: false, error: "Sign in to play for chips." });
+          return;
+        }
 
         const cap = maxStake(await store.bank());
         if (stake > cap) {
@@ -1590,6 +1682,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     socket.on("disconnect", () => {
       const seat = sockets.get(socket.id);
       sockets.delete(socket.id);
+      // Play money lives at the machine and goes when they do.
+      funMachines.delete(socket.id);
       budgets.delete(socket.id);
       chatBudgets.delete(socket.id);
       if (seat === undefined) {

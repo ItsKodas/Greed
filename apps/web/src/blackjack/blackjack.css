@@ -266,11 +266,15 @@
 
 .bj__chips {
   display: grid;
-  /* Four across rather than two: a chip is a thing you tap, not a panel. At
-     two per row they filled the side of the page and outshouted the felt. */
+  /* One row, however many the house mints: a fixed four left the fifth chip
+     orphaned on a second row, hanging off the left with three empty columns
+     beside it. A chip is a thing you tap, not a panel — at two per row they
+     filled the side of the page and outshouted the felt. */
   /* minmax(0,…) rather than 1fr: a plain 1fr will not shrink a track below its
      content, so the widest chip pushed the row out past the panel it sits in. */
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  justify-content: center;
   gap: var(--gr-space-2);
 }
 
