@@ -982,3 +982,27 @@
     transform: none;
   }
 }
+
+/*
+ * The label and what there is to bet with, on one line.
+ *
+ * The balance sits opposite the label rather than under it: this panel is read
+ * top-down while deciding a stake, and a number tucked below the heading reads
+ * as part of the heading rather than as the answer to "how much have I got?".
+ */
+.panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--gr-space-2);
+}
+
+.bj__bank {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--gr-text-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+  white-space: nowrap;
+}

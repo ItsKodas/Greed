@@ -21,7 +21,7 @@ import { ChipStack } from "../chips/ChipStack.js";
 import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
-import { Digits } from "./Digits.js";
+import { Digits } from "../game/Digits.js";
 import { Fireworks } from "./Fireworks.js";
 import { Reel, REEL_STAGGER_MS } from "./Reel.js";
 import { FaceDefs } from "./Symbols.js";
@@ -288,6 +288,30 @@ export default function Slots() {
    * nothing.
    */
   const scattered = useRef(bonusRun());
+  /**
+   * A balance the player has been paid but has not been shown yet.
+   *
+   * Held from the moment the answer lands until the celebration finishes, so
+   * the number climbs while the coins are counting out rather than before the
+   * reels have stopped. Null whenever there is nothing owed, which is every
+   * spin that did not pay.
+   */
+  const owed = useRef<number | null>(null);
+  /**
+   * Rows the wall has been told about but has not shown yet.
+   *
+   * Same reason as `owed`: the answer is in long before the reels have
+   * finished saying it, and the feed would say it first.
+   */
+  const held = useRef<SpinNews[]>([]);
+  /**
+   * Whether the machine is mid-spin, readable from the socket handler.
+   *
+   * The handler is registered once, so it closes over the first render's
+   * `settling` for ever. A ref is the only thing it can ask.
+   */
+  const settlingNow = useRef(false);
+
   const [lines, setLines] = useState<SpinLine[]>([]);
   const [lit, setLit] = useState(false);
 
@@ -304,6 +328,31 @@ export default function Slots() {
   const [forFun, setForFun] = useState(false);
   /** The play purse, which lives at the machine and never sees an account. */
   const [funPurse, setFunPurse] = useState(FUN_PURSE);
+
+  /**
+   * Show a balance that was already paid.
+   *
+   * Called when the celebration ends, and again at the start of the next pull
+   * in case anything skipped it — leaving a player looking at a balance that
+   * is short by their last win is far worse than showing it a beat early.
+   */
+  const payOut = useCallback(() => {
+    if (held.current.length > 0) {
+      const waiting = held.current;
+      held.current = [];
+      setNews((seen) => [...waiting, ...seen].slice(0, 24));
+    }
+    const paid = owed.current;
+    owed.current = null;
+    if (paid === null) {
+      return;
+    }
+    if (forFun) {
+      setFunPurse(paid);
+      return;
+    }
+    account.setChips(paid);
+  }, [account.setChips, forFun]);
   const [funSign, setFunSign] = useState<MachineSign>(FUN_SIGN);
   /** What everybody else at the machine has been doing. */
   const [news, setNews] = useState<SpinNews[]>([]);
@@ -353,6 +402,8 @@ export default function Slots() {
    * the winning lines both wait on.
    */
   const [settling, setSettling] = useState(false);
+  // Kept in step every render, because the socket handler cannot see state.
+  settlingNow.current = settling;
   /**
    * How many of the nine lines are being bought.
    *
@@ -425,6 +476,22 @@ export default function Slots() {
     });
     socket.on("disconnect", () => setConnected(false));
     socket.on("slots:spun", (spun) => {
+      /*
+       * Held while this machine is still turning.
+       *
+       * The feed is fed by the server, which knows the answer the moment the
+       * spin resolves — so a player's own row lands on the wall, win and all,
+       * while their reels are still going round. It is the same giveaway as a
+       * balance that jumps early, and a worse one: the row says the figure.
+       *
+       * Everybody's rows wait, not just this player's. Whose row it is cannot
+       * be told apart from here without matching on a name, and a stranger's
+       * spin arriving a second and a half late costs nothing.
+       */
+      if (settlingNow.current) {
+        held.current = [spun, ...held.current];
+        return;
+      }
       setNews((seen) => [spun, ...seen].slice(0, 24));
     });
     return () => {
@@ -604,7 +671,14 @@ export default function Slots() {
      */
     const result = landed.current;
     if (result === null || (result.won <= 0 && result.awarded <= 0)) {
-      // Nothing to watch, so the lever comes straight back.
+      /*
+       * Nothing to watch, so the lever comes straight back — but the wall
+       * still has to be let go of. Rows are held for the whole of a spin, and
+       * a spin that paid nothing ends here rather than at the celebration;
+       * without this they would wait for the next pull, and for a player who
+       * has stopped spinning, for ever.
+       */
+      payOut();
       setSettling(false);
       return;
     }
@@ -671,15 +745,16 @@ export default function Slots() {
      * Held down while the win plays out. Taking a stake over the top of a
      * payout hurries the player past the part they are here for.
      */
-    const done = window.setTimeout(
-      () => setSettling(false),
-      LINE_LIGHT_MS + celebrationMs(result.won, result.jackpot, result.lit, result.awarded),
-    );
+    const done = window.setTimeout(() => {
+      // The chips arrive last, and the counter climbs to meet them.
+      payOut();
+      setSettling(false);
+    }, LINE_LIGHT_MS + celebrationMs(result.won, result.jackpot, result.lit, result.awarded));
     return () => {
       window.clearTimeout(show);
       window.clearTimeout(done);
     };
-  }, [stopped, payingOut]);
+  }, [stopped, payingOut, payOut]);
 
   /*
    * Held in a ref so the loop below does not restart on every render. `pull`
@@ -745,6 +820,7 @@ export default function Slots() {
      * turning, the stake leaves the balance, and nothing here guesses at a
      * face — the reels show a blur until the server says what stopped where.
      */
+    payOut();
     setSpinning(true);
     setGrid(undefined);
     setLines([]);
@@ -830,7 +906,11 @@ export default function Slots() {
         awarded: result.awarded,
       };
       if (forFun) {
-        setFunPurse(result.balance);
+        // Same rule as the account below: the stake has gone, the win waits
+        // for the reels. This machine teaches the other one, so it cannot
+        // count out its money on a different beat.
+        setFunPurse(result.balance - result.won);
+        owed.current = result.won > 0 ? result.balance : null;
         setFunSign({
           bank: result.bank,
           maxStake: maxStake(result.bank),
@@ -850,7 +930,21 @@ export default function Slots() {
         maxStake: maxStake(result.bank),
         jackpot: jackpotPay(result.bank),
       });
-      account.setChips(result.balance);
+      /*
+       * The stake has left, but the win has not arrived yet.
+       *
+       * The server has already paid it — `result.balance` includes it, and the
+       * account is the server's to decide. What is deferred is only the
+       * *showing* of it: a counter that jumps the moment the answer lands is a
+       * counter that has told the player what the reels are still turning to
+       * say, and by the time the coins are counting out the number has been
+       * right for two seconds and nobody watched it move.
+       *
+       * So the balance goes to what it was with the stake gone and the win not
+       * yet in, and `owed` carries the rest until the celebration is over.
+       */
+      account.setChips(result.balance - result.won);
+      owed.current = result.won > 0 ? result.balance : null;
       setSaid(sayWhat(result.won));
     });
   };

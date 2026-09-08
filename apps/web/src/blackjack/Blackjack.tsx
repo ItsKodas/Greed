@@ -3,10 +3,12 @@ import { LAST_CALL_MS, value, WINDOWS } from "@backroom/game-blackjack";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Chip, MINTED } from "../chips/Chip.js";
+import { Chip, ChipMark, MINTED } from "../chips/Chip.js";
 import { ChipStack } from "../chips/ChipStack.js";
 import { Avatar } from "../game/Avatar.js";
+import { Digits } from "../game/Digits.js";
 import { play } from "../game/audio.js";
+import { compact } from "../game/money.js";
 import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
@@ -112,7 +114,7 @@ export function Blackjack() {
         <Sit table={table} invited={urlCode} account={account} />
       ) : (
         <>
-          <Felt table={table} state={state} seatId={seatId} />
+          <Felt table={table} state={state} seatId={seatId} chips={account.profile?.chips ?? null} />
           <Chat log={table.chat} seatId={seatId} onSay={table.say} />
         </>
       )}
@@ -124,10 +126,13 @@ function Felt({
   table,
   state,
   seatId,
+  chips,
 }: {
   table: Table;
   state: TableView;
   seatId: string | null;
+  /** What the player has to bet with, or null for a guest. */
+  chips: number | null;
 }) {
   const me = state.seats.find((seat) => seat.id === seatId) ?? null;
   /*
@@ -295,6 +300,7 @@ function Felt({
             windowMs={state.bettingMs}
             onStake={intent.place}
             forFun={state.forFun}
+            chips={chips}
           />
         ) : state.phase === "settled" ? (
           <>
@@ -529,6 +535,7 @@ function Betting({
   windowMs,
   onStake,
   forFun,
+  chips,
 }: {
   table: Table;
   mine: number;
@@ -543,6 +550,8 @@ function Betting({
   onStake: (amount: number) => void;
   /** True at a table playing for nothing, which is the only kind bots sit at. */
   forFun: boolean;
+  /** What the player has to bet with, or null for a guest. */
+  chips: number | null;
 }) {
   const stake = (amount: number) => {
     // Sounded and shown on the press rather than on the state coming back: the
@@ -567,7 +576,25 @@ function Betting({
 
   return (
     <>
-      <p className="panel__label">Your bet</p>
+      <div className="panel__head">
+        <p className="panel__label">Your bet</p>
+        {/*
+          * What there is to bet with, next to the thing being bet. Deciding
+          * how much to put down is the one moment it actually matters, and
+          * until now it was only in the navbar at the top of the page — the
+          * far corner from where the chips are.
+          *
+          * Not at a for-fun table: the purse there was never anybody's, so
+          * showing an account balance beside it would be answering a question
+          * nobody asked with a number that has nothing to do with the game.
+          */}
+        {chips !== null && !forFun ? (
+          <span className="bj__bank" title={`${fmt(chips)} chips`}>
+            <ChipMark />
+            <Digits value={compact(chips)} />
+          </span>
+        ) : null}
+      </div>
       {left === null ? null : (
         <p className={`bj__clock${lastCall ? " bj__clock--last" : ""}`}>
           <ClockIcon />

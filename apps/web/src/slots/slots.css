@@ -231,10 +231,6 @@
 }
 
 /*
- * The coin tray. Empty on purpose: it is the bottom edge of a machine, and a
- * machine that stops in a straight line reads as a panel.
- */
-/*
  * The coin tray: the bottom edge of the cabinet, not a panel sitting near it.
  *
  * Inset on all four sides it read as a hole in the machine — a dark rounded
@@ -774,51 +770,6 @@
  * every digit on the strip is one window tall, so a hundredth of a pixel out
  * multiplies by nine and the nines sit half a line high.
  */
-.roll {
-  display: inline-flex;
-  line-height: 1;
-}
-
-/*
- * The figure as text, for a screen reader. Off the page rather than
- * display:none, which would take it out of the accessibility tree along with
- * everything else.
- */
-.roll__said {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.roll__place {
-  display: inline-block;
-  overflow: hidden;
-  height: 1em;
-  /* A digit's own width, so the figure does not shuffle as the values change. */
-  width: 0.62em;
-  text-align: center;
-}
-
-.roll__gap {
-  display: inline-block;
-  height: 1em;
-}
-
-.roll__strip {
-  display: flex;
-  flex-direction: column;
-  transition: transform 620ms cubic-bezier(0.22, 1.2, 0.28, 1);
-}
-
-.roll__digit {
-  display: block;
-  height: 1em;
-  line-height: 1;
-}
-
 .screen__note {
   margin: 0;
   max-width: 36ch;
@@ -1544,7 +1495,13 @@
 }
 
 .slots__purse {
-  margin: 0;
+  /*
+   * Clear of the button above it. These two figures are a caption on the
+   * machine rather than part of the control — sat tight under the slab they
+   * read as a label on it, and the button loses the room it needs to look
+   * like something that moves.
+   */
+  margin: var(--gr-space-3) 0 0;
   display: flex;
   justify-content: space-between;
   gap: var(--gr-space-2);

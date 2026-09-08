@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChipMark } from "../chips/Chip.js";
+import { Digits } from "../game/Digits.js";
 import { Avatar } from "../game/Avatar.js";
 import { compact, exact } from "../game/money.js";
 import { Sign } from "../game/Sign.js";
@@ -152,7 +153,13 @@ function Who({ account }: { account: Account }) {
           */}
         <span className="me__chips" title={`${exact(account.profile.chips)} chips`}>
           <ChipMark />
-          {compact(account.profile.chips)}
+          {/*
+            * Rolled rather than replaced, so a win reads as chips arriving
+            * rather than as a number that was suddenly different. Only the
+            * columns that changed turn, which is what makes it a counter on a
+            * machine instead of text being swapped out.
+            */}
+          <Digits value={compact(account.profile.chips)} />
         </span>
       </Link>
       {low ? (

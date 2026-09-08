@@ -2338,3 +2338,50 @@
   font-size: var(--gr-text-xl);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------- a figure that rolls */
+
+.roll {
+  display: inline-flex;
+  line-height: 1;
+}
+
+/*
+ * The figure as text, for a screen reader. Off the page rather than
+ * display:none, which would take it out of the accessibility tree along with
+ * everything else.
+ */
+.roll__said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.roll__place {
+  display: inline-block;
+  overflow: hidden;
+  height: 1em;
+  /* A digit's own width, so the figure does not shuffle as the values change. */
+  width: 0.62em;
+  text-align: center;
+}
+
+.roll__gap {
+  display: inline-block;
+  height: 1em;
+}
+
+.roll__strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 620ms cubic-bezier(0.22, 1.2, 0.28, 1);
+}
+
+.roll__digit {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
