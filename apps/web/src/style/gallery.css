@@ -193,6 +193,13 @@
   background: #17101d;
 }
 
+/* The same drawing, at a size a person can actually judge it at. */
+.mock__face--big {
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+}
+
 .mock__caption {
   font-size: var(--gr-text-xs);
   color: var(--gr-color-ink-faint);
@@ -203,8 +210,8 @@
  * The wins.
  *
  * One per face, and each says something about the object rather than being
- * the same pulse seven times over: a key turns, a card flips, a chip spins on
- * its edge. That is the whole argument for drawing them separately.
+ * the same pulse seven times over: a domino falls, a stone catches the light,
+ * an ember breathes. That is the whole argument for drawing them separately.
  */
 .mock__face--won .mk-move {
   transform-origin: 30px 30px;
@@ -215,29 +222,63 @@
   animation: mk-slosh 1.4s ease-in-out infinite;
 }
 
+/*
+ * The cigar rocks, and the ember breathes inside it — two motions, but on two
+ * separate things, which is the only way that is allowed. The ember's own
+ * swell is small: it is a coal catching, not a firework.
+ */
 .mock__face--won .mk-move--cigar {
-  animation: mk-flare 0.9s ease-in-out infinite;
+  animation: mk-rock 1.6s ease-in-out infinite;
 }
 
-.mock__face--won .mk-move--dice {
-  animation: mk-throw 1.4s cubic-bezier(0.3, 0, 0.35, 1) infinite;
+.mock__face--won .mk-ember {
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+  animation: mk-flare 1.6s ease-in-out infinite;
+}
+
+/* Pivoted on the bottom edge, because that is what a domino falls about. */
+.mock__face--won .mk-move--domino {
+  transform-origin: 50% 100%;
+  animation: mk-topple 1.9s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
 .mock__face--won .mk-move--spade {
   animation: mk-turn-face 1.5s cubic-bezier(0.4, 0, 0.3, 1) infinite;
 }
 
-.mock__face--won .mk-move--stack {
-  animation: mk-settle 1.5s cubic-bezier(0.2, 1.5, 0.4, 1) infinite;
+/*
+ * The stone swells while the light crosses it, on the same clock, so the two
+ * read as one event.
+ *
+ * Deliberately not a .mk-move: that rule scales a face about its own bounding
+ * box, and this one's box holds the shine parked off to the left, which pulls
+ * the centre of the swell off the stone. Measured at 2x, the shared origin
+ * walks the stone 5px down and right; this one holds it still.
+ */
+.mock__face--won .mk-move--diamond {
+  transform-box: view-box;
+  /*
+   * The stone's own middle, in the stone's own coordinates — which are
+   * already centred in the box by the group above it. Not 30px 30px: that
+   * resolves in this group's space, which puts it in the corner of the box
+   * and walks the stone up and to the left as it swells. Measured: 7px of
+   * travel on a 9px swell.
+   */
+  transform-origin: 0 2.5px;
+  animation: mk-pulse 1.8s ease-in-out infinite;
 }
 
-/* Nothing at all until it wins: the chip being paid in does not exist yet. */
-.mk-drop {
+/* Nothing until it wins: a bar of white sitting on a gem is not a resting
+   state. */
+.mk-shine {
   opacity: 0;
+  transform: rotate(16deg);
+  transform-origin: 30px 30px;
 }
 
-.mock__face--won .mk-drop {
-  animation: mk-payin 1.5s cubic-bezier(0.3, 1.6, 0.5, 1) infinite;
+.mock__face--won .mk-shine {
+  animation: mk-shine 1.8s cubic-bezier(0.4, 0, 0.5, 1) infinite;
 }
 
 .mock__face--won .mk-move--seven {
@@ -257,19 +298,27 @@
   75% { transform: translateX(1px) rotate(2deg); }
 }
 
-/* The ember catches, brightens, and dies back. */
-@keyframes mk-flare {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  45% { transform: scale(1.35); opacity: 1; }
+/* Held between two fingers, and turned. */
+@keyframes mk-rock {
+  0%, 100% { transform: rotate(0deg); }
+  30% { transform: rotate(-6deg); }
+  65% { transform: rotate(5deg); }
 }
 
-/* Thrown: up, over, and down onto the felt. */
-@keyframes mk-throw {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25% { transform: translateY(-7px) rotate(-120deg); }
-  50% { transform: translateY(-9px) rotate(-240deg); }
-  72% { transform: translateY(1px) rotate(-360deg); }
-  84% { transform: translateY(0) rotate(-360deg); }
+/* Drawn on: it brightens, then dies back. */
+@keyframes mk-flare {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  45% { transform: scale(1.12); opacity: 1; }
+}
+
+/* A rock back, the fall, and it stands itself up again to do it once more. */
+@keyframes mk-topple {
+  0%, 8% { transform: rotate(0deg); }
+  24% { transform: rotate(-9deg); }
+  48% { transform: rotate(78deg); }
+  55% { transform: rotate(71deg); }
+  62%, 72% { transform: rotate(76deg); }
+  94%, 100% { transform: rotate(0deg); }
 }
 
 /* Turning to catch the light, then back. A pip is a flat thing; leaning it
@@ -280,19 +329,20 @@
   65% { transform: rotate(9deg) scale(1.06); }
 }
 
-/* Taking the weight of the one that just landed on it. */
-@keyframes mk-settle {
-  0%, 22%, 100% { transform: translateY(0) scaleY(1); }
-  32% { transform: translateY(1.5px) scaleY(0.9); }
-  48% { transform: translateY(0) scaleY(1.04); }
+/* Taking a breath, which is what a stone does not do — and is exactly why it
+   reads as the stone being excited rather than as the stone moving. */
+@keyframes mk-pulse {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.12); }
+  62% { transform: scale(0.97); }
 }
 
-/* A chip paid onto the stack: in from above, and gone once it has landed. */
-@keyframes mk-payin {
-  0% { opacity: 0; transform: translateY(-26px); }
-  10% { opacity: 1; }
-  30%, 55% { opacity: 1; transform: translateY(0); }
-  70%, 100% { opacity: 0; transform: translateY(0); }
+/* Light crossing the stone, left to right, and not coming back. */
+@keyframes mk-shine {
+  0% { opacity: 0; transform: rotate(16deg) translateX(0); }
+  12% { opacity: 0.55; }
+  55% { opacity: 0.55; transform: rotate(16deg) translateX(58px); }
+  66%, 100% { opacity: 0; transform: rotate(16deg) translateX(58px); }
 }
 
 /* A tube coming up: two false starts, then it holds. Stepped, because a
@@ -314,7 +364,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mock__face--won .mk-move {
+  .mock__face--won .mk-move,
+  .mock__face--won .mk-move--diamond,
+  .mock__face--won .mk-ember,
+  .mock__face--won .mk-shine {
     animation: none;
   }
 }

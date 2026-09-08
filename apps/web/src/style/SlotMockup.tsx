@@ -8,24 +8,29 @@ import { ReelFace } from "../slots/Symbols.js";
  * can change what anybody is playing. It is here to be argued with.
  *
  * The set on the right is drawn from this building rather than from a fruit
- * machine — a tumbler, a cigar, a thrown pair of dice, a spade, a stack of
- * chips, the neon seven that was already the best of the old lot, and a star
- * for the bonus. Every silhouette is different, which is what actually does
- * the work at 57px on a phone: a trapezoid, a diagonal, a cluster of cubes, a
- * pip, a squat stack, a numeral, a burst.
+ * machine — a tumbler, a cigar, a domino stood on end, a spade, a cut stone,
+ * the neon seven that was already the best of the old lot, and a star for the
+ * bonus. Every silhouette is different, which is what actually does the work
+ * at 57px on a phone: a trapezoid, a diagonal, an upright slab, a pip, a
+ * pointed gem, a numeral, a burst.
+ *
+ * Each face is one object seen face-on, lit from the top left. Not one drawn
+ * in perspective: a tile with a visible thickness down its side, or a gem
+ * built out of a dozen shaded planes, reads as a render of a thing rather than
+ * as a symbol of it, and at 57px the extra geometry is mud.
  *
  * Each one also carries its own win animation, and each says something about
- * the object rather than being the same pulse seven times: the dice tumble, a
- * chip is paid onto the stack, the ember flares, the glass rattles.
+ * the object rather than being the same pulse seven times: the domino falls,
+ * the stone takes the light, the ember flares.
  */
 
 /** Every proposed face, cheapest first, the way a paytable reads. */
 export const PROPOSED = [
   "tumbler",
   "cigar",
-  "dice",
+  "domino",
   "spade",
-  "stack",
+  "diamond",
   "seven",
   "bonus",
 ] as const;
@@ -35,15 +40,18 @@ export type Proposed = (typeof PROPOSED)[number];
 const LABEL: Record<Proposed, string> = {
   tumbler: "Tumbler",
   cigar: "Cigar",
-  dice: "Dice",
+  domino: "Domino",
   spade: "Spade",
-  stack: "Chips",
+  diamond: "Diamond",
   seven: "Seven",
   bonus: "Bonus",
 };
 
 /** What the current machine shows, for the comparison. */
 export const CURRENT = ["chip", "dice", "spade", "horseshoe", "bell", "seven"] as const;
+
+/** The gem, kept in one place: the shine is a bar slid across behind it. */
+const GEM = "M-9 -14 L9 -14 L18 -4 L0 19 L-18 -4 Z";
 
 /** Shading shared by every proposed face, mounted once. */
 function Defs() {
@@ -63,7 +71,7 @@ function Defs() {
           <stop offset="0%" stopColor="#8d6237" />
           <stop offset="100%" stopColor="#4e3319" />
         </linearGradient>
-        <linearGradient id="mk-dice" x1="0.15" y1="0" x2="0.85" y2="1">
+        <linearGradient id="mk-ivory" x1="0.15" y1="0" x2="0.85" y2="1">
           <stop offset="0%" stopColor="#ffffff" />
           <stop offset="60%" stopColor="#eef1f6" />
           <stop offset="100%" stopColor="#c3ccda" />
@@ -73,15 +81,10 @@ function Defs() {
           <stop offset="55%" stopColor="#7fa8d8" />
           <stop offset="100%" stopColor="#4e77a8" />
         </linearGradient>
-        {/* The wall of the chip, darker down the side as a real one is. */}
-        <linearGradient id="mk-chip-wall" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#c8973a" />
-          <stop offset="100%" stopColor="#6d4d11" />
-        </linearGradient>
-        <linearGradient id="mk-chip" x1="0.2" y1="0" x2="0.8" y2="1">
-          <stop offset="0%" stopColor="#f7d478" />
-          <stop offset="55%" stopColor="#e0b048" />
-          <stop offset="100%" stopColor="#a97c22" />
+        <linearGradient id="mk-gem" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0%" stopColor="#eafbff" />
+          <stop offset="45%" stopColor="#8fd4ea" />
+          <stop offset="100%" stopColor="#3f8fb4" />
         </linearGradient>
         <linearGradient id="mk-neon" x1="0.2" y1="0" x2="0.8" y2="1">
           <stop offset="0%" stopColor="var(--gr-color-neon-core, #ffe8f7)" />
@@ -102,53 +105,17 @@ function Defs() {
           <stop offset="45%" stopColor="#ff8a2b" />
           <stop offset="100%" stopColor="#b52d05" stopOpacity="0" />
         </radialGradient>
+        {/*
+          * The stone, so a shine can be slid across it without escaping it.
+          * Untranslated: a clip is resolved in the user space of whatever it
+          * is applied to, and the thing it clips already sits inside the
+          * group that centres every face.
+          */}
+        <clipPath id="mk-gem-clip">
+          <path d={GEM} />
+        </clipPath>
       </defs>
     </svg>
-  );
-}
-
-/**
- * One die, with a top and a right face so it reads as a cube.
- *
- * `pips` are in units of the half-face, so the same list places them however
- * big the die is drawn.
- */
-function Die({
-  x,
-  y,
-  size,
-  rot,
-  pips,
-}: {
-  x: number;
-  y: number;
-  size: number;
-  rot: number;
-  pips: [number, number][];
-}) {
-  const lean = size * 0.42;
-  return (
-    <g transform={`translate(${x} ${y}) rotate(${rot})`}>
-      {/* The top, tilted away, and the right side falling off it. */}
-      <path
-        d={`M${-size} ${-size} L${-size + lean} ${-size - lean} L${size + lean} ${-size - lean} L${size} ${-size} Z`}
-        fill="#ffffff"
-      />
-      <path
-        d={`M${size} ${-size} L${size + lean} ${-size - lean} L${size + lean} ${size - lean} L${size} ${size} Z`}
-        fill="#b9c3d2"
-      />
-      <rect x={-size} y={-size} width={size * 2} height={size * 2} rx={size * 0.24} fill="url(#mk-dice)" />
-      {pips.map(([px, py]) => (
-        <circle
-          key={`${px},${py}`}
-          cx={px * size * 0.52}
-          cy={py * size * 0.52}
-          r={size * 0.19}
-          fill="#1b2028"
-        />
-      ))}
-    </g>
   );
 }
 
@@ -197,41 +164,57 @@ const ART: Record<Proposed, React.ReactNode> = {
   cigar: (
     <>
       <Ground rx={17} />
+      {/*
+       * The lean is on the outer group and the rock on the inner one: a CSS
+       * transform replaces the SVG attribute outright rather than composing
+       * with it, so a rock written onto this group would drop the lean and lay
+       * the cigar flat the moment it won.
+       */}
       <g transform="rotate(-24)">
-        <rect x="-20" y="-6" width="34" height="12" rx="5" fill="url(#mk-leaf)" />
-        {/* The band, because a cigar without one is a brown rectangle. */}
-        <rect x="0" y="-6" width="7" height="12" fill="#c8a03c" />
-        <path d="M-20 -3 H10" stroke="#fff" strokeOpacity="0.16" strokeWidth="2" strokeLinecap="round" />
         <g className="mk-move mk-move--cigar">
-          <circle cx="17" cy="0" r="7" fill="url(#mk-ember)" />
-          <circle cx="15" cy="0" r="3.4" fill="#ffb347" />
+          <rect x="-20" y="-6" width="34" height="12" rx="5" fill="url(#mk-leaf)" />
+          {/* The band, because a cigar without one is a brown rectangle. */}
+          <rect x="0" y="-6" width="7" height="12" fill="#c8a03c" />
+          <path
+            d="M-20 -3 H10"
+            stroke="#fff"
+            strokeOpacity="0.16"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          {/* A coal catching, not a firework: it barely swells. */}
+          <g className="mk-ember">
+            <circle cx="17" cy="0" r="7" fill="url(#mk-ember)" />
+            <circle cx="15" cy="0" r="3.4" fill="#ffb347" />
+          </g>
         </g>
       </g>
     </>
   ),
-  dice: (
+  domino: (
     <>
-      <Ground rx={17} cy={21} />
+      <Ground rx={10} cy={17} />
       {/*
-       * A pair, and built with a top and a side rather than drawn flat on.
-       *
-       * A die seen square-on is a rounded rectangle with dots in it — the same
-       * shape as a card, a domino or a matchbook. The two extra faces are what
-       * make the outline unmistakable at 57px, and a pair reads as a throw
-       * rather than as an object sitting still.
+       * Stood on its end, which is the only way a domino is interesting: lying
+       * flat it is a rectangle, standing it is a thing about to fall. Face-on,
+       * with no thickness down the side. Twice as tall as it is wide, which
+       * is a domino's own proportion — and no taller, because the fall pivots
+       * on the bottom edge and a tile longer than half the box lands with its
+       * far corner outside it.
        */}
-      <g className="mk-move mk-move--dice">
-        <Die x={5} y={2} size={13} rot={12} pips={[[0, 0]]} />
-        <Die
-          x={-8}
-          y={-2}
-          size={11}
-          rot={-16}
-          pips={[
-            [-1, -1],
-            [1, 1],
-          ]}
-        />
+      <g className="mk-move mk-move--domino">
+        <rect x="-8" y="-14" width="16" height="28" rx="2.5" fill="url(#mk-ivory)" />
+        <rect x="-6.4" y="-0.8" width="12.8" height="1.6" rx="0.8" fill="#9aa5b5" />
+        {/* Three over two: a face that reads at a glance and is not a die. */}
+        {[
+          [-3.6, -10.6],
+          [0, -7],
+          [3.6, -3.4],
+          [-3.6, 3.4],
+          [3.6, 10.6],
+        ].map(([x, y]) => (
+          <circle key={`${x},${y}`} cx={x} cy={y} r="2" fill="#1b2028" />
+        ))}
       </g>
     </>
   ),
@@ -253,66 +236,31 @@ const ART: Record<Proposed, React.ReactNode> = {
       </g>
     </>
   ),
-  stack: (
+  diamond: (
     <>
-      <Ground rx={17} cy={22} />
+      <Ground rx={15} cy={22} />
       {/*
-       * A stack rather than a chip.
+       * One stone with its cut drawn on, rather than a dozen shaded planes:
+       * the girdle and two pavilion lines are the whole of it. Which leaves
+       * the win somewhere to happen — the stone swells while the light travels
+       * across it, and the light is clipped to the stone's own outline.
        *
-       * One disc is a circle with a pattern on it however it is shaded, and it
-       * has to sit in a row beside a glass, a cigar and a key — all objects
-       * with a height. Three of them stacked is money, reads at a glance from
-       * its outline alone, and gives the win something to actually do.
+       * The shine rides inside the swelling group rather than beside it. A
+       * clip is resolved before an ancestor's transform, so the two scale
+       * together and the light keeps its edges on the stone.
        */}
-      <g className="mk-move mk-move--stack">
-        {[10, 3, -4].map((y, tier) => (
-          <g key={y}>
-            <path
-              d={`M-16 ${y} A 16 6.4 0 0 0 16 ${y} L 16 ${y + 5} A 16 6.4 0 0 1 -16 ${y + 5} Z`}
-              fill="url(#mk-chip-wall)"
-            />
-            {[-12, -6, 0, 6, 12].map((x) => (
-              <rect
-                key={x}
-                x={x - 1.2}
-                y={y + 1.4 - Math.abs(x) * 0.16}
-                width="2.4"
-                height="5"
-                rx="1"
-                fill="#f7ecd6"
-                opacity={tier === 2 ? 0.85 : 0.6}
-              />
-            ))}
-            <ellipse cx="0" cy={y} rx="16" ry="6.4" fill="url(#mk-chip)" />
-          </g>
-        ))}
-        {/* Only the top one shows a face; the rest are edges. */}
-        <ellipse
-          cx="0"
-          cy="-4"
-          rx="12"
-          ry="4.6"
-          fill="none"
-          stroke="#f7ecd6"
-          strokeWidth="3.4"
-          strokeDasharray="5.5 5"
+      <g className="mk-move--diamond">
+        <path d={GEM} fill="url(#mk-gem)" />
+        <path d="M-9 -14 L-18 -4 L-4 -4 L0 19 Z" fill="#fff" opacity="0.26" />
+        <path
+          d="M-18 -4 H18 M-6 -4 L0 19 M6 -4 L0 19"
+          stroke="#fff"
+          strokeOpacity="0.4"
+          strokeWidth="1.6"
         />
-        <ellipse cx="0" cy="-4" rx="5.4" ry="2.1" fill="#a97c22" opacity="0.45" />
-      </g>
-      {/* The one being paid in, which only exists while it is landing. */}
-      <g className="mk-drop">
-        <path d="M-16 -13 A 16 6.4 0 0 0 16 -13 L 16 -8 A 16 6.4 0 0 1 -16 -8 Z" fill="url(#mk-chip-wall)" />
-        <ellipse cx="0" cy="-13" rx="16" ry="6.4" fill="url(#mk-chip)" />
-        <ellipse
-          cx="0"
-          cy="-13"
-          rx="12"
-          ry="4.6"
-          fill="none"
-          stroke="#f7ecd6"
-          strokeWidth="3.4"
-          strokeDasharray="5.5 5"
-        />
+        <g clipPath="url(#mk-gem-clip)">
+          <rect className="mk-shine" x="-34" y="-40" width="9" height="80" fill="#fff" />
+        </g>
       </g>
     </>
   ),
@@ -321,7 +269,13 @@ const ART: Record<Proposed, React.ReactNode> = {
       <Ground rx={14} />
       <g className="mk-move mk-move--seven">
         <path d="M-11 -16 L11 -16 L11 -10 L2 16 L-5 16 L4 -10 L-11 -10 Z" fill="url(#mk-neon)" />
-        <path d="M-9 -14 L9 -14" stroke="#fff" strokeOpacity="0.65" strokeWidth="2.4" strokeLinecap="round" />
+        <path
+          d="M-9 -14 L9 -14"
+          stroke="#fff"
+          strokeOpacity="0.65"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
       </g>
     </>
   ),
@@ -342,10 +296,10 @@ const ART: Record<Proposed, React.ReactNode> = {
   ),
 };
 
-function Face({ face, won }: { face: Proposed; won: boolean }) {
+function Face({ face, won, big = false }: { face: Proposed; won: boolean; big?: boolean }) {
   return (
     <svg
-      className={`mock__face${won ? " mock__face--won" : ""}`}
+      className={`mock__face${big ? " mock__face--big" : ""}${won ? " mock__face--won" : ""}`}
       viewBox="0 0 60 60"
       role="img"
       aria-label={LABEL[face]}
@@ -398,6 +352,15 @@ export function SlotMockup() {
         ))}
       </div>
 
+      <p className="gallery__label">Large enough to argue with</p>
+      <div className="mock__row">
+        {PROPOSED.map((face) => (
+          <figure className="mock__cell" key={`big-${face}`}>
+            <Face face={face} won={won} big={true} />
+          </figure>
+        ))}
+      </div>
+
       <button
         type="button"
         className={`btn btn--small${won ? "" : " btn--ghost"}`}
@@ -407,10 +370,10 @@ export function SlotMockup() {
       </button>
 
       <p className="gallery__note">
-        The dice tumble, the spade turns to catch the light, a chip is paid onto the stack, the
-        ember flares, the glass rattles, the tube flickers up to full, and the bonus pops out and
-        grows — which is the one that has to be unmistakable, because it is the face a player is
-        hunting for.
+        The domino topples and stands back up, the stone swells as the light crosses it, the cigar rocks
+        while its ember breathes, the spade turns to catch it, the glass rattles, the tube flickers
+        up to full, and the bonus pops out and grows — which is the one that has to be unmistakable,
+        because it is the face a player is hunting for.
       </p>
     </section>
   );
