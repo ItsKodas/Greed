@@ -91,7 +91,16 @@ function Table({
 }) {
   return (
     <div className="pk">
-      <div className="pk__felt">
+      {/*
+       * The rail and the felt are two elements because they are two materials.
+       * Seats sit against the rail rather than inside the felt: at a real
+       * table the players are the other side of the wood, and a seat drawn on
+       * the cloth reads as something lying on the table rather than somebody
+       * sitting at it.
+       */}
+      <div className="pk__table">
+        <div className="pk__felt" />
+
         <div className="pk__middle">
           <p className="pk__pot">
             <span className="pk__pot-label">Pot</span>
@@ -133,16 +142,40 @@ function Table({
             <div className="pk__who">
               <span className="pk__name">{seat.name}</span>
               <span className="pk__stack">{seat.stack.toLocaleString("en-US")}</span>
+              {/*
+                * The same number as the chips on the ring, and only one of the
+                * two is ever shown. On a wide table the chips sit out on the
+                * cloth where they belong; on a phone there is no room for a
+                * third ring between the seats and the board, so the amount
+                * comes and sits in the seat instead.
+                */}
+              {seat.bet > 0 ? (
+                <span className="pk__wager">bet {seat.bet.toLocaleString("en-US")}</span>
+              ) : null}
             </div>
             {seat.mark === undefined ? null : (
               <span className={`pk__mark pk__mark--${seat.mark.toLowerCase()}`}>{seat.mark}</span>
             )}
-            {seat.bet > 0 ? (
-              <span className="pk__bet">{seat.bet.toLocaleString("en-US")}</span>
-            ) : null}
             {seat.says === undefined ? null : <span className="pk__says">{seat.says}</span>}
           </div>
         ))}
+
+        {/*
+          * The chips, on their own ring inside the seats.
+          *
+          * Not part of a seat, because a seat is a thing on the edge of the
+          * table and its chips are a thing in the middle of it. Hung off the
+          * seat they had nowhere to go: pushed towards the pot from a seat
+          * above the middle, towards the pot is downwards, and downwards is
+          * where that player's own name already is.
+          */}
+        {seats.map((seat, at) =>
+          seat.bet > 0 ? (
+            <span className="pk__bet" key={`bet-${seat.name}`} style={seatAt(at, seats.length)}>
+              {seat.bet.toLocaleString("en-US")}
+            </span>
+          ) : null,
+        )}
       </div>
     </div>
   );
