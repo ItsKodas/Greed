@@ -188,11 +188,11 @@ export interface ClientToServer {
  * broken build.
  */
 export const SPIN_FACES = [
-  "chip",
+  "tumbler",
+  "cigar",
   "dice",
   "spade",
-  "horseshoe",
-  "bell",
+  "diamond",
   "seven",
 ] as const;
 

@@ -4,8 +4,8 @@ import { PAYS } from "./paytable.js";
 /** What a jackpot takes out of the bank. */
 export const JACKPOT_SHARE = 0.4;
 
-/** The largest fixed win on one line: five bells. */
-export const MAX_LINE_PAY = PAYS.bell[5] as number;
+/** The largest fixed win on one line: five diamonds. */
+export const MAX_LINE_PAY = PAYS.diamond[5] as number;
 
 /**
  * What the bank has to hold per chip staked.

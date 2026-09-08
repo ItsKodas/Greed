@@ -13,8 +13,8 @@ import { REEL_STAGGER_MS, Reel, SPIN_UP_MS } from "./Reel.js";
  * server has said what they are, which reads as a machine that had decided
  * before you pulled. So it is tested on a clock rather than by eye.
  */
-const column: Face[] = ["chip", "dice", "seven"];
-const other: Face[] = ["bell", "bell", "spade"];
+const column: Face[] = ["tumbler", "cigar", "seven"];
+const other: Face[] = ["diamond", "diamond", "dice"];
 
 /**
  * Faces at rest under the payline — the answer, as opposed to the strip.
@@ -110,7 +110,7 @@ describe("a reel", () => {
     act(() => vi.advanceTimersByTime(SPIN_UP_MS + 500));
 
     expect(landed(container)).toBe(3);
-    expect(container.querySelectorAll('[data-final] [data-face="bell"]')).toHaveLength(2);
+    expect(container.querySelectorAll('[data-final] [data-face="diamond"]')).toHaveLength(2);
   });
 
   it("does not leave a timer running when it is taken off the page", () => {
@@ -153,5 +153,21 @@ describe("a reel", () => {
     const { container } = render(<Reel column={undefined} spinning index={0} resting={column} />);
     expect(container.querySelector(".reel--spinning")).not.toBeNull();
     expect(landed(container)).toBe(0);
+  });
+});
+
+describe("a reel that won", () => {
+  it("marks only the rows on a line that paid", () => {
+    const { container } = render(
+      <Reel column={column} spinning={false} index={0} won={[false, true, false]} />,
+    );
+    const marked = [...container.querySelectorAll("[data-final][data-won]")];
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.querySelector("[data-face]")?.getAttribute("data-face")).toBe(column[1]);
+  });
+
+  it("marks nothing before the lines light", () => {
+    const { container } = render(<Reel column={column} spinning={false} index={0} />);
+    expect(container.querySelectorAll("[data-won]")).toHaveLength(0);
   });
 });

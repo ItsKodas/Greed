@@ -91,6 +91,7 @@ export function Reel({
   index,
   resting,
   holdMs = 0,
+  won,
   onStop,
 }: {
   /** What the server said is on this reel, or nothing while it is still out. */
@@ -115,6 +116,14 @@ export function Reel({
    * machine does when the first three reels have come up sevens.
    */
   holdMs?: number;
+  /**
+   * Which of this reel's three rows are on a line that paid.
+   *
+   * Undefined until the lines light, and cleared with them. The reel does not
+   * work this out: which lines paid is the table's answer, not something five
+   * separate reels should each be deriving from the same grid.
+   */
+  won?: boolean[];
   /** Called the moment this reel actually settles, for the sound. */
   onStop?: () => void;
 }) {
@@ -284,7 +293,14 @@ export function Reel({
       >
         {settled !== undefined ? (
           settled.map((face, row) => (
-            <g key={ROWS[row] ?? row} transform={`translate(0 ${row * FACE_SIZE})`} data-final="">
+            <g
+              key={ROWS[row] ?? row}
+              transform={`translate(0 ${row * FACE_SIZE})`}
+              data-final=""
+              // Absent rather than "false": a face that did not win should
+              // match nothing, and [data-won] matches an empty attribute.
+              data-won={won?.[row] === true ? "" : undefined}
+            >
               <ReelFace face={face} />
             </g>
           ))

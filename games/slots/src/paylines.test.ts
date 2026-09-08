@@ -6,8 +6,8 @@ import type { Face } from "./strip.js";
 function grid(...columns: Face[][]): Face[][] {
   return columns;
 }
-const c: Face = "chip";
-const d: Face = "dice";
+const t: Face = "tumbler";
+const c: Face = "cigar";
 const s: Face = "seven";
 
 describe("the paylines", () => {
@@ -41,41 +41,41 @@ describe("reading a line", () => {
   const middle = [1, 1, 1, 1, 1] as const;
 
   it("counts a run from the leftmost reel", () => {
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [c, d, c], [c, c, c]);
-    expect(runOn(g, middle)).toEqual({ face: "chip", length: 3 });
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [t, c, t], [t, t, t]);
+    expect(runOn(g, middle)).toEqual({ face: "tumbler", length: 3 });
   });
 
   it("counts all five when nothing breaks it", () => {
-    const g = grid([c, s, c], [c, s, c], [c, s, c], [c, s, c], [c, s, c]);
+    const g = grid([t, s, t], [t, s, t], [t, s, t], [t, s, t], [t, s, t]);
     expect(runOn(g, middle)).toEqual({ face: "seven", length: 5 });
   });
 
   it("stops at the first reel that does not match", () => {
     // A run broken at reel 3 is worth three, not five. Getting this wrong is
     // the classic slot bug: paying for faces that were never in a row.
-    const g = grid([c, c, c], [c, c, c], [c, d, c], [c, c, c], [c, c, c]);
-    expect(runOn(g, middle)).toEqual({ face: "chip", length: 2 });
+    const g = grid([t, t, t], [t, t, t], [t, c, t], [t, t, t], [t, t, t]);
+    expect(runOn(g, middle)).toEqual({ face: "tumbler", length: 2 });
   });
 
   it("does not pay for a run that starts on reel 2", () => {
     // Left to right from reel 1 only. Four sevens starting on reel 2 is a
     // near miss, and has to read as one.
-    const g = grid([c, c, c], [c, s, c], [c, s, c], [c, s, c], [c, s, c]);
-    expect(runOn(g, middle)).toEqual({ face: "chip", length: 1 });
+    const g = grid([t, t, t], [t, s, t], [t, s, t], [t, s, t], [t, s, t]);
+    expect(runOn(g, middle)).toEqual({ face: "tumbler", length: 1 });
   });
 
   it("reads whichever row the line passes through on each reel", () => {
     // The V: top, middle, bottom, middle, top. Every cell it touches is a
     // seven and every cell it misses is not, so a line that read straight
     // across would find nothing here.
-    const g = grid([s, c, c], [c, s, c], [c, c, s], [c, s, c], [s, c, c]);
+    const g = grid([s, t, t], [t, s, t], [t, t, s], [t, s, t], [s, t, t]);
     expect(runOn(g, [0, 1, 2, 1, 0])).toEqual({ face: "seven", length: 5 });
   });
 
   it("reads every one of the nine lines without falling off the grid", () => {
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [c, c, c], [c, c, c]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [t, t, t], [t, t, t]);
     for (const line of PAYLINES) {
-      expect(runOn(g, line)).toEqual({ face: "chip", length: 5 });
+      expect(runOn(g, line)).toEqual({ face: "tumbler", length: 5 });
     }
   });
 });

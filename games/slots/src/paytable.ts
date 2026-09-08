@@ -15,11 +15,11 @@ import type { Face } from "./strip.js";
  * two ways to pay one thing is two numbers that can disagree.
  */
 export const PAYS: Record<Face, Record<3 | 4 | 5, number | null>> = {
-  chip: { 3: 4, 4: 22, 5: 109 },
-  dice: { 3: 7, 4: 33, 5: 164 },
-  spade: { 3: 11, 4: 55, 5: 273 },
-  horseshoe: { 3: 18, 4: 88, 5: 438 },
-  bell: { 3: 33, 4: 164, 5: 875 },
+  tumbler: { 3: 4, 4: 22, 5: 109 },
+  cigar: { 3: 7, 4: 33, 5: 164 },
+  dice: { 3: 11, 4: 55, 5: 273 },
+  spade: { 3: 18, 4: 88, 5: 438 },
+  diamond: { 3: 33, 4: 164, 5: 875 },
   seven: { 3: 55, 4: 328, 5: null },
 };
 

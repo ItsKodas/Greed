@@ -870,6 +870,258 @@
   opacity: 0.32;
 }
 
+
+/* ------------------------------------------------------- the faces winning */
+
+/*
+ * What a face does when it earns its line.
+ *
+ * A line drawn over the glass says where the win was; this says what it was.
+ * One per face, and each about the object rather than the same pulse six
+ * times: the dice fly apart, the stone takes the light, the ember flares.
+ *
+ * Hung on [data-won], which the reel puts on a settled cell when the lines
+ * light — so these start with the paylines, not with the reel stopping.
+ */
+.reel__defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+[data-won] .sf-move {
+  transform-origin: 30px 30px;
+  transform-box: fill-box;
+}
+
+[data-won] .sf-move--tumbler {
+  animation: sf-slosh 1.4s ease-in-out infinite;
+}
+
+/*
+ * The cigar rocks and the ember breathes inside it — two motions, but on two
+ * separate elements, which is the only way that is allowed. The ember's own
+ * swell is small: it is a coal catching, not a firework.
+ */
+[data-won] .sf-move--cigar {
+  animation: sf-rock 1.6s ease-in-out infinite;
+}
+
+[data-won] .sf-ember {
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+  animation: sf-flare 1.6s ease-in-out infinite;
+}
+
+/*
+ * The pair flies apart and comes back. Neither die is a .sf-move, and nor is
+ * the stone: that rule takes its origin from the corner of the box, and both
+ * of these have to move about their own middle. Measured rather than guessed —
+ * with the shared origin the stone walks 7px up and left on a 9px swell.
+ */
+[data-won] .sf-die {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+
+[data-won] .sf-die--back {
+  animation: sf-burst-back 1.6s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+}
+
+[data-won] .sf-die--front {
+  animation: sf-burst-front 1.6s cubic-bezier(0.2, 0.9, 0.3, 1) infinite;
+}
+
+[data-won] .sf-move--spade {
+  animation: sf-turn-face 1.5s cubic-bezier(0.4, 0, 0.3, 1) infinite;
+}
+
+[data-won] .sf-gem {
+  transform-box: view-box;
+  /* The stone's own middle, in the stone's own coordinates. */
+  transform-origin: 0 2.5px;
+  animation: sf-pulse 1.8s ease-in-out infinite;
+}
+
+/* Nothing until it wins: a bar of white sitting on a gem is not a face. */
+.sf-shine {
+  opacity: 0;
+  transform: rotate(16deg);
+  transform-origin: 30px 30px;
+}
+
+[data-won] .sf-shine {
+  animation: sf-shine 1.8s cubic-bezier(0.4, 0, 0.5, 1) infinite;
+}
+
+[data-won] .sf-move--seven {
+  animation: sf-tube 1.3s steps(1, end) infinite;
+}
+
+/* The whole glass rattled on the bar, and settling. */
+@keyframes sf-slosh {
+  0%,
+  100% {
+    transform: translateX(0) rotate(0deg);
+  }
+  15% {
+    transform: translateX(-2.5px) rotate(-7deg);
+  }
+  35% {
+    transform: translateX(2.5px) rotate(6deg);
+  }
+  55% {
+    transform: translateX(-1.5px) rotate(-4deg);
+  }
+  75% {
+    transform: translateX(1px) rotate(2deg);
+  }
+}
+
+/* Held between two fingers, and turned. */
+@keyframes sf-rock {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  30% {
+    transform: rotate(-6deg);
+  }
+  65% {
+    transform: rotate(5deg);
+  }
+}
+
+/* Drawn on: it brightens, then dies back. */
+@keyframes sf-flare {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  45% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+
+/*
+ * Thrown apart, held at the top of the arc, and back down together. They go
+ * opposite ways and spin opposite ways, which is what stops two dice moving at
+ * once reading as one object being dragged. How far they go was measured: any
+ * further and a corner leaves the cell at the top of the arc.
+ */
+@keyframes sf-burst-back {
+  0%,
+  10% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  44%,
+  62% {
+    transform: translate(-8px, -6px) rotate(-168deg);
+  }
+  95%,
+  100% {
+    transform: translate(0, 0) rotate(-360deg);
+  }
+}
+
+@keyframes sf-burst-front {
+  0%,
+  10% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  44%,
+  62% {
+    transform: translate(8px, 6px) rotate(192deg);
+  }
+  95%,
+  100% {
+    transform: translate(0, 0) rotate(360deg);
+  }
+}
+
+/*
+ * Turning to catch the light, then back. A pip is a flat thing; leaning it is
+ * the only way it has of showing a face.
+ */
+@keyframes sf-turn-face {
+  0%,
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+  30% {
+    transform: rotate(-13deg) scale(1.1);
+  }
+  65% {
+    transform: rotate(9deg) scale(1.06);
+  }
+}
+
+/*
+ * Taking a breath, which is what a stone does not do — and is exactly why it
+ * reads as the stone being excited rather than as the stone moving.
+ */
+@keyframes sf-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.12);
+  }
+  62% {
+    transform: scale(0.97);
+  }
+}
+
+/* Light crossing the stone, left to right, and not coming back. */
+@keyframes sf-shine {
+  0% {
+    opacity: 0;
+    transform: rotate(16deg) translateX(0);
+  }
+  12% {
+    opacity: 0.55;
+  }
+  55% {
+    opacity: 0.55;
+    transform: rotate(16deg) translateX(58px);
+  }
+  66%,
+  100% {
+    opacity: 0;
+    transform: rotate(16deg) translateX(58px);
+  }
+}
+
+/*
+ * A tube coming up: two false starts, then it holds. Stepped, because a
+ * filament flickers rather than fades.
+ */
+@keyframes sf-tube {
+  0% {
+    opacity: 0.25;
+  }
+  12% {
+    opacity: 1;
+  }
+  20% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+  38% {
+    opacity: 0.45;
+  }
+  46%,
+  100% {
+    opacity: 1;
+  }
+}
+
 /* ---------------------------------------------------------- the paylines */
 
 .paylines {
@@ -1138,6 +1390,11 @@
   .payline,
   .slots__said--big,
   .slots__chip,
+  [data-won] .sf-move,
+  [data-won] .sf-die,
+  [data-won] .sf-gem,
+  [data-won] .sf-ember,
+  [data-won] .sf-shine,
 
   .feed__row,
   .won__row {

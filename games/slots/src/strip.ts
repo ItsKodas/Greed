@@ -10,18 +10,18 @@
  * and a type that shadows one produces error messages about the wrong thing.
  */
 
-export type Face = "chip" | "dice" | "spade" | "horseshoe" | "bell" | "seven";
+export type Face = "tumbler" | "cigar" | "dice" | "spade" | "diamond" | "seven";
 
 /** The whole loop, and the denominator of every probability in this game. */
 export const STOPS = 32;
 
 /** Commonest first, which is also cheapest first. */
 export const FACES: readonly Face[] = [
-  "chip",
+  "tumbler",
+  "cigar",
   "dice",
   "spade",
-  "horseshoe",
-  "bell",
+  "diamond",
   "seven",
 ];
 
@@ -33,11 +33,11 @@ export const FACES: readonly Face[] = [
  * rather than trusting this table.
  */
 export const WEIGHTS: Record<Face, number> = {
-  chip: 9,
-  dice: 7,
-  spade: 6,
-  horseshoe: 4,
-  bell: 3,
+  tumbler: 9,
+  cigar: 7,
+  dice: 6,
+  spade: 4,
+  diamond: 3,
   seven: 3,
 };
 

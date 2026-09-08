@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { evaluate, PAYS } from "./paytable.js";
 import type { Face } from "./strip.js";
 
-const c: Face = "chip";
-const d: Face = "dice";
-const b: Face = "bell";
+const t: Face = "tumbler";
+const c: Face = "cigar";
+const d: Face = "diamond";
 const s: Face = "seven";
 
 /** Five columns of three, the way it looks on the glass. */
@@ -36,7 +36,7 @@ describe("evaluating a spin", () => {
   it("pays on the line bet, which is a ninth of the stake", () => {
     // Chip three-of-a-kind is 4x the line bet. At a stake of 900 the line bet
     // is 100, so the line is worth 400 — not 3600.
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     const middle = evaluate(g, 900).lines.find((line) => line.line === 0);
     expect(middle?.pay).toBe(400);
   });
@@ -45,7 +45,7 @@ describe("evaluating a spin", () => {
     // At a stake of 1 the line bet is a ninth of a chip, and 4x it is still
     // less than one. Nothing is rounded up: a machine that invents a chip is
     // the whole thing this game is built to avoid.
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     expect(evaluate(g, 1).fixed).toBe(0);
   });
 
@@ -53,13 +53,13 @@ describe("evaluating a spin", () => {
     // Chips on the first three reels means all nine lines read chip three-of-
     // a-kind. A machine that paid only the highest line would be a different
     // and much meaner game than the paytable advertises.
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     expect(evaluate(g, 900).lines).toHaveLength(9);
     expect(evaluate(g, 900).fixed).toBe(3600);
   });
 
   it("does not pay for a run of two", () => {
-    const g = grid([c, c, c], [c, c, c], [d, d, d], [d, d, d], [b, b, b]);
+    const g = grid([t, t, t], [t, t, t], [c, c, c], [c, c, c], [d, d, d]);
     expect(evaluate(g, 900).lines).toHaveLength(0);
     expect(evaluate(g, 900).fixed).toBe(0);
   });
@@ -87,14 +87,14 @@ describe("evaluating a spin", () => {
   it("still pays the other lines when one of them is the jackpot", () => {
     // Sevens along the middle, bells top and bottom: one jackpot line and two
     // lines of five bells. The jackpot must not swallow the rest.
-    const g = grid([b, s, b], [b, s, b], [b, s, b], [b, s, b], [b, s, b]);
+    const g = grid([d, s, d], [d, s, d], [d, s, d], [d, s, d], [d, s, d]);
     const result = evaluate(g, 900);
     expect(result.jackpot).toBe(true);
     expect(result.fixed).toBe(2 * 875 * 100);
   });
 
   it("names the line it paid on, so the glass can light the right one", () => {
-    const g = grid([b, s, b], [b, s, b], [b, s, b], [b, s, b], [b, s, b]);
+    const g = grid([d, s, d], [d, s, d], [d, s, d], [d, s, d], [d, s, d]);
     const paid = evaluate(g, 900).lines.map((line) => line.line).sort();
     // The top and the bottom; the middle was the jackpot and pays no
     // multiplier, and every diagonal is broken by the row it crosses into.
@@ -102,10 +102,10 @@ describe("evaluating a spin", () => {
   });
 
   it("reports how far each winning run actually reached", () => {
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     for (const line of evaluate(g, 900).lines) {
       expect(line.length).toBe(3);
-      expect(line.face).toBe("chip");
+      expect(line.face).toBe("tumbler");
     }
   });
 });
@@ -116,7 +116,7 @@ describe("buying fewer lines", () => {
      * The whole meaning of choosing fewer. Chips across the top three reels
      * light every one of the nine; on a single line only the middle one pays.
      */
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     expect(evaluate(g, 900, 9).lines).toHaveLength(9);
     expect(evaluate(g, 900, 1).lines).toHaveLength(1);
     expect(evaluate(g, 900, 1).lines[0]?.line).toBe(0);
@@ -125,7 +125,7 @@ describe("buying fewer lines", () => {
   it("splits the stake across the lines bought, not across all nine", () => {
     // 900 on one line is 900 a line, so chip three-of-a-kind at 4x pays 3600 —
     // the same spin on nine lines pays 400 on each of them.
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     expect(evaluate(g, 900, 1).fixed).toBe(3600);
     expect(evaluate(g, 900, 9).fixed).toBe(3600);
   });
@@ -134,7 +134,7 @@ describe("buying fewer lines", () => {
     // Not a coincidence and worth pinning: the line bet rises exactly as fast
     // as the line count falls, which is why the bank's cap does not care how
     // many lines were bought.
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [c, c, c], [c, c, c]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [t, t, t], [t, t, t]);
     for (const lines of [1, 3, 5, 9]) {
       expect(evaluate(g, 900, lines).fixed).toBe(evaluate(g, 900, 9).fixed);
     }
@@ -142,13 +142,13 @@ describe("buying fewer lines", () => {
 
   it("misses a win that lands on a line nobody bought", () => {
     // Sevens along the bottom, which is line three. One line buys the middle.
-    const g = grid([d, d, s], [d, d, s], [d, d, s], [d, d, s], [d, d, s]);
+    const g = grid([c, c, s], [c, c, s], [c, c, s], [c, c, s], [c, c, s]);
     expect(evaluate(g, 900, 9).jackpot).toBe(true);
     expect(evaluate(g, 900, 1).jackpot).toBe(false);
   });
 
   it("refuses to read a line count that is not on the machine", () => {
-    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const g = grid([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     // Clamped rather than trusted: this arrives over a wire.
     expect(evaluate(g, 900, 0).lines.length).toBeGreaterThan(0);
     expect(evaluate(g, 900, 99).lines).toHaveLength(9);

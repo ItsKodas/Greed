@@ -2,15 +2,15 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Face } from "@backroom/game-slots";
-import { HOLD_MS, holdsFor, Marquee, PaylineOverlay } from "./Slots.js";
+import { HOLD_MS, holdsFor, Marquee, PaylineOverlay, winningCells } from "./Slots.js";
 
 describe("a win", () => {
   it("lights every line that paid", () => {
     const { container } = render(
       <PaylineOverlay
         lines={[
-          { line: 0, face: "chip", length: 3, pay: 400 },
-          { line: 3, face: "bell", length: 5, pay: 8750 },
+          { line: 0, face: "tumbler", length: 3, pay: 400 },
+          { line: 3, face: "diamond", length: 5, pay: 8750 },
         ]}
       />,
     );
@@ -24,7 +24,7 @@ describe("a win", () => {
      * a win the player cannot see on the glass. Three points, not five.
      */
     const { container } = render(
-      <PaylineOverlay lines={[{ line: 0, face: "chip", length: 3, pay: 400 }]} />,
+      <PaylineOverlay lines={[{ line: 0, face: "tumbler", length: 3, pay: 400 }]} />,
     );
     const drawn = container.querySelector(".payline");
     expect(drawn?.getAttribute("data-length")).toBe("3");
@@ -34,7 +34,7 @@ describe("a win", () => {
   it("draws each line through the middle of the cells it passes", () => {
     // The middle line runs straight across the centre row of a 500x300 box.
     const { container } = render(
-      <PaylineOverlay lines={[{ line: 0, face: "chip", length: 5, pay: 400 }]} />,
+      <PaylineOverlay lines={[{ line: 0, face: "tumbler", length: 5, pay: 400 }]} />,
     );
     expect(container.querySelector(".payline")?.getAttribute("points")).toBe(
       "50,150 150,150 250,150 350,150 450,150",
@@ -44,7 +44,7 @@ describe("a win", () => {
   it("follows a diagonal rather than flattening it", () => {
     // Line 3 is the V: top, middle, bottom, middle, top.
     const { container } = render(
-      <PaylineOverlay lines={[{ line: 3, face: "bell", length: 5, pay: 8750 }]} />,
+      <PaylineOverlay lines={[{ line: 3, face: "diamond", length: 5, pay: 8750 }]} />,
     );
     expect(container.querySelector(".payline")?.getAttribute("points")).toBe(
       "50,50 150,150 250,250 350,150 450,50",
@@ -55,7 +55,7 @@ describe("a win", () => {
     // The reels fill the box; an overlay that preserved its aspect ratio would
     // sit a line down the middle of nothing.
     const { container } = render(
-      <PaylineOverlay lines={[{ line: 0, face: "chip", length: 3, pay: 400 }]} />,
+      <PaylineOverlay lines={[{ line: 0, face: "tumbler", length: 3, pay: 400 }]} />,
     );
     expect(container.querySelector("svg")?.getAttribute("preserveAspectRatio")).toBe("none");
   });
@@ -76,40 +76,40 @@ describe("a win", () => {
  */
 describe("holding a reel back", () => {
   const g = (...columns: Face[][]) => columns;
-  const c: Face = "chip";
-  const d: Face = "dice";
+  const t: Face = "tumbler";
+  const c: Face = "cigar";
   const s7: Face = "seven";
-  const b: Face = "bell";
+  const d: Face = "diamond";
 
   it("does not hold anything on an ordinary spin", () => {
     // Alternating reels drawn from two faces that never meet, so no payline
     // can start a run at all. Writing this by eye is how the first version of
     // this test ended up with three bells down the peak line.
-    const grid = g([c, c, c], [d, d, d], [c, c, c], [d, d, d], [c, c, c]);
+    const grid = g([t, t, t], [c, c, c], [t, t, t], [c, c, c], [t, t, t]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
   });
 
   it("does not make a meal of three small ones", () => {
     // Three chips pays, but it is not a moment, and treating it as one makes
     // every spin feel the same.
-    const grid = g([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    const grid = g([t, t, t], [t, t, t], [t, t, t], [c, c, c], [c, c, c]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
   });
 
   it("holds the fourth reel when three sevens are already up", () => {
-    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [d, d, d], [d, d, d]);
+    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [c, c, c], [c, c, c]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, 0]);
   });
 
   it("holds the last reel too once four are up", () => {
-    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [d, d, d]);
+    const grid = g([s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [s7, s7, s7], [c, c, c]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
   });
 
   it("holds for four of anything, however cheap", () => {
     // Four across is one reel from a five of anything, which is worth the wait
     // whatever the face turns out to be.
-    const grid = g([c, c, c], [c, c, c], [c, c, c], [c, c, c], [d, d, d]);
+    const grid = g([t, t, t], [t, t, t], [t, t, t], [t, t, t], [c, c, c]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, HOLD_MS]);
   });
 
@@ -119,13 +119,13 @@ describe("holding a reel back", () => {
   });
 
   it("holds for bells as well as sevens", () => {
-    const grid = g([b, b, b], [b, b, b], [b, b, b], [d, d, d], [d, d, d]);
+    const grid = g([d, d, d], [d, d, d], [d, d, d], [c, c, c], [c, c, c]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, HOLD_MS, 0]);
   });
 
   it("never holds a reel the answer no longer rides on", () => {
     // A run that died on reel two: nothing after it is worth waiting for.
-    const grid = g([s7, s7, s7], [s7, s7, s7], [d, d, d], [s7, s7, s7], [s7, s7, s7]);
+    const grid = g([s7, s7, s7], [s7, s7, s7], [c, c, c], [s7, s7, s7], [s7, s7, s7]);
     expect(holdsFor(grid)).toEqual([0, 0, 0, 0, 0]);
   });
 });
@@ -138,7 +138,7 @@ describe("holding a reel back", () => {
  * pushing the reels down the page every time somebody wins.
  */
 describe("the machine's screen", () => {
-  const chipLine = (line: number) => ({ line, face: "chip" as const, length: 3, pay: 1000 });
+  const tumblerLine = (line: number) => ({ line, face: "tumbler" as const, length: 3, pay: 1000 });
 
   it("shows what there is to play for when nothing has happened", () => {
     const { container } = render(
@@ -167,7 +167,7 @@ describe("the machine's screen", () => {
         forFun={false}
         said="6,000"
         problem={null}
-        lines={[chipLine(0), chipLine(1)]}
+        lines={[tumblerLine(0), tumblerLine(1)]}
         wasJackpot={false}
         showing
       />,
@@ -186,7 +186,7 @@ describe("the machine's screen", () => {
         forFun={false}
         said="6,000"
         problem={null}
-        lines={[chipLine(0)]}
+        lines={[tumblerLine(0)]}
         wasJackpot={false}
         showing={false}
       />,
@@ -207,14 +207,14 @@ describe("the machine's screen", () => {
         forFun={false}
         said="6,000"
         problem={null}
-        lines={[0, 1, 2, 3, 4, 5].map(chipLine)}
+        lines={[0, 1, 2, 3, 4, 5].map(tumblerLine)}
         wasJackpot={false}
         showing
       />,
     );
     const rows = [...container.querySelectorAll(".won__row")];
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.textContent).toContain("3 × chip");
+    expect(rows[0]?.textContent).toContain("3 × tumbler");
     expect(rows[0]?.textContent).toContain("on 6 lines");
     // And the total across all six, not one of them.
     expect(rows[0]?.textContent).toContain("6,000");
@@ -228,14 +228,14 @@ describe("the machine's screen", () => {
         forFun={false}
         said="9,000"
         problem={null}
-        lines={[chipLine(0), { line: 1, face: "bell", length: 5, pay: 8000 }]}
+        lines={[tumblerLine(0), { line: 1, face: "diamond", length: 5, pay: 8000 }]}
         wasJackpot={false}
         showing
       />,
     );
     expect(container.querySelectorAll(".won__row")).toHaveLength(2);
     // Biggest first: the thing worth looking at is at the top.
-    expect(container.querySelectorAll(".won__row")[0]?.textContent).toContain("5 × bell");
+    expect(container.querySelectorAll(".won__row")[0]?.textContent).toContain("5 × diamond");
   });
 
   it("says the jackpot in its own words", () => {
@@ -273,3 +273,63 @@ describe("the machine's screen", () => {
   });
 });
 
+/*
+ * Which faces move when a line pays.
+ *
+ * The overlay says where the win was; the faces say what it was. Getting this
+ * wrong is quiet — the machine still pays correctly and still draws the line,
+ * and all that happens is that the wrong glass rattles.
+ */
+describe("the faces that won", () => {
+  const line = (index: number, length: number) => ({
+    line: index,
+    face: "tumbler" as const,
+    length,
+    pay: 100,
+  });
+
+  it("marks nothing at all when nothing paid", () => {
+    expect(winningCells([])).toEqual([
+      [false, false, false],
+      [false, false, false],
+      [false, false, false],
+      [false, false, false],
+      [false, false, false],
+    ]);
+  });
+
+  it("marks the middle row across every reel for a five along the middle", () => {
+    // PAYLINES[0] is the middle row, which is why it is the line to test with.
+    const cells = winningCells([line(0, 5)]);
+    for (const reel of cells) {
+      expect(reel).toEqual([false, true, false]);
+    }
+  });
+
+  it("stops where the run stopped, because the next face is what ended it", () => {
+    const cells = winningCells([line(0, 3)]);
+    expect(cells.slice(0, 3)).toEqual([
+      [false, true, false],
+      [false, true, false],
+      [false, true, false],
+    ]);
+    expect(cells.slice(3)).toEqual([
+      [false, false, false],
+      [false, false, false],
+    ]);
+  });
+
+  it("marks a cell once however many lines cross it", () => {
+    // The middle of the grid sits on several paylines at once, and a cell is
+    // either winning or not — there is no marking it twice.
+    const cells = winningCells([line(0, 5), line(1, 5), line(2, 5)]);
+    expect(cells[2]?.filter((on) => on)).toHaveLength(3);
+  });
+
+  it("ignores a line number the machine has not got", () => {
+    // It comes off the wire. A face nobody can draw is a blank cell; a row
+    // index off the end of the list would be a crash on the winning spin.
+    expect(() => winningCells([line(99, 5)])).not.toThrow();
+    expect(winningCells([line(99, 5)])[0]).toEqual([false, false, false]);
+  });
+});

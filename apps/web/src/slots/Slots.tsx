@@ -10,7 +10,7 @@ import {
   runOn,
 } from "@backroom/game-slots";
 import type { SpinLine, SpinNews, SpinResult } from "@backroom/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { DiscordIcon } from "../blackjack/Icons.js";
 import { play, riser, startLoop } from "../game/audio.js";
@@ -23,6 +23,7 @@ import { Navbar } from "../nav/Navbar.js";
 import { Digits } from "./Digits.js";
 import { Fireworks } from "./Fireworks.js";
 import { Reel, REEL_STAGGER_MS } from "./Reel.js";
+import { FaceDefs } from "./Symbols.js";
 import "@backroom/game-slots/theme.css";
 import "./slots.css";
 
@@ -78,12 +79,41 @@ const REEL_NAMES = ["one", "two", "three", "four", "five"] as const;
  * nothing lit and nothing said.
  */
 const ATTRACT: Face[][] = [
-  ["chip", "dice", "spade"],
-  ["horseshoe", "bell", "seven"],
-  ["spade", "chip", "dice"],
-  ["seven", "horseshoe", "bell"],
-  ["dice", "spade", "chip"],
+  ["tumbler", "cigar", "dice"],
+  ["spade", "diamond", "seven"],
+  ["dice", "tumbler", "cigar"],
+  ["seven", "spade", "diamond"],
+  ["cigar", "dice", "tumbler"],
 ];
+
+/**
+ * Which cells sit on a line that paid.
+ *
+ * A win is the machine's answer to "what landed?", and a line drawn over the
+ * glass only half answers it — it says where, not what. So the faces that
+ * earned it move, each in its own way, and the ones that did not hold still.
+ *
+ * Only as far along as the run went: a line that paid three of a kind lit its
+ * first three reels and nothing after, because the fourth face is exactly the
+ * one that ended it.
+ */
+export function winningCells(lines: readonly SpinLine[]): boolean[][] {
+  const cells: boolean[][] = Array.from({ length: 5 }, () => [false, false, false]);
+  for (const { line, length } of lines) {
+    const rows = PAYLINES[line];
+    if (rows === undefined) {
+      continue;
+    }
+    for (let reel = 0; reel < length && reel < rows.length; reel += 1) {
+      const row = rows[reel];
+      const column = cells[reel];
+      if (row !== undefined && column !== undefined) {
+        column[row] = true;
+      }
+    }
+  }
+  return cells;
+}
 
 /**
  * How long the machine waits for an answer before giving up on it.
@@ -112,7 +142,7 @@ export function holdsFor(grid: Face[][]): number[] {
   let best = 0;
   for (const line of PAYLINES) {
     const { face, length } = runOn(grid, line);
-    const worth = length >= 4 || (length >= 3 && (face === "seven" || face === "bell"));
+    const worth = length >= 4 || (length >= 3 && (face === "seven" || face === "diamond"));
     if (worth) {
       best = Math.max(best, length);
     }
@@ -178,6 +208,14 @@ export default function Slots() {
   const [grid, setGrid] = useState<Face[][] | undefined>(undefined);
   const [lines, setLines] = useState<SpinLine[]>([]);
   const [lit, setLit] = useState(false);
+
+  /*
+   * Recomputed only when the lines change or they light. Five reels' worth of
+   * booleans is nothing to work out, but this is read on every render of a
+   * page with five reels turning on it, and a fresh array each time would give
+   * every reel a new prop sixty times a second.
+   */
+  const won = useMemo(() => winningCells(lit ? lines : []), [lit, lines]);
   const [spinning, setSpinning] = useState(false);
   const [stake, setStake] = useState(0);
   /** Which machine: the one that pays chips, or the one that pays nothing. */
@@ -719,6 +757,7 @@ export default function Slots() {
                     and occupies no space in the layout. */}
                 <Fireworks fire={fired} scale={showSize} />
                 <div className="slots__glass">
+                  <FaceDefs />
                   {columns.map((column, reel) => (
                     <Reel
                       // Five fixed positions; what changes is the faces in one.
@@ -728,6 +767,7 @@ export default function Slots() {
                       index={reel}
                       resting={ATTRACT[reel]}
                       holdMs={holds[reel] ?? 0}
+                      won={won[reel]}
                       onStop={() => reelStopped(reel)}
                     />
                   ))}

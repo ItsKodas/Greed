@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FACES } from "@backroom/game-slots";
 import { ReelFace } from "../slots/Symbols.js";
 
 /**
@@ -47,8 +48,11 @@ const LABEL: Record<Proposed, string> = {
   bonus: "Bonus",
 };
 
-/** What the current machine shows, for the comparison. */
-export const CURRENT = ["chip", "dice", "spade", "horseshoe", "bell", "seven"] as const;
+/**
+ * What the machine shows now — read from the game rather than listed here, so
+ * this comparison cannot quietly go stale once the proposal is adopted.
+ */
+export const CURRENT = FACES;
 
 /** The gem, kept in one place: the shine is a bar slid across behind it. */
 const GEM = "M-9 -14 L9 -14 L18 -4 L0 19 L-18 -4 Z";
