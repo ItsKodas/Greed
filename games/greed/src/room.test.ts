@@ -464,6 +464,53 @@ describe("finishing", () => {
     expect(view.lastEvent).toMatch(/ada wins/i);
   });
 
+  it("does not carry the last game's final round into the next one", () => {
+    /*
+     * The seat that reached the target starts everyone's last turn, and the
+     * game ends when play comes back round to it. That trigger belongs to one
+     * game — left standing, the next game ends the first time play reaches
+     * whoever set it, with every score still near zero.
+     */
+    const room = new Room(
+      "TEST1",
+      scripted(
+        [1, 1, 1, 1, 1, 1], // Ada takes 8000 and starts the last round
+        [1, 1, 1, 2, 3, 4], // Bo's last turn
+        [1, 1, 1, 2, 3, 4], // and now a second game
+        [1, 1, 1, 2, 3, 4],
+      ),
+      { ...DEFAULT_RULESET, targetScore: 5000 },
+    );
+    room.join("a", "Ada");
+    room.join("b", "Bo");
+    room.start("a");
+
+    room.doRoll("a");
+    pick(room, 0, 1, 2, 3, 4, 5);
+    room.bank("a");
+    room.doRoll("b");
+    pick(room, 0, 1, 2);
+    room.bank("b");
+    expect(room.view().status).toBe("over");
+
+    room.playAgain("a");
+    room.start("a");
+
+    room.doRoll("a");
+    pick(room, 0, 1, 2);
+    room.bank("a"); // 1000, nowhere near the target
+    expect(room.view().status).toBe("playing");
+
+    room.doRoll("b");
+    pick(room, 0, 1, 2);
+    room.bank("b"); // also 1000
+
+    // Both on a thousand of five. Nothing here has been reached.
+    const view = room.view();
+    expect(view.status).toBe("playing");
+    expect(view.turn?.seatId).toBe("a");
+  });
+
   it("ends immediately when the final round is disabled", () => {
     const room = new Room("TEST1", scripted([1, 1, 1, 1, 1, 1]), {
       ...DEFAULT_RULESET,

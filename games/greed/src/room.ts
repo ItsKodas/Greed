@@ -272,6 +272,14 @@ export class Room {
     this.status = "lobby";
     this.turn = null;
     this.winnerIds = [];
+    /*
+     * Belongs to the game that just ended, and to nothing else.
+     *
+     * Left standing it ends the next game the first time play comes round to
+     * whoever set it — with every score still near zero, and a winner declared
+     * out of a game nobody finished.
+     */
+    this.finalRoundTrigger = null;
     // The pot is derived from the stake and the seats, so there is nothing to
     // reset — it is already whatever the next game will be worth.
     for (const seat of this.seats) {
