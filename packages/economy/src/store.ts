@@ -2,6 +2,8 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { judgeCode, mintCodeText, normaliseCode } from "./codes.js";
 import type { CodeRecord, RedeemResult } from "./codes.js";
 import { judgeEmote } from "./emotes.js";
+import { judgeSend, leftToSend, SEND_WINDOW_MS } from "./transfers.js";
+import type { SendResult, Transfer } from "./transfers.js";
 import type { EmoteAsset, EmoteRecord, NewEmote } from "./emotes.js";
 /**
  * Where profiles, chips and finished games live.
@@ -30,6 +32,19 @@ export interface Profile {
    * game names its own figures; nothing here knows what they mean.
    */
   byGame: Record<string, Record<string, number>>;
+}
+
+/**
+ * A player as somebody else may see them.
+ *
+ * What is not here is the point of it: no balance, no Discord id, no stats.
+ * Enough to recognise a person you meant to pay and no more.
+ */
+export interface PublicPlayer {
+  id: string;
+  name: string;
+  avatar: string | null;
+  accentColor: number | null;
 }
 
 /** What every game can answer about a player, whatever the game is. */
@@ -159,6 +174,33 @@ export interface Store {
   recentGames(userId: string, limit: number): Promise<GameRecord[]>;
 
   /**
+   * Players whose name begins with this, for somebody looking for one to pay.
+   *
+   * A prefix rather than anything cleverer, and capped, because this is the
+   * one route in the building that answers questions about people who are not
+   * asking. It is behind a sign-in, it never returns a balance, and a caller
+   * gets a handful of matches rather than the playerbase.
+   */
+  findPlayers(prefix: string, limit: number): Promise<PublicPlayer[]>;
+
+  /**
+   * Moves chips from one account to another, and writes it down.
+   *
+   * One method rather than two `adjustChips` calls, because a debit that
+   * lands and a credit that does not is chips destroyed, and neither caller
+   * nor store would know. Everything the rule depends on — what the sender
+   * holds, what they have already sent today — is read here rather than passed
+   * in, so no caller can decide it is allowed.
+   */
+  send(fromId: string, toId: string, amount: number): Promise<SendResult>;
+
+  /** What this account has sent inside the window ending now. */
+  sentSince(userId: string, since: number): Promise<number>;
+
+  /** This account's transfers, in and out, newest first. */
+  transfers(userId: string, limit: number): Promise<Transfer[]>;
+
+  /**
    * The emotes players may throw at each other, and the files behind them.
    *
    * Uploaded by an admin, which puts them behind the same allowlist as minting
@@ -237,6 +279,8 @@ export class MemoryStore implements Store {
    * listing the emotes is a common thing to do and copying a couple of
    * megabytes each time to answer it is not.
    */
+  /** Every transfer ever made here, oldest first. Appended to, never edited. */
+  private readonly ledger: Transfer[] = [];
   private readonly emoteFiles = new Map<
     string,
     { image: EmoteAsset; sound: EmoteAsset | null }
@@ -408,6 +452,74 @@ export class MemoryStore implements Store {
     record.redemptions += 1;
     profile.chips += record.chips;
     return { ok: true, chips: record.chips, balance: profile.chips };
+  }
+
+  async findPlayers(prefix: string, limit: number): Promise<PublicPlayer[]> {
+    const wanted = prefix.trim().toLowerCase();
+    if (wanted.length === 0) {
+      return [];
+    }
+    return [...this.people.values()]
+      .filter((person) => person.name.toLowerCase().startsWith(wanted))
+      .slice(0, limit)
+      .map((person) => ({
+        id: person.id,
+        name: person.name,
+        avatar: person.avatar,
+        accentColor: person.accentColor,
+      }));
+  }
+
+  async sentSince(userId: string, since: number): Promise<number> {
+    return this.ledger
+      .filter((one) => one.fromId === userId && one.at >= since)
+      .reduce((total, one) => total + one.amount, 0);
+  }
+
+  async transfers(userId: string, limit: number): Promise<Transfer[]> {
+    return this.ledger
+      .filter((one) => one.fromId === userId || one.toId === userId)
+      .sort((left, right) => right.at - left.at)
+      .slice(0, limit);
+  }
+
+  async send(fromId: string, toId: string, amount: number): Promise<SendResult> {
+    const from = this.people.get(fromId);
+    const to = this.people.get(toId);
+    const sentToday = await this.sentSince(fromId, Date.now() - SEND_WINDOW_MS);
+    const left = leftToSend(sentToday);
+    if (from === undefined) {
+      return { ok: false, reason: "no-recipient", leftToday: left };
+    }
+    if (to === undefined) {
+      return { ok: false, reason: "no-recipient", leftToday: left };
+    }
+    if (fromId === toId) {
+      return { ok: false, reason: "to-yourself", leftToday: left };
+    }
+    const judged = judgeSend({ amount, balance: from.chips, sentToday });
+    if (!judged.ok) {
+      return { ok: false, reason: judged.reason, leftToday: left };
+    }
+
+    from.chips -= amount;
+    to.chips += amount;
+    this.ledger.push({
+      id: randomUUID(),
+      fromId,
+      fromName: from.name,
+      toId,
+      toName: to.name,
+      amount,
+      at: Date.now(),
+    });
+    return {
+      ok: true,
+      balance: from.chips,
+      amount,
+      leftToday: left - amount,
+      to: { id: to.id, name: to.name },
+    };
   }
 
   async addEmote(input: NewEmote): Promise<EmoteRecord> {

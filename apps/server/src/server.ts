@@ -67,6 +67,7 @@ import type { AuthConfig } from "./auth.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
 import { friendlyRedirect } from "./domains.js";
 import { EMOTE_UPLOAD_PATH, emoteUrls, mountEmotes } from "./emotes.js";
+import { mountTransfers } from "./transfers.js";
 import { inject, pageFor } from "./meta.js";
 import type { CardSpec } from "./og.js";
 import { Avatars, Cards } from "./og.js";
@@ -340,6 +341,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   const taunts = new Taunts();
   const chatBudgets = new Map<string, Budget>();
   const tauntBudgets = new Map<string, Budget>();
+  /** Searching for somebody and paying them, budgeted by account. */
+  const sendBudgets = new Map<string, Budget>();
   /**
    * The emotes this server has seen thrown, by id.
    *
@@ -875,6 +878,15 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   };
 
   mountEmotes(app, { store, requireAdmin, userIdOf: userIdOfRequest });
+  mountTransfers(app, {
+    store,
+    whoIs: async (request) => {
+      const profile = await whoIs(request as express.Request);
+      return profile === null ? null : { id: profile.id, name: profile.name };
+    },
+    tellChips,
+    withinBudget: (id, max, windowMs) => withinBudget(sendBudgets, id, max, windowMs),
+  });
 
   app.get("/api/admin/codes", requireAdmin, (_request, response) => {
     void (async () => {
