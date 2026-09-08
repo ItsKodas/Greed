@@ -1,4 +1,10 @@
-import type { PlayTable, Seat as TableSeat, SeatIdentity, TableStatus } from "@backroom/core";
+import type {
+  BotSkill,
+  PlayTable,
+  Seat as TableSeat,
+  SeatIdentity,
+  TableStatus,
+} from "@backroom/core";
 import { Seating, TableError } from "@backroom/core";
 import type { Card } from "./cards.js";
 import { Deck } from "./cards.js";
@@ -56,6 +62,16 @@ export interface Payout {
 /** The smallest table that can play a hand: heads up. */
 export const MIN_SEATS = 2;
 
+/**
+ * What a seat sits down with at a table playing for nothing.
+ *
+ * Made up on the spot and gone when the table closes. It never came off an
+ * account and it never goes back onto one, which is the whole of what makes a
+ * for-fun table safe to put bots at: a hand won here moves a number that
+ * exists only at this table.
+ */
+export const FUN_STACK = 2_000;
+
 /** One seat, as somebody at the table is allowed to see it. */
 export interface SeatView {
   id: string;
@@ -68,6 +84,8 @@ export interface SeatView {
   committed: number;
   folded: boolean;
   allIn: boolean;
+  /** Marked on the felt, so nobody wonders who they are playing. */
+  isBot: boolean;
   /**
    * Their two cards — or two nulls, which is a hand that exists and is not
    * yours to see. Null rather than absent so the felt can lay a face-down card
@@ -105,6 +123,10 @@ export interface OwnView {
 export interface TableView {
   /** Null for somebody watching, and for a seat with no decision to make. */
   you: OwnView | null;
+  /** Whether the chips here are real. Bots sit only where they are not. */
+  forFun: boolean;
+  /** Whose table it is, so the controls that are theirs are offered to them. */
+  hostId: string | null;
   code: string;
   street: Street;
   board: Card[];
@@ -212,6 +234,14 @@ export class Table implements PlayTable {
      * is one answer to how long a turn is rather than two that can disagree.
      */
     readonly turnMs = 30_000,
+    /**
+     * Whether this table plays for nothing.
+     *
+     * It changes three things and they are all the same thing: nobody needs an
+     * account to sit down, bots may be dealt in, and no chip that moves here
+     * ever reaches the economy. Play money lives at the table and dies with it.
+     */
+    readonly forFun = false,
   ) {
     this.seating = new Seating(maxSeats);
   }
@@ -294,8 +324,39 @@ export class Table implements PlayTable {
   }
 
   join(id: string, name: string, identity: SeatIdentity | null): Seat {
-    // Chips only, so a seat has to be somebody: a pot is other people's money.
-    const seat = this.seating.join(id, name, this.status, identity, true) as Seat;
+    /*
+     * Playing for chips, a seat has to be somebody: a pot is other people's
+     * money and there is an account at the end of it. Playing for nothing,
+     * anybody can sit down, because there is no account at either end.
+     */
+    const seat = this.seating.join(id, name, this.status, identity, !this.forFun) as Seat;
+    this.blank(seat);
+    this.lastEvent = `${seat.name} sat down`;
+    return seat;
+  }
+
+  /**
+   * Sits a bot down with play money in front of it.
+   *
+   * Only ever at a table playing for nothing. Chips are only won from real
+   * people: a bot has no account to take them from and none to pay them to, so
+   * a hand won against one at a table paying real chips would be chips out of
+   * thin air. The same reason the other two games refuse one.
+   */
+  addBot(id: string, name: string, skill: BotSkill): Seat {
+    if (!this.forFun) {
+      throw new TableError("Bots only sit at tables playing for fun.");
+    }
+    const seat = this.seating.addBot(id, name, skill) as Seat;
+    this.blank(seat);
+    // Straight to a stack: nobody is going to press sit-down for it.
+    seat.stack = FUN_STACK;
+    this.lastEvent = `${seat.name} sat down`;
+    return seat;
+  }
+
+  /** A seat with nothing of a hand on it yet. */
+  private blank(seat: Seat): void {
     seat.stack = 0;
     seat.hole = [];
     seat.committed = 0;
@@ -304,8 +365,6 @@ export class Table implements PlayTable {
     seat.allIn = false;
     seat.acted = false;
     seat.showed = null;
-    this.lastEvent = `${seat.name} sat down`;
-    return seat;
   }
 
   /**
@@ -379,7 +438,13 @@ export class Table implements PlayTable {
     }
     // What is still in front of them, though, comes off the table with them.
     const left = this.cashOut(id);
-    if (left > 0 && gone.userId !== null) {
+    /*
+     * Guarded on the table rather than only on the seat. Somebody signed in
+     * may perfectly well sit at a table playing for nothing, and paying their
+     * play-money stack into their account would be the one thing this whole
+     * building is arranged to prevent.
+     */
+    if (left > 0 && gone.userId !== null && !this.forFun) {
       this.owedOut.push({ userId: gone.userId, name: gone.name, chips: left });
     }
     this.seating.remove(id);
@@ -398,6 +463,8 @@ export class Table implements PlayTable {
     const mine = forSeatId === null ? undefined : (this.seating.find(forSeatId) as Seat | undefined);
     return {
       you: mine === undefined ? null : this.ownView(mine),
+      forFun: this.forFun,
+      hostId: this.hostId,
       code: this.code,
       street: this.street,
       board: this.board,
@@ -423,6 +490,7 @@ export class Table implements PlayTable {
         committed: seat.committed,
         folded: seat.folded,
         allIn: seat.allIn,
+        isBot: seat.isBot,
         /*
          * The whole reason a view is per-seat. Your own cards, and anybody
          * else's only once they have been turned over at a showdown — a hand

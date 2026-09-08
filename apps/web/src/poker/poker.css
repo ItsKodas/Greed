@@ -342,6 +342,64 @@
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.9);
 }
 
+/*
+ * Dealing bots in, which only ever appears at a table playing for nothing.
+ * Under the controls rather than among them: it is a thing you do to the
+ * table, not a move in the hand.
+ */
+.pk__bots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.pk__bots-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+}
+
+.pk__bot {
+  padding: 6px 14px;
+  /* Thumb-sized: this sits under a felt that gets played on a phone. */
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: 12px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.pk__bot:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.1);
+  color: var(--gr-color-ink);
+}
+
+.pk__bot:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/** Who you are actually playing, said on the seat rather than guessed at. */
+.pk__bot-mark {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.12);
+  color: var(--gr-color-ink-faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+
 /** Where the buttons would be, when there is nothing to press. */
 .pk__note {
   margin: 12px auto 0;
@@ -405,6 +463,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  /* Centred, which only shows when there is no slider to fill the row: the
+     buy-in is a single button, and one button hard against the left edge of a
+     table reads as something that has come loose. */
+  justify-content: center;
   gap: var(--gr-space-2);
   margin-top: var(--gr-space-3);
 }

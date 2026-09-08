@@ -1,5 +1,5 @@
 import type { SeatView, TableView } from "@backroom/game-poker";
-import { BIG_BLIND, BUY_IN, SMALL_BLIND } from "@backroom/game-poker";
+import { BIG_BLIND, BUY_IN, FUN_STACK, SMALL_BLIND } from "@backroom/game-poker";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -199,6 +199,27 @@ export function Felt({
       </div>
 
       <Actions table={table} state={state} me={me} intent={intent} />
+      {/*
+        * Only at a table playing for nothing, and only for whoever opened it.
+        * The server refuses it anywhere else whatever the browser shows —
+        * hiding a control is a courtesy, refusing the message is the rule.
+        */}
+      {state.forFun && state.hostId === seatId ? (
+        <div className="pk__bots">
+          <span className="pk__bots-label">Deal somebody in</span>
+          {(["easy", "normal", "hard"] as const).map((skill) => (
+            <button
+              key={skill}
+              type="button"
+              className="pk__bot"
+              disabled={table.busy || state.seats.length >= 10}
+              onClick={() => table.addBot(skill)}
+            >
+              {skill}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -276,7 +297,10 @@ function Seat({
         )}
       </div>
       <div className="pk__who">
-        <span className="pk__name">{seat.name}</span>
+        <span className="pk__name">
+          {seat.name}
+          {seat.isBot ? <span className="pk__bot-mark">bot</span> : null}
+        </span>
         <span className="pk__stack">{fmt(seat.stack)}</span>
         {seat.committed > 0 ? <span className="pk__wager">bet {fmt(seat.committed)}</span> : null}
       </div>
@@ -339,11 +363,12 @@ export function Actions({
           disabled={table.busy}
           onClick={() => table.act({ type: "buyIn" })}
         >
-          Sit down with {compact(BUY_IN)}
+          Sit down with {compact(state.forFun ? FUN_STACK : BUY_IN)}
         </button>
         <p className="pk__note">
-          Chips come off your balance and go in front of you. Stand up and whatever is still there
-          comes back.
+          {state.forFun
+            ? "Play money. It lives at this table and is gone when it closes."
+            : "Chips come off your balance and go in front of you. Stand up and whatever is still there comes back."}
         </p>
       </div>
     );
@@ -490,7 +515,21 @@ function Sit({
   const ready = code.length === CODE_LENGTH && !table.busy;
   const guest = account.profile === null;
   const [maxSeats, setMaxSeats] = useState(6);
-  const name = account.profile?.name ?? "";
+  const [typed, setTyped] = useState("");
+  /*
+   * Null until the host picks, rather than a boolean seeded from `guest`.
+   * Seeding it freezes the answer at the first render, which happens while the
+   * account is still on its way — and a profile that has not arrived looks
+   * exactly like a guest.
+   */
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const forFun = chosen ?? guest;
+  /*
+   * A signed-in player's name is the account's and the server uses that
+   * whatever is sent. A guest has none, so at a for-fun table they type one.
+   */
+  const name = account.profile?.name ?? typed.trim();
+  const named = name.length > 0;
 
   return (
     <div className="join">
@@ -499,15 +538,23 @@ function Sit({
         so nothing is won here that somebody at the table did not put in.
       </p>
 
-      {/*
-        * No for-fun table and no bots, and neither is an omission. A pot is
-        * other people's money: a table of bots playing for chips would be a
-        * button that mints them, and a table of bots playing for nothing is a
-        * game with no pot at all.
-        */}
+      {account.loading || !guest ? null : (
+        <label className="field">
+          <span className="field__label">Your name</span>
+          <input
+            className="field__input"
+            value={typed}
+            maxLength={20}
+            placeholder="Ada"
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        </label>
+      )}
+
       {account.loading || !guest ? null : (
         <p className="join__warn">
-          Poker is played for real chips, so it needs an account. Sign in to sit down.
+          Playing for fun deals you play money that lives at the table and nowhere else. Sign in to
+          play for real chips.
         </p>
       )}
 
@@ -522,10 +569,13 @@ function Sit({
             aria-label="Table code"
             onChange={(event) => setCode(event.target.value.toUpperCase())}
           />
+          {/* Not gated on signing in: whether a guest may sit depends on what
+              the table plays for, which only the server knows. It refuses in
+              words. */}
           <button
             type="button"
             className="btn btn--wide"
-            disabled={!ready || guest}
+            disabled={!ready || !named}
             onClick={() => table.join(name, code)}
           >
             Take a seat
@@ -542,16 +592,43 @@ function Sit({
 
         <div className="panel">
           <p className="panel__label">Open your own</p>
+
+          <div className="variants" role="radiogroup" aria-label="What the table plays for">
+            {[false, true].map((option) => (
+              <button
+                key={String(option)}
+                type="button"
+                role="radio"
+                aria-checked={forFun === option}
+                // A guest has nothing real to stake, so the choice is not
+                // offered rather than offered and refused.
+                disabled={!option && guest}
+                className={`variant${forFun === option ? " variant--on" : ""}`}
+                onClick={() => setChosen(option)}
+              >
+                <span className="variant__name">{option ? "For fun" : "For chips"}</span>
+                <span className="variant__note">
+                  {option
+                    ? "Play money, and you can deal bots in. Anybody can sit down."
+                    : guest
+                      ? "Sign in to play for real chips."
+                      : "Real chips, from your balance."}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <SeatCount value={maxSeats} onChange={setMaxSeats} />
           <p className="panel__note">
-            You get a five-character code to share. Sitting down costs {compact(BUY_IN)}, and what
-            is still in front of you comes back when you stand up.
+            You get a five-character code to share. Sitting down costs{" "}
+            {forFun ? `${compact(FUN_STACK)} in play money` : compact(BUY_IN)}
+            {forFun ? "." : ", and what is still in front of you comes back when you stand up."}
           </p>
           <button
             type="button"
             className="btn btn--wide"
-            disabled={table.busy || guest}
-            onClick={() => table.create(name, { game: "poker", maxSeats })}
+            disabled={table.busy || !named}
+            onClick={() => table.create(name, { game: "poker", forFun, maxSeats })}
           >
             Open a table
           </button>
@@ -561,8 +638,8 @@ function Sit({
       <PublicTables
         game="poker"
         busy={table.busy}
-        canSit={!guest}
-        whyNotSit="Sign in to sit down."
+        canSit={named}
+        whyNotSit="Put in a name first."
         onJoin={(open) => table.join(name, open)}
         onWatch={(open) => table.watch(open)}
       />

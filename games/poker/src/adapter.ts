@@ -1,8 +1,9 @@
 import type { GameAdapter } from "@backroom/core";
 import { seatLimit, TableError } from "@backroom/core";
 import { BIG_BLIND, BUY_IN, POKER, SMALL_BLIND } from "./listing.js";
+import { decide, thinkingTime } from "./bot.js";
 import type { Move } from "./table.js";
-import { Table } from "./table.js";
+import { FUN_STACK, Table } from "./table.js";
 
 /**
  * What the room does with a poker table.
@@ -47,6 +48,7 @@ export function pokerAdapter(
         BIG_BLIND,
         seatLimit(made?.["maxSeats"], POKER.maxSeats),
         turnMs,
+        made?.["forFun"] === true,
       );
     },
 
@@ -68,6 +70,15 @@ export function pokerAdapter(
            */
           if (seat.stack > 0) {
             throw new TableError("You already have chips on the table.");
+          }
+          /*
+           * A table playing for nothing asks the economy for nothing. The
+           * stack is made up on the spot and dies with the table, so there is
+           * no account to take it from and none to give it back to.
+           */
+          if (table.forFun) {
+            table.buyIn(seatId, FUN_STACK);
+            return;
           }
           if (seat.userId === null) {
             throw new TableError("Sign in to play for chips.");
@@ -121,6 +132,56 @@ export function pokerAdapter(
       for (const one of owed) {
         await deps.give(one.userId, one.chips);
       }
+    },
+
+    /*
+     * A bot's turn, or nothing.
+     *
+     * Only ever at a table playing for nothing — the table refuses to seat one
+     * anywhere else, so by the time there is a bot here the question of real
+     * chips has already been settled.
+     */
+    botMove(table) {
+      if (table.toAct === null) {
+        return null;
+      }
+      const seat = table.seats.find((one) => one.id === table.toAct);
+      if (seat === undefined || !seat.isBot) {
+        return null;
+      }
+      const skill = seat.skill ?? "normal";
+      const owed = table.owed(seat);
+      const minRaiseTo = Math.min(table.minRaise(seat) + seat.committed, seat.committed + seat.stack);
+      const choice = decide(
+        seat,
+        table,
+        owed,
+        minRaiseTo,
+        seat.committed + seat.stack,
+        skill,
+        random,
+      );
+
+      return {
+        seatId: seat.id,
+        delayMs: thinkingTime(skill),
+        play() {
+          /*
+           * Checked again on the way in. A bot thinks for the best part of a
+           * second, and a table does not stop for it — somebody may have left
+           * and moved the turn on, and a move sent for a seat whose turn it no
+           * longer is would throw with nobody behind it to hear.
+           */
+          if (table.toAct !== seat.id) {
+            return;
+          }
+          if (choice.move === "raise" && choice.to !== undefined) {
+            table.act(seat.id, "raise", choice.to);
+            return;
+          }
+          table.act(seat.id, choice.move);
+        },
+      };
     },
 
     clock(table) {
