@@ -207,6 +207,44 @@ emoteSchema.index({ createdAt: -1 });
 /** The record without the files, which is all anything but the two asset routes wants. */
 const EMOTE_FIELDS = "-image -sound";
 
+/**
+ * The bytes out of a BSON binary field, whatever shape they arrive in.
+ *
+ * This exists because of a bug that served every emote as an empty file while
+ * answering 200 with the right content type — a broken image and a silent
+ * sound, and nothing anywhere saying why.
+ *
+ * `.lean()` hands back what the driver produced rather than what Mongoose
+ * would have cast it to, and for a binary field that is a `Binary`, not a
+ * `Buffer`. The trap is that `Binary` has a `length` *method*. `Uint8Array.from`
+ * reads `.length` as a number, gets `NaN` from a function, and quietly returns
+ * an empty array — no throw, no warning, nothing to notice in a log.
+ *
+ * So every shape is handled explicitly rather than trusted to be array-like,
+ * and anything unrecognised throws instead of becoming a silent empty file.
+ * A loud failure here is worth far more than a quiet one: the quiet one
+ * reached production.
+ */
+export function bytesOf(value: unknown): Uint8Array {
+  // A Buffer already is a Uint8Array, so this covers both.
+  if (value instanceof Uint8Array) {
+    return Uint8Array.from(value);
+  }
+  const held = (value as { buffer?: unknown } | null)?.buffer;
+  // What the driver actually returns: a BSON Binary wrapping the bytes.
+  if (held instanceof Uint8Array) {
+    return Uint8Array.from(held);
+  }
+  // A document that has been through JSON, where a Buffer becomes this.
+  const data = (value as { type?: string; data?: unknown } | null)?.data;
+  if (Array.isArray(data)) {
+    return Uint8Array.from(data as number[]);
+  }
+  throw new TypeError(
+    `emote bytes came back as ${Object.prototype.toString.call(value)}, which this does not know how to read`,
+  );
+}
+
 function toEmote(doc: EmoteDoc): EmoteRecord {
   return {
     id: doc._id,
@@ -610,12 +648,12 @@ export class MongoStore implements Store {
       return null;
     }
     if (which === "image") {
-      return { mime: doc.imageMime, bytes: Uint8Array.from(doc.image) };
+      return { mime: doc.imageMime, bytes: bytesOf(doc.image) };
     }
-    if (doc.sound === null || doc.soundMime === null) {
+    if (doc.sound === null || doc.sound === undefined || doc.soundMime === null) {
       return null;
     }
-    return { mime: doc.soundMime, bytes: Uint8Array.from(doc.sound) };
+    return { mime: doc.soundMime, bytes: bytesOf(doc.sound) };
   }
 
   async retireEmote(id: string): Promise<boolean> {
