@@ -215,3 +215,16 @@ group("the deck itself", () => {
     expect(rankValue("K")).toBeLessThan(rankValue("A"));
   });
 });
+
+group("a full ring", () => {
+  it("has cards enough for ten players and a board", () => {
+    /*
+     * Ten hands of two, five on the board and three burnt between streets:
+     * twenty-eight of fifty-two. The deck is never refilled inside a hand, so
+     * this is what makes that safe rather than lucky.
+     */
+    const MAX_SEATS = 10;
+    expect(MAX_SEATS * 2 + 5 + 3).toBeLessThanOrEqual(freshDeck().length);
+  });
+});
+

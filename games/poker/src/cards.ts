@@ -80,10 +80,11 @@ export function shuffle(cards: Card[], random: () => number): Card[] {
 /**
  * One deck, dealt from the top and never refilled.
  *
- * A hand of hold'em needs at most twenty-two cards — nine players' hole cards
- * and five on the board — so a fifty-two card deck cannot run out inside one.
- * It throws rather than reshuffling if it ever does: a deck that quietly opens
- * a second one has dealt somebody a card that is already on the table.
+ * A hand of hold'em needs at most twenty-eight cards — ten players' hole
+ * cards, five on the board and three burnt — so a fifty-two card deck cannot
+ * run out inside one. It throws rather than reshuffling if it ever does: a
+ * deck that quietly opens a second one has dealt somebody a card that is
+ * already on the table.
  */
 export class Deck {
   private cards: Card[];

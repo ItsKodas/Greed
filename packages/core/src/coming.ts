@@ -25,10 +25,15 @@ export const COMING: readonly GameListing[] = [
   {
     id: "poker",
     name: "Poker",
-    blurb: "Five to a table, and the pot is everybody's chips.",
+    blurb: "Up to ten to a table, and the pot is everybody's chips.",
     shape: "table",
+    /*
+     * Two is a real game of poker — heads up — and the whole building's
+     * ceiling is ten. Twenty hole cards, five on the board and three burnt is
+     * twenty-eight of fifty-two, so a full ring never runs the deck out.
+     */
     minSeats: 2,
-    maxSeats: 6,
+    maxSeats: 10,
     /*
      * The one on this list that needs no bank. Players bet into a pot and one
      * of them takes it, so the chips never leave the table — the same footing
