@@ -166,6 +166,8 @@ export interface TableView {
    * made you show" is a rule about a hand rather than a fact about a picture.
    */
   canShow: boolean;
+  /** Whether you have chips you are free to take off the table right now. */
+  canTakeOff: boolean;
   /** Whose table it is, so the controls that are theirs are offered to them. */
   hostId: string | null;
   code: string;
@@ -442,8 +444,11 @@ export class Table implements PlayTable {
   /**
    * Takes a seat's chips off the table, and says how many there were.
    *
-   * Refuses while they are in a hand, because chips on the felt are not
-   * theirs to take back yet — that is the whole of what a bet is.
+   * Refuses nothing, deliberately: `leave` calls it in the middle of a hand,
+   * where taking your stack is exactly right — what you have already bet stays
+   * in the pot and the rest comes with you. The rule about when somebody may
+   * choose to do this is in `takeOffTable` below, which is the door a player
+   * goes through; this is the mechanism both use.
    */
   cashOut(seatId: string): number {
     const seat = this.seating.find(seatId) as Seat | undefined;
@@ -453,6 +458,45 @@ export class Table implements PlayTable {
     const chips = seat.stack;
     seat.stack = 0;
     return chips;
+  }
+
+  /**
+   * Cashing out on purpose, without leaving the table.
+   *
+   * Refused while you hold cards. Chips on the felt are not yours to take back
+   * — that is the whole of what a bet is — and a player who could lift their
+   * stack mid-hand could sit down, see a flop, and take the money back off the
+   * table when it missed.
+   *
+   * Between hands it is simply yours. The seat stays, empty, and buying in
+   * again is the same press it always was.
+   */
+  takeOffTable(seatId: string): number {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined) {
+      throw new TableError("You are not at this table.");
+    }
+    if (!this.canTakeOff(seatId)) {
+      throw new TableError("You cannot take chips off the table mid-hand.");
+    }
+    const chips = this.cashOut(seatId);
+    if (chips > 0 && seat.userId !== null && !this.forFun) {
+      this.owedOut.push({ userId: seat.userId, name: seat.name, chips });
+    }
+    if (chips > 0) {
+      this.lastEvent = `${seat.name} took ${chips.toLocaleString("en-US")} off the table`;
+    }
+    return chips;
+  }
+
+  /** Whether this seat has chips it is free to take back right now. */
+  canTakeOff(seatId: string): boolean {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined || seat.stack <= 0) {
+      return false;
+    }
+    // In a hand means holding cards you have not thrown away.
+    return this.street === "waiting" || seat.folded || seat.hole.length === 0;
   }
 
   leave(id: string): void {
@@ -568,6 +612,7 @@ export class Table implements PlayTable {
       forFun: this.forFun,
       entry: this.entry,
       canShow: forSeatId !== null && this.canShow(forSeatId),
+      canTakeOff: forSeatId !== null && this.canTakeOff(forSeatId),
       hostId: this.hostId,
       code: this.code,
       street: this.street,

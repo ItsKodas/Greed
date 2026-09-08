@@ -416,3 +416,74 @@ describe("showing a hand", () => {
     expect(() => table.show(who)).not.toThrow();
   });
 });
+
+/*
+ * Taking chips back off the table without leaving it.
+ *
+ * The rule that matters is when: a player who could lift their stack mid-hand
+ * could sit down, see a flop, and take the money back when it missed.
+ */
+describe("cashing out", () => {
+  const chips = () => new Table("CSH01", Math.random, 50, 100, 6, 30_000, false, 2_000);
+
+  it("hands the stack back between hands, and keeps the seat", () => {
+    const table = chips();
+    table.join("a", "Ada", identity("u1"));
+    table.join("b", "Bram", identity("u2"));
+    table.buyIn("a", 2_000);
+
+    expect(table.canTakeOff("a")).toBe(true);
+    expect(table.takeOffTable("a")).toBe(2_000);
+
+    expect(table.owedOut).toEqual([{ userId: "u1", name: "Ada", chips: 2_000 }]);
+    expect(table.seats).toHaveLength(2);
+    expect(table.seats.find((seat) => seat.id === "a")?.stack).toBe(0);
+  });
+
+  it("refuses while you are holding cards", () => {
+    /*
+     * The one that would be a way to bet nothing: see a flop, and if it misses
+     * pick your stack up off the felt.
+     */
+    const table = chips();
+    table.join("a", "Ada", identity("u1"));
+    table.join("b", "Bram", identity("u2"));
+    table.buyIn("a", 2_000);
+    table.buyIn("b", 2_000);
+    table.deal();
+
+    expect(table.canTakeOff("a")).toBe(false);
+    expect(() => table.takeOffTable("a")).toThrow(/mid-hand/i);
+    expect(table.owedOut).toEqual([]);
+  });
+
+  it("lets somebody who has folded take what is left", () => {
+    // Their bet stays in the pot; the rest was never in the hand.
+    const table = chips();
+    table.join("a", "Ada", identity("u1"));
+    table.join("b", "Bram", identity("u2"));
+    table.buyIn("a", 2_000);
+    table.buyIn("b", 2_000);
+    table.deal();
+    const first = table.toAct as string;
+    table.act(first, "fold");
+
+    expect(table.canTakeOff(first)).toBe(true);
+  });
+
+  it("owes an account nothing at a table playing for nothing", () => {
+    // Play money dies with the table, whichever door it goes out of.
+    const table = new Table("FUN03", Math.random, 50, 100, 6, 30_000, true, 2_000);
+    table.join("a", "Ada", identity("u1"));
+    table.buyIn("a", 2_000);
+
+    expect(table.takeOffTable("a")).toBe(2_000);
+    expect(table.owedOut).toEqual([]);
+  });
+
+  it("has nothing to hand back when there is nothing in front of you", () => {
+    const table = chips();
+    table.join("a", "Ada", identity("u1"));
+    expect(table.canTakeOff("a")).toBe(false);
+  });
+});

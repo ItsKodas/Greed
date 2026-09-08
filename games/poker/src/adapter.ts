@@ -101,6 +101,15 @@ export function pokerAdapter(
         case "show":
           table.show(seatId);
           return;
+        /*
+         * Taking chips back off the table. The table queues what it owes and
+         * `payOut` hands it over on the next broadcast — the same path a seat
+         * standing up uses, so there is one way chips leave a poker table and
+         * not two.
+         */
+        case "cashOut":
+          table.takeOffTable(seatId);
+          return;
         case "fold":
         case "check":
         case "call":

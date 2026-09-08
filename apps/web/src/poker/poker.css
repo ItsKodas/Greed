@@ -115,8 +115,16 @@
     0 0 10px rgb(0 0 0 / 0.6);
 }
 
+/*
+ * The type on a seat scales with the felt too.
+ *
+ * The last of the same bug the cards had: a name at a fixed size sits in a
+ * block whose height is then fixed, while the ring it hangs off is a fraction
+ * of the table — so at some sizes the block grows into the chips below it. In
+ * `cqw` the seat is one drawing that gets bigger, like everything else here.
+ */
 .pk__name {
-  font-size: var(--gr-text-sm);
+  font-size: clamp(11px, 1.15cqw, 18px);
   color: var(--gr-color-ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -124,7 +132,7 @@
 }
 
 .pk__stack {
-  font-size: var(--gr-text-sm);
+  font-size: clamp(11px, 1.15cqw, 18px);
   font-variant-numeric: tabular-nums;
   color: var(--gr-color-chip);
 }
@@ -206,7 +214,10 @@
 .pk__pot-chips {
   position: absolute;
   left: calc(100% + 8px);
-  bottom: -0.25em;
+  /* Sat on the figure's own line rather than hanging below it: the heap
+     spreads sideways as the pot grows, and below the line that reach brings
+     it down onto the first board card. */
+  bottom: 0.15em;
   display: block;
 }
 

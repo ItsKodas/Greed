@@ -216,7 +216,20 @@ export function Felt({
             <strong>{fmt(state.pot)}</strong>
             {state.pot > 0 ? (
               <span className="pk__pot-chips">
-                <ChipStack amount={state.pot} width={19} ladder={TABLE_CHIPS} most={15} tallest={5} />
+                {/*
+                  * Shorter stacks than anywhere else, so the pot reads as a
+                  * heap rather than as one tall column. It is the biggest pile
+                  * on the table and the only one nobody owns — a spread of
+                  * stacks is what that looks like, and what a dealer would
+                  * actually have left in the middle.
+                  */}
+                <ChipStack
+                  amount={state.pot}
+                  width={19}
+                  ladder={TABLE_CHIPS}
+                  most={18}
+                  tallest={3}
+                />
               </span>
             ) : null}
           </p>
@@ -673,9 +686,33 @@ export function Actions({
     const inHand = state.street !== "waiting" && !me.folded && me.hole.length > 0;
     if (!inHand) {
       return (
-        <p className="pk__note">
-          {state.street === "waiting" ? "Waiting for the next hand." : "Waiting for the others."}
-        </p>
+        <div className="pk__controls">
+          {/*
+            * Between hands your stack is simply yours, so here is the door.
+            * Offered only when it is true — mid-hand the table refuses it, and
+            * a button that is refused when pressed is worse than no button.
+            */}
+          {state.canTakeOff ? (
+            <div className="pk__acts">
+              <button
+                type="button"
+                className="pk__act"
+                disabled={table.busy}
+                aria-label={`Take ${fmt(me.stack)} off the table`}
+                onClick={() => table.act({ type: "cashOut" })}
+              >
+                <span className="pk__act-name">Cash out</span>
+                <span className="pk__act-figure">{fmt(me.stack)}</span>
+              </button>
+            </div>
+          ) : null}
+          <p className="pk__note">
+            {state.street === "waiting" ? "Waiting for the next hand." : "Waiting for the others."}
+            {state.canTakeOff && !state.forFun
+              ? " Your chips go back to your balance, and the seat stays yours."
+              : ""}
+          </p>
+        </div>
       );
     }
     return (
