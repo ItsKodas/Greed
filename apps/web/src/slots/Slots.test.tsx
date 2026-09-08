@@ -1,30 +1,7 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { credits, CREDITS_PER_CHIP, PaylineOverlay } from "./Slots.js";
-
-/**
- * Credits are a display convention, not a currency.
- *
- * There is one ledger in this building and it is in chips. The glass reads in
- * credits because a machine that says 500 feels like a slot machine and one
- * that says 5 does not — but the multiplication happens on the way to the
- * screen, and nothing underneath ever stores a credit.
- */
-describe("the glass", () => {
-  it("reads a hundred credits to the chip", () => {
-    expect(CREDITS_PER_CHIP).toBe(100);
-    expect(credits(5)).toBe("500");
-  });
-
-  it("groups a large number so it can be read at a glance", () => {
-    expect(credits(50_000)).toBe("5,000,000");
-  });
-
-  it("shows nothing as nothing", () => {
-    expect(credits(0)).toBe("0");
-  });
-});
+import { PaylineOverlay } from "./Slots.js";
 
 describe("a win", () => {
   it("lights every line that paid", () => {

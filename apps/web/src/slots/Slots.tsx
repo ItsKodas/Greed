@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { DiscordIcon } from "../blackjack/Icons.js";
 import { useAccount } from "../game/useAccount.js";
-import { compact } from "../game/money.js";
+import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
 import { Reel, REEL_STAGGER_MS, SPIN_UP_MS } from "./Reel.js";
 import "@backroom/game-slots/theme.css";
@@ -19,31 +19,16 @@ import "./slots.css";
  * real people — everybody who pulled the lever before you.
  */
 
-/**
- * A hundred credits to the chip.
+/*
+ * Everything on this cabinet is chips.
  *
- * A display convention and nothing more. There is one ledger in this building
- * and it is in chips; the multiplication happens here, on the way to the
- * glass, because a machine that says 500 feels like a slot machine and one
- * that says 5 does not. Nothing underneath ever stores a credit.
+ * It read in credits at a hundred to the chip for a while, on the argument
+ * that a machine saying 500 feels more like a slot machine than one saying 5.
+ * That argument is not worth what it costs: a player cannot tell what they are
+ * playing for when the stake and the prize are in different units, and the
+ * moment any figure here is a chip they all have to be. Chips are what the
+ * rest of the building counts in, so chips it is.
  */
-export const CREDITS_PER_CHIP = 100;
-
-export function credits(chips: number): string {
-  return (chips * CREDITS_PER_CHIP).toLocaleString("en-US");
-}
-
-/**
- * The same figure, short enough to glance at.
- *
- * Credits are a hundred to the chip, so every number on this cabinet is two
- * digits longer than the one underneath it — a middling balance is already
- * seven digits. The jackpot sign and the purse are glanced at; what a spin
- * actually paid is read, and stays written out.
- */
-export function creditsShort(chips: number): string {
-  return compact(chips * CREDITS_PER_CHIP);
-}
 
 /** How long after the last reel stops before the winning lines light. */
 export const LINE_LIGHT_MS = 420;
@@ -67,8 +52,13 @@ const ATTRACT: Face[][] = [
   ["dice", "spade", "chip"],
 ];
 
-/** The stakes on offer, before the bank's own ceiling is applied. */
-const STAKES = [1, 2, 5, 10, 25, 50, 100] as const;
+/**
+ * The stakes on offer, before the bank's own ceiling is applied.
+ *
+ * In chips, so these are the amounts that actually leave the account. What the
+ * bank can cover cuts the list short — an empty one offers nothing at all.
+ */
+const STAKES = [1, 2, 5, 10, 25, 50, 100, 250, 500] as const;
 
 interface MachineSign {
   bank: number;
@@ -192,9 +182,9 @@ export default function Slots() {
       account.setChips(result.balance);
       setSaid(
         result.jackpot
-          ? `JACKPOT — ${credits(result.won)} credits`
+          ? `JACKPOT — ${exact(result.won)} chips`
           : result.won > 0
-            ? `${credits(result.won)} credits`
+            ? `${exact(result.won)} chips`
             : null,
       );
     });
@@ -272,13 +262,16 @@ function BankSign({ bank, jackpot }: { bank: number; jackpot: number }) {
   return (
     <div className="slots__bank">
       <span className="slots__bank-label">Jackpot</span>
-      <strong className="slots__bank-figure" title={`${credits(jackpot)} credits`}>
-        {creditsShort(jackpot)}
-      </strong>
+      {/*
+        * In full, never shortened. This is the one number on the page somebody
+        * is here for, and "19.9K" is a rounder answer to "what am I playing
+        * for" than the question deserves.
+        */}
+      <strong className="slots__bank-figure">{exact(jackpot)}</strong>
       <span className="slots__bank-note">
         {bank === 0
           ? "The bank has not been stocked yet, so the machine is shut."
-          : `of ${creditsShort(bank)} in the bank — every credit of it staked by somebody`}
+          : `of ${exact(bank)} in the bank — every chip of it staked by somebody`}
       </span>
     </div>
   );
@@ -357,7 +350,7 @@ function Controls({
 }) {
   return (
     <div className="slots__controls">
-      <div className="slots__stakes" role="radiogroup" aria-label="Credits per spin">
+      <div className="slots__stakes" role="radiogroup" aria-label="Chips per spin">
         {offered.length === 0 ? (
           <p className="slots__shut">
             {/*
@@ -379,7 +372,7 @@ function Controls({
               onClick={() => onStake(amount)}
               disabled={amount > balance}
             >
-              {credits(amount)}
+              {exact(amount)}
             </button>
           ))
         )}
@@ -390,8 +383,8 @@ function Controls({
       </button>
 
       <p className="slots__purse">
-        <span title={`${credits(balance)} credits`}>{creditsShort(balance)} credits</span>
-        {cap > 0 ? <span className="slots__cap">Max {creditsShort(cap)} a spin</span> : null}
+        <span>{exact(balance)} chips</span>
+        {cap > 0 ? <span className="slots__cap">Max {exact(cap)} a spin</span> : null}
       </p>
     </div>
   );
