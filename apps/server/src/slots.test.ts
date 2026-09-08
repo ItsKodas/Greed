@@ -641,8 +641,20 @@ describe("the wall at the machine", () => {
   });
 
   it("hands somebody who has just walked up what they missed", async () => {
-    // So a machine that has been played does not look untouched.
-    const { client, base } = await openMachine({ bank: 500_000, chips: 100_000 });
+    /*
+     * So a machine that has been played does not look untouched.
+     *
+     * On scripted reels, because this asserts what each spin cost. On real
+     * ones the first spin can trigger the bonus, which makes the second a free
+     * one — it replays the first bet and goes up the wall at nothing, because
+     * that is what it cost. About one run in seventy, which is exactly often
+     * enough to look like a flake and not often enough to be found.
+     */
+    const { client, base } = await openMachine({
+      bank: 500_000,
+      chips: 100_000,
+      spinRandom: losing(),
+    });
     await spin(client, 100);
     await spin(client, 250);
 

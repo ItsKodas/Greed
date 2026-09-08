@@ -767,6 +767,19 @@ function SignInToJoin({ code, onWatch }: { code: string; onWatch: () => void }) 
   );
 }
 
+/**
+ * What a table opens as: what the host chose, or the sensible default until
+ * they choose.
+ *
+ * The default has to be read at render rather than frozen at mount. Whether
+ * somebody is a guest is not known when this panel first draws — the account
+ * is still on its way — and "not known yet" looks exactly like "guest", so a
+ * default captured then is the wrong one for everybody who is signed in.
+ */
+export function opensForFun(chosen: boolean | null, guest: boolean): boolean {
+  return chosen ?? guest;
+}
+
 function Sit({
   table,
   invited,
@@ -792,8 +805,15 @@ function Sit({
    * A guest has no chips to stake, so their table is the play-money one. A
    * signed-in player is offered the choice and starts on the real thing,
    * which is what they came for.
+   *
+   * Null until the host actually picks, rather than a boolean seeded from
+   * `guest`. Seeding froze it at the first render, which happens while the
+   * account is still being fetched — and a profile that has not arrived reads
+   * as a guest, so a signed-in host was quietly defaulted to play money and
+   * only noticed when their table would not take a chip.
    */
-  const [forFun, setForFun] = useState(guest);
+  const [chosen, setChosen] = useState<boolean | null>(null);
+  const forFun = opensForFun(chosen, guest);
   // Six is a card table; the host may want a bigger or a smaller one.
   const [maxSeats, setMaxSeats] = useState(6);
   /*
@@ -883,7 +903,7 @@ function Sit({
                 // offered rather than offered and refused.
                 disabled={!option && guest}
                 className={`variant${forFun === option ? " variant--on" : ""}`}
-                onClick={() => setForFun(option)}
+                onClick={() => setChosen(option)}
               >
                 <span className="variant__name">{option ? "For fun" : "For chips"}</span>
                 <span className="variant__note">
