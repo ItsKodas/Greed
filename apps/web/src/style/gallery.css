@@ -223,8 +223,8 @@
   animation: mk-turn 1.6s cubic-bezier(0.5, 0, 0.2, 1) infinite;
 }
 
-.mock__face--won .mk-move--ace {
-  animation: mk-flip 1.6s cubic-bezier(0.45, 0, 0.3, 1) infinite;
+.mock__face--won .mk-move--spade {
+  animation: mk-turn-face 1.5s cubic-bezier(0.4, 0, 0.3, 1) infinite;
 }
 
 .mock__face--won .mk-move--chip {
@@ -239,11 +239,13 @@
   animation: mk-pop 1.5s cubic-bezier(0.16, 1.4, 0.3, 1) infinite;
 }
 
-/* The pour tips and settles, the way a glass set down hard does. */
+/* The whole glass rattled on the bar, and settling. */
 @keyframes mk-slosh {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-9deg); }
-  60% { transform: rotate(5deg); }
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  15% { transform: translateX(-2.5px) rotate(-7deg); }
+  35% { transform: translateX(2.5px) rotate(6deg); }
+  55% { transform: translateX(-1.5px) rotate(-4deg); }
+  75% { transform: translateX(1px) rotate(2deg); }
 }
 
 /* The ember catches, brightens, and dies back. */
@@ -258,11 +260,12 @@
   25%, 35% { transform: rotate(90deg); }
 }
 
-/* Over and back. Squashed through the middle rather than rotated, because a
-   card has no thickness to show. */
-@keyframes mk-flip {
-  0%, 100% { transform: scaleX(1); }
-  50% { transform: scaleX(-1); }
+/* Turning to catch the light, then back. A pip is a flat thing; leaning it
+   is the only way it has of showing a face. */
+@keyframes mk-turn-face {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  30% { transform: rotate(-13deg) scale(1.1); }
+  65% { transform: rotate(9deg) scale(1.06); }
 }
 
 /* On its edge, the way a chip does on a table. */

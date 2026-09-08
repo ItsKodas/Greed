@@ -24,7 +24,7 @@ export const PROPOSED = [
   "tumbler",
   "cigar",
   "key",
-  "ace",
+  "spade",
   "chip",
   "seven",
   "bonus",
@@ -36,7 +36,7 @@ const LABEL: Record<Proposed, string> = {
   tumbler: "Tumbler",
   cigar: "Cigar",
   key: "Key",
-  ace: "Ace",
+  spade: "Spade",
   chip: "Chip",
   seven: "Seven",
   bonus: "Bonus",
@@ -68,9 +68,15 @@ function Defs() {
           <stop offset="50%" stopColor="#c8a03c" />
           <stop offset="100%" stopColor="#7d5f18" />
         </linearGradient>
-        <linearGradient id="mk-card" x1="0" y1="0" x2="0.4" y2="1">
-          <stop offset="0%" stopColor="#ffffff" />
-          <stop offset="100%" stopColor="#cfd6e2" />
+        <linearGradient id="mk-spade" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0%" stopColor="#a9c8ee" />
+          <stop offset="55%" stopColor="#7fa8d8" />
+          <stop offset="100%" stopColor="#4e77a8" />
+        </linearGradient>
+        {/* The wall of the chip, darker down the side as a real one is. */}
+        <linearGradient id="mk-chip-wall" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#c8973a" />
+          <stop offset="100%" stopColor="#6d4d11" />
         </linearGradient>
         <linearGradient id="mk-chip" x1="0.2" y1="0" x2="0.8" y2="1">
           <stop offset="0%" stopColor="#f7d478" />
@@ -116,21 +122,31 @@ const ART: Record<Proposed, React.ReactNode> = {
   tumbler: (
     <>
       <Ground rx={15} cy={20} />
-      {/* The pour, which is what sloshes when it wins. */}
+      {/*
+       * The whole glass moves, not the drink inside it. Rocking only the pour
+       * tipped the liquid straight out through the side of the glass, which
+       * is a good deal more than a win is worth.
+       */}
       <g className="mk-move mk-move--tumbler">
         <path d="M-11 -1 H11 L9.5 15 H-9.5 Z" fill="url(#mk-whisky)" />
         <rect x="-5" y="1" width="7" height="7" rx="1.6" fill="#fff" opacity="0.28" />
+        <path
+          d="M-13 -14 H13 L10 16 H-10 Z"
+          fill="url(#mk-glass)"
+          fillOpacity="0.4"
+          stroke="#dff1f6"
+          strokeOpacity="0.8"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M-9 -11 L-7 12"
+          stroke="#fff"
+          strokeOpacity="0.55"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
       </g>
-      <path
-        d="M-13 -14 H13 L10 16 H-10 Z"
-        fill="url(#mk-glass)"
-        fillOpacity="0.4"
-        stroke="#dff1f6"
-        strokeOpacity="0.8"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path d="M-9 -11 L-7 12" stroke="#fff" strokeOpacity="0.55" strokeWidth="2.4" strokeLinecap="round" />
     </>
   ),
   cigar: (
@@ -161,47 +177,60 @@ const ART: Record<Proposed, React.ReactNode> = {
       </g>
     </>
   ),
-  ace: (
+  spade: (
     <>
-      <Ground rx={14} />
-      <g className="mk-move mk-move--ace">
-        <rect x="-13" y="-18" width="26" height="36" rx="4" fill="url(#mk-card)" />
-        <rect
-          x="-13"
-          y="-18"
-          width="26"
-          height="36"
-          rx="4"
-          fill="none"
-          stroke="#98a3b5"
-          strokeWidth="1.2"
-        />
+      <Ground rx={16} />
+      <g className="mk-move mk-move--spade">
         <path
-          transform="translate(0 2) scale(0.85)"
+          transform="scale(1.32)"
           d="M0 -13 C 8 -5, 14 -2, 14 2 C 14 6, 10 8, 6 8 C 3 8, 1 7, 0 5 C -1 7, -3 8, -6 8 C -10 8, -14 6, -14 2 C -14 -2, -8 -5, 0 -13 Z M-1 5 C -2 8, -4 10, -6 11 L 6 11 C 4 10, 2 8, 1 5 Z"
-          fill="#1b2028"
+          fill="url(#mk-spade)"
         />
-        <path d="M-10 -14 h4 M-8 -16 v4" stroke="#1b2028" strokeWidth="1.8" strokeLinecap="round" />
+        {/* A lit facet down the left lobe, which is what stops it reading flat. */}
+        <path
+          d="M-2 -15 C -8 -6, -15 -3, -15 3 C -15 6, -13 8, -10 8 C -13 4, -11 -2, -2 -11 Z"
+          fill="#fff"
+          opacity="0.3"
+        />
       </g>
     </>
   ),
   chip: (
     <>
-      <Ground rx={18} />
+      <Ground rx={19} cy={23} />
       <g className="mk-move mk-move--chip">
-        <circle cx="0" cy="2" r="19" fill="#a97c22" />
-        <circle cx="0" cy="0" r="19" fill="url(#mk-chip)" />
-        <circle
+        {/*
+         * Seen from slightly above, which is the only way a disc reads as an
+         * object: an ellipse for the face, a wall under it for the thickness,
+         * and the flutes cut down that wall the way they are on a real chip.
+         * Drawn flat on, it is a circle with a pattern on it.
+         */}
+        <path d="M-19 -1 A 19 12 0 0 0 19 -1 L 19 5 A 19 12 0 0 1 -19 5 Z" fill="url(#mk-chip-wall)" />
+        {[-15, -9, -3, 3, 9, 15].map((x) => (
+          <rect key={x} x={x - 1.4} y={7 - Math.abs(x) * 0.28} width="2.8" height="6" rx="1.2" fill="#f7ecd6" opacity="0.85" />
+        ))}
+        <ellipse cx="0" cy="-1" rx="19" ry="12" fill="url(#mk-chip)" />
+        {/* The inlays, squashed to the same perspective as the face. */}
+        <ellipse
           cx="0"
-          cy="0"
-          r="15"
+          cy="-1"
+          rx="15"
+          ry="9.4"
           fill="none"
           stroke="#f7ecd6"
-          strokeWidth="7"
-          strokeDasharray="8 7.7"
+          strokeWidth="5"
+          strokeDasharray="7 6.5"
         />
-        <circle cx="0" cy="0" r="9" fill="#a97c22" opacity="0.35" />
-        <circle cx="0" cy="0" r="9" fill="none" stroke="#f7ecd6" strokeWidth="1.6" />
+        <ellipse cx="0" cy="-1" rx="8.5" ry="5.2" fill="#a97c22" opacity="0.4" />
+        <ellipse cx="0" cy="-1" rx="8.5" ry="5.2" fill="none" stroke="#f7ecd6" strokeWidth="1.4" />
+        <path
+          d="M-13 -6 A 16 10 0 0 1 -2 -12"
+          fill="none"
+          stroke="#fff"
+          strokeOpacity="0.55"
+          strokeWidth="2.4"
+          strokeLinecap="round"
+        />
       </g>
     </>
   ),
@@ -296,9 +325,10 @@ export function SlotMockup() {
       </button>
 
       <p className="gallery__note">
-        The key turns in its lock, the card flips, the chip spins on its edge, the ember flares, the
-        whisky tips, the tube flickers up to full, and the bonus pops out and grows — which is the
-        one that has to be unmistakable, because it is the face a player is hunting for.
+        The key turns in its lock, the spade turns to catch the light, the chip spins on its edge, the
+        ember flares, the glass rattles, the tube flickers up to full, and the bonus pops out and
+        grows — which is the one that has to be unmistakable, because it is the face a player is
+        hunting for.
       </p>
     </section>
   );
