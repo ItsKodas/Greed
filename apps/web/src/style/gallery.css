@@ -150,11 +150,21 @@
   --bj-card-w: 150px;
 }
 
+/*
+ * Three hands side by side, and one of them is deliberately a long one.
+ *
+ * Scrolls inside its own box rather than pushing the page: at 375px the wide
+ * hand ran forty pixels past the viewport and took the whole document sideways
+ * with it. A long hand is exactly the "wide thing" the house rule has in mind
+ * — it gets its own scroll, and the page keeps still.
+ */
 .deck__hands {
   display: flex;
   gap: var(--gr-space-6);
   align-items: flex-start;
   margin-top: var(--gr-space-3);
+  overflow-x: auto;
+  padding-bottom: var(--gr-space-2);
 }
 
 /* --------------------------------------------------- proposed reel faces */
@@ -477,3 +487,352 @@
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------- the felt */
+
+/*
+ * A poker table, mocked up.
+ *
+ * The whole layout hangs off one decision: the seats are placed round an
+ * ellipse in percentages, so the table is one box that can be any size and the
+ * seats stay where they belong in it. A phone gets the same felt, smaller,
+ * rather than a different arrangement that would have to be designed twice.
+ */
+.pk {
+  container-type: inline-size;
+}
+
+.pk__felt {
+  /*
+   * How far the ring of seats reaches, as a share of the felt. Here rather
+   * than in the component because it is the one thing that has to change with
+   * the felt's width, and only the stylesheet knows what that is.
+   */
+  --across: 44%;
+  --down: 40%;
+  position: relative;
+  /*
+   * Wider than it is tall, like a card table seen from above. The ratio is
+   * what makes ten seats sit evenly instead of bunching at the ends.
+   */
+  aspect-ratio: 16 / 10;
+  border-radius: 44% / 46%;
+  border: 2px solid rgb(0 0 0 / 0.5);
+  background:
+    radial-gradient(70% 70% at 50% 40%, #1f4a37 0%, #16352a 60%, #0e241c 100%);
+  box-shadow:
+    inset 0 0 60px rgb(0 0 0 / 0.55),
+    0 18px 40px rgb(0 0 0 / 0.4);
+}
+
+/* The pot and the board, in the middle where everybody can read them. */
+.pk__middle {
+  position: absolute;
+  left: 50%;
+  top: 44%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-2);
+  width: 78%;
+}
+
+.pk__pot {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--gr-space-2);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+}
+
+.pk__pot-label,
+.pk__side {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.pk__board {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+/*
+ * A card that has not come yet. It holds the space so the board keeps its
+ * width all the way from the flop to the river — without it every street
+ * shunts the cards sideways, and a card that moves when a different card
+ * arrives reads as the wrong card moving.
+ */
+.pk__gap {
+  width: 40px;
+  aspect-ratio: 5 / 7;
+  border-radius: 4px;
+  border: 1px dashed rgb(255 255 255 / 0.12);
+}
+
+.pk__board .bj-card {
+  width: 40px;
+  height: auto;
+}
+
+/* ------------------------------------------------------------ the seats */
+
+.pk__seat {
+  position: absolute;
+  /* Placed by its middle, from the angle the component worked out. */
+  left: calc(50% + var(--cos) * var(--across));
+  top: calc(50% + var(--sin) * var(--down));
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 92px;
+  padding: 5px 6px;
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(0 0 0 / 0.42);
+  text-align: center;
+}
+
+.pk__cards {
+  display: flex;
+  gap: 2px;
+}
+
+.pk__cards .bj-card {
+  width: 26px;
+  height: auto;
+}
+
+.pk__who {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+
+.pk__name {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pk__stack {
+  font-size: var(--gr-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+}
+
+/*
+ * The button, and the blinds.
+ *
+ * Sat on the corner of the seat rather than beside it, so it costs no width at
+ * a table that has none to spare. White for the dealer because that is what a
+ * button is; the blinds are quieter, because they say what a seat has already
+ * been made to do rather than where the deal starts.
+ */
+.pk__mark {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: #f2f0ea;
+  color: #1b2028;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.5);
+}
+
+.pk__mark--sb,
+.pk__mark--bb {
+  background: rgb(0 0 0 / 0.72);
+  color: var(--gr-color-ink-dim);
+  border: 1px solid rgb(255 255 255 / 0.22);
+}
+
+/* What this seat has in front of it, sat outside the seat towards the pot. */
+.pk__bet {
+  position: absolute;
+  bottom: -11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--gr-color-chip);
+  color: #2a1704;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pk__says {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+}
+
+/*
+ * The one seat that is waiting on somebody.
+ *
+ * Lit rather than outlined, because at a ten-handed table the question "whose
+ * turn is it" has to be answerable from the corner of the eye.
+ */
+.pk__seat--acting {
+  border-color: var(--gr-color-neon);
+  box-shadow: 0 0 0 1px var(--gr-color-neon), 0 0 18px rgb(201 67 158 / 0.5);
+}
+
+/*
+ * Folded: still there, and plainly out.
+ *
+ * It keeps its chair rather than disappearing — a table that emptied out every
+ * hand would look like people leaving rather than people folding.
+ */
+.pk__seat--folded {
+  opacity: 0.38;
+}
+
+.pk__seat--folded .pk__cards {
+  visibility: hidden;
+}
+
+.pk__seat--allIn {
+  border-color: var(--gr-color-good);
+}
+
+.pk__seat--won {
+  border-color: var(--gr-color-chip);
+  box-shadow: 0 0 0 1px var(--gr-color-chip), 0 0 22px rgb(224 176 72 / 0.45);
+}
+
+/* ---------------------------------------------------------- what you do */
+
+.pk__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gr-space-2);
+  margin-top: var(--gr-space-3);
+}
+
+.pk__act {
+  min-height: 44px;
+  padding: 0 var(--gr-space-4);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink);
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+}
+
+.pk__act--fold {
+  color: var(--gr-color-ink-dim);
+}
+
+.pk__act--raise {
+  border-color: var(--gr-color-neon);
+  color: var(--gr-color-ink-lit);
+}
+
+.pk__slider {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.pk__slider input {
+  flex: 1;
+  min-width: 0;
+}
+
+.pk__slider-label {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  white-space: nowrap;
+}
+
+/*
+ * A phone gets the same table, smaller.
+ *
+ * Everything that shrinks here is a size rather than an arrangement: the seats
+ * stay where they are round the ellipse, because a second layout is a second
+ * thing to get right and a table that rearranged itself would stop being the
+ * same table.
+ */
+@container (max-width: 560px) {
+  /*
+   * Taller, because the seats need somewhere to go.
+   *
+   * Ten seats round a wide ellipse at this width collided — six overlapping
+   * pairs, and the outermost ones hanging off the sides of the page. A felt
+   * nearer square has far more room down its sides, which is where the seats
+   * that were fighting each other end up.
+   */
+  .pk__felt {
+    aspect-ratio: 1 / 1;
+    --across: 36%;
+  }
+
+  .pk__seat {
+    width: 46px;
+    padding: 2px 3px;
+    gap: 1px;
+  }
+
+  /*
+   * Everybody else's cards go.
+   *
+   * They are face down: two dark rectangles saying nothing, at a size where
+   * they say it illegibly. What a player needs from another seat on a phone is
+   * who it is, what they have left, and whether they are still in — so the
+   * cards give up their room to those, and your own hand keeps its own.
+   */
+  .pk__seat .pk__cards {
+    display: none;
+  }
+
+  .pk__seat--acting .pk__cards,
+  .pk__seat--won .pk__cards {
+    display: flex;
+  }
+
+  .pk__cards .bj-card {
+    width: 20px;
+  }
+
+  .pk__board .bj-card,
+  .pk__gap {
+    width: 26px;
+  }
+
+  .pk__name,
+  .pk__stack {
+    font-size: 10px;
+  }
+
+  .pk__says {
+    font-size: 9px;
+  }
+
+  .pk__bet {
+    bottom: -9px;
+    font-size: 9px;
+    padding: 0 4px;
+  }
+}
+
