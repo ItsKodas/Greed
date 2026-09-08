@@ -46,6 +46,17 @@ export interface Seat extends TableSeat {
   acted: boolean;
   /** Sat down mid-hand, and dealt in from the next one. */
   waiting: boolean;
+  /**
+   * The last thing they did, and when they did it.
+   *
+   * Kept per seat rather than read off `lastEvent`, which is one line for the
+   * whole table: a bubble belongs over the person who said it, and at a table
+   * of ten the last thing to happen is rarely the last thing *you* did. The
+   * moment is carried with it so the felt can let it fade on its own clock
+   * rather than needing to be told when to.
+   */
+  spoke: { move: Move; said: string; at: number } | null;
+
   /** What they turned over, once there has been a showdown. */
   showed: Score | null;
   /**
@@ -97,6 +108,8 @@ export interface SeatView {
   allIn: boolean;
   /** Marked on the felt, so nobody wonders who they are playing. */
   isBot: boolean;
+  /** The last thing they did, for the felt to say over their head. */
+  spoke: { move: Move; said: string; at: number } | null;
   /**
    * Their two cards — or two nulls, which is a hand that exists and is not
    * yours to see. Null rather than absent so the felt can lay a face-down card
@@ -418,6 +431,7 @@ export class Table implements PlayTable {
     seat.acted = false;
     seat.showed = null;
     seat.revealed = false;
+    seat.spoke = null;
   }
 
   /**
@@ -640,6 +654,7 @@ export class Table implements PlayTable {
         folded: seat.folded,
         allIn: seat.allIn,
         isBot: seat.isBot,
+        spoke: seat.spoke,
         /*
          * The whole reason a view is per-seat. Your own cards, and anybody
          * else's only once they have been turned over at a showdown — a hand
@@ -868,12 +883,14 @@ export class Table implements PlayTable {
       case "fold":
         seat.folded = true;
         this.lastEvent = `${seat.name} folded`;
+        seat.spoke = { move, said: "Fold", at: Date.now() };
         break;
       case "check":
         if (this.owed(seat) > 0) {
           throw new TableError("You cannot check for free.");
         }
         this.lastEvent = `${seat.name} checked`;
+        seat.spoke = { move, said: "Check", at: Date.now() };
         break;
       case "call": {
         const owed = this.owed(seat);
@@ -882,6 +899,7 @@ export class Table implements PlayTable {
         }
         this.put(seat, owed);
         this.lastEvent = `${seat.name} called ${owed.toLocaleString("en-US")}`;
+        seat.spoke = { move, said: `Call ${owed.toLocaleString("en-US")}`, at: Date.now() };
         break;
       }
       case "allIn": {
@@ -891,9 +909,11 @@ export class Table implements PlayTable {
         }
         this.raiseBy(seat, all);
         this.lastEvent = `${seat.name} is all in`;
+        seat.spoke = { move, said: "All in", at: Date.now() };
         break;
       }
       case "raise": {
+        const was = this.highest;
         const more = Math.floor(amount) - seat.committed;
         if (more <= this.owed(seat)) {
           throw new TableError("A raise has to be more than a call.");
@@ -908,6 +928,12 @@ export class Table implements PlayTable {
         }
         this.raiseBy(seat, more);
         this.lastEvent = `${seat.name} raised to ${seat.committed.toLocaleString("en-US")}`;
+        seat.spoke = {
+          move,
+          /* A first bet is a bet; putting it up over somebody is a raise. */
+          said: `${was === 0 ? "Bet" : "Raise"} ${seat.committed.toLocaleString("en-US")}`,
+          at: Date.now(),
+        };
         break;
       }
     }
@@ -1145,6 +1171,7 @@ export class Table implements PlayTable {
       seat.hole = [];
       seat.showed = null;
       seat.revealed = false;
+      seat.spoke = null;
       seat.committed = 0;
       seat.paid = 0;
       seat.folded = false;

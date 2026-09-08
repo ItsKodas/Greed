@@ -26,6 +26,8 @@ const seat = (over: Partial<SeatView> & { id: string; name: string }): SeatView 
   allIn: false,
   hole: [],
   showed: null,
+  isBot: false,
+  spoke: null,
   ...over,
 });
 
@@ -46,6 +48,11 @@ const view = (over: Partial<TableView> = {}): TableView => ({
   lastEvent: null,
   watching: 0,
   seats: [],
+  forFun: false,
+  entry: 2_000,
+  canShow: false,
+  canTakeOff: false,
+  hostId: null,
   ...over,
 });
 

@@ -1,5 +1,6 @@
 import type { TableView } from "@backroom/game-poker";
 import { useEffect, useRef } from "react";
+import type { Cue } from "../game/audio.js";
 import { play, preload, unlock } from "../game/audio.js";
 
 /**
@@ -10,6 +11,15 @@ import { play, preload, unlock } from "../game/audio.js";
  * way, though, and for the same reason: a table sounds for everybody's cards
  * and not only your own, which is most of what makes it feel occupied.
  */
+
+/** Which tone belongs to which move. */
+const SAID: Record<string, Cue> = {
+  check: "sayCheck",
+  fold: "sayFold",
+  call: "sayCall",
+  raise: "sayRaise",
+  allIn: "sayAllIn",
+};
 
 /** What everybody has put in this street, which is what a chip sound is for. */
 const onFelt = (view: TableView): number =>
@@ -40,6 +50,10 @@ export function useTableSound(view: TableView | null, seatId: string | null): vo
     if (view === null || before === null) {
       return;
     }
+    /* When each seat last spoke, as of the update before this one. */
+    const beforeSeats = new Map(
+      before.seats.map((seat) => [seat.id, seat.spoke?.at ?? null] as const),
+    );
 
     /*
      * At most one card sound per update, in the order of what matters. A hand
@@ -57,6 +71,31 @@ export function useTableSound(view: TableView | null, seatId: string | null): vo
       // instead of them: a street turns over and the betting starts again in
       // the same update, and the card is the thing that just happened.
       play("bet");
+    }
+
+    /*
+     * What each seat just did, said once.
+     *
+     * Keyed on the moment the table stamped rather than on the words: two
+     * checks in a row are two different things that happened, and comparing
+     * the text would hear them as one. Everybody's, not only yours — a table
+     * that only made a noise for you would be a table you were playing alone.
+     */
+    for (const seat of view.seats) {
+      const now = seat.spoke;
+      if (now === null) {
+        continue;
+      }
+      // Named `spokeAt` rather than `before`, which is the previous view two
+      // scopes up and is a different thing entirely.
+      const spokeAt = beforeSeats.get(seat.id);
+      if (spokeAt !== undefined && spokeAt === now.at) {
+        continue;
+      }
+      const cue = SAID[now.move];
+      if (cue !== undefined) {
+        play(cue);
+      }
     }
 
     /*

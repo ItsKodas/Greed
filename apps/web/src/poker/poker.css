@@ -421,6 +421,73 @@
 }
 
 /*
+ * What a seat just did, over its head and gone again.
+ *
+ * Above the cards rather than in the seat, because the seat is already full —
+ * a name, a stack, a mark and sometimes a clock — and this is the one thing on
+ * it that is about a moment rather than a state. It leaves on its own after a
+ * couple of seconds; nothing has to remember to take it away.
+ */
+.pk__bubble {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  z-index: 4;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(10 14 20 / 0.92);
+  color: var(--gr-color-ink-lit);
+  font-size: clamp(10px, 1.05cqw, 15px);
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.5);
+  animation: pk-said 2.2s ease forwards;
+}
+
+/*
+ * Up, hold, gone. The hold is most of it: a bubble that starts leaving as soon
+ * as it arrives is one you have to already be looking at to read.
+ */
+@keyframes pk-said {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.92);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -6px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__bubble {
+    /* Still said, just not moved: it appears, holds, and goes. */
+    animation: pk-said-still 2.2s steps(1, end) forwards;
+    transform: translateX(-50%);
+  }
+
+  @keyframes pk-said-still {
+    0%,
+    92% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+/*
  * The one seat that is waiting on somebody.
  *
  * A glow on the cloth beneath them rather than a border, now that there is

@@ -481,6 +481,18 @@ function Seat({
         <span className={`pk__mark pk__mark--${mark.toLowerCase()}`}>{mark}</span>
       )}
       {said !== null ? <span className="pk__says">{said}</span> : null}
+      {/*
+        * What they just did, over their head and gone again.
+        *
+        * Keyed on the moment rather than the words, so two checks in a row are
+        * two bubbles rather than one that never moves — React replaces the
+        * element and the animation runs again.
+        */}
+      {seat.spoke != null ? (
+        <span className="pk__bubble" key={seat.spoke.at}>
+          {seat.spoke.said}
+        </span>
+      ) : null}
       {said === null && won !== null ? (
         <span className="pk__says">won {fmt(won)}</span>
       ) : null}
