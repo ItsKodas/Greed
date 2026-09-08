@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { Face } from "@backroom/game-slots";
+import { MIN_STAKE, STAKE_DIVISOR, type Face } from "@backroom/game-slots";
+import { exact } from "../game/money.js";
 import {
+  bonusRun,
   celebrationMs,
+  Controls,
   HOLD_MS,
   holdsFor,
   Marquee,
@@ -425,5 +428,136 @@ describe("how long the machine holds the lever down", () => {
 
   it("still holds longest for a jackpot", () => {
     expect(celebrationMs(1000, true, 1, 8)).toBeGreaterThan(celebrationMs(0, false, 0, 8));
+  });
+});
+
+/*
+ * The rising notes, and where they go back to nought.
+ *
+ * Each bonus landing sounds a note above the last, which is a sentence about
+ * one spin: "that is the second one on the glass, and a third would pay". Left
+ * to carry across spins it stops being that sentence — the first bonus of the
+ * evening is the only one that ever sounds its own note, every spin after it
+ * starts wherever the last one stopped, and once five have landed the pitch is
+ * pinned at the top for the rest of the session.
+ */
+describe("the run of bonuses in a spin", () => {
+  it("starts at the bottom", () => {
+    expect(bonusRun().landed()).toBe(0);
+  });
+
+  it("climbs one step per bonus", () => {
+    const run = bonusRun();
+    expect([run.landed(), run.landed(), run.landed()]).toEqual([0, 1, 2]);
+  });
+
+  it("goes back to the bottom for the next spin", () => {
+    const run = bonusRun();
+    run.landed();
+    run.landed();
+    run.reset();
+    expect(run.landed()).toBe(0);
+  });
+
+  it("starts every spin the same way, however many the last one had", () => {
+    // The whole point. Five spins, each with a couple of bonuses on it, and
+    // every one of them opens on the same note.
+    const run = bonusRun();
+    for (let spin = 0; spin < 5; spin += 1) {
+      run.reset();
+      expect(run.landed()).toBe(0);
+      expect(run.landed()).toBe(1);
+    }
+  });
+
+  it("resets a spin that had none at all", () => {
+    // A spin with no bonuses never calls landed(), so nothing would clear it
+    // if the reset were hung off the landing rather than off the pull.
+    const run = bonusRun();
+    run.landed();
+    run.reset();
+    run.reset();
+    expect(run.landed()).toBe(0);
+  });
+});
+
+/*
+ * The spin button during a run of free spins.
+ *
+ * The screen at the top of the cabinet carries the count as well, but a player
+ * mid-run is looking at the thing they are about to hit — and the question
+ * they are asking of it is whether this press costs anything.
+ */
+describe("the spin button", () => {
+  const press = (props: Partial<Parameters<typeof Controls>[0]>) =>
+    render(
+      <Controls
+        stake={100}
+        onAdd={() => {}}
+        onClear={() => {}}
+        canAdd={() => true}
+        busy={false}
+        balance={50_000}
+        cap={5000}
+        forFun={true}
+        lineCount={9}
+        onLines={() => {}}
+        total={900}
+        onPull={() => {}}
+        canPull={true}
+        auto={false}
+        onAuto={() => {}}
+        freeLeft={0}
+        {...props}
+      />,
+    );
+
+  it("says Spin when the next one costs something", () => {
+    const { container } = press({});
+    expect(container.querySelector(".spin__face")?.textContent).toBe("Spin");
+    expect(container.querySelector(".spin__left")).toBeNull();
+  });
+
+  it("says what it is and how many are left during a run", () => {
+    const { container } = press({ freeLeft: 7 });
+    expect(container.querySelector(".spin__face")?.textContent).toBe("Free spin");
+    expect(container.querySelector(".spin__left")?.textContent).toContain("7");
+  });
+
+  it("counts a run down to its last one", () => {
+    const { container } = press({ freeLeft: 1 });
+    expect(container.querySelector(".spin__left")?.textContent).toContain("1");
+    expect(container.querySelector(".spin__face")?.textContent).toBe("Free spin");
+  });
+
+  it("drops the badge the moment the run is over", () => {
+    // Zero is not a count to show. A badge reading nought is a machine that
+    // still looks like it owes something.
+    const { container } = press({ freeLeft: 0 });
+    expect(container.querySelector(".spin__left")).toBeNull();
+  });
+
+  it("says the count in full for anybody not looking at it", () => {
+    const { container } = press({ freeLeft: 7 });
+    expect(container.querySelector(".spin__left")?.textContent).toContain("free spins left");
+  });
+
+  it("still says Spinning while the reels are up", () => {
+    // Whatever it cost, what it is doing now is the more useful thing to say.
+    const { container } = press({ freeLeft: 7, busy: true });
+    expect(container.querySelector(".spin__face")?.textContent).toBe("Spinning");
+    // The count stays put, so it does not flicker away for every spin.
+    expect(container.querySelector(".spin__left")?.textContent).toContain("7");
+  });
+
+  it("works out what a shut machine needs from the paytable, not a number", () => {
+    /*
+     * This read 1296 until the paytable was retuned for the bonus, at which
+     * point it quietly understated what the bank needs by about a tenth — a
+     * figure a player would act on, and one nothing else would have caught.
+     */
+    const { container } = press({ cap: 0 });
+    const said = container.querySelector(".slots__shut")?.textContent ?? "";
+    expect(said).toContain(exact(MIN_STAKE * STAKE_DIVISOR));
   });
 });

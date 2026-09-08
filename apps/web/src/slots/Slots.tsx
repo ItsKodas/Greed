@@ -8,6 +8,7 @@ import {
   MIN_STAKE,
   PAYLINES,
   runOn,
+  STAKE_DIVISOR,
 } from "@backroom/game-slots";
 import type { SpinLine, SpinNews, SpinResult } from "@backroom/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -101,6 +102,33 @@ const ATTRACT: Face[][] = [
   ["seven", "spade", "diamond"],
   ["cigar", "dice", "tumbler"],
 ];
+
+/**
+ * The run of bonuses landing in one spin.
+ *
+ * Each one sounds a note above the last, and the run belongs to the spin: the
+ * point of it is "that is the second one on the glass, and a third would pay",
+ * which is a sentence about this spin and nothing else. Carried across, the
+ * first bonus of the evening is the only one that ever sounds its own note.
+ *
+ * A tiny object rather than a number in a ref, because the rule worth holding
+ * is when it goes back to nought, and a counter that has to be reset by
+ * whoever remembers is a counter that eventually is not.
+ */
+export function bonusRun(): { landed: () => number; reset: () => void } {
+  let seen = 0;
+  return {
+    /** One has just arrived: how far up the run it is, counting it in. */
+    landed: () => {
+      const at = seen;
+      seen += 1;
+      return at;
+    },
+    reset: () => {
+      seen = 0;
+    },
+  };
+}
 
 /**
  * Which cells sit on a line that paid.
@@ -223,12 +251,13 @@ export default function Slots() {
   const [sign, setSign] = useState<MachineSign | null>(null);
   const [grid, setGrid] = useState<Face[][] | undefined>(undefined);
   /**
-   * Bonuses that have landed so far this spin, which is what pitches the next
-   * one. A ref rather than state: it changes as each reel stops and nothing
-   * renders from it, so putting it in state would be five renders a spin to
-   * redraw nothing.
+   * Bonuses landed so far this spin, which is what pitches the next one.
+   *
+   * A ref rather than state: it changes as each reel stops and nothing renders
+   * from it, so putting it in state would be five renders a spin to redraw
+   * nothing.
    */
-  const scattered = useRef(0);
+  const scattered = useRef(bonusRun());
   const [lines, setLines] = useState<SpinLine[]>([]);
   const [lit, setLit] = useState(false);
 
@@ -497,8 +526,7 @@ export default function Slots() {
        * scattering, which is what the paytable would count it as.
        */
       if (grid?.[index]?.includes("bonus") === true) {
-        play("bonusAppear", scattered.current);
-        scattered.current += 1;
+        play("bonusAppear", scattered.current.landed());
       }
 
       // The next reel is being held, which means the answer still rides on it.
@@ -673,7 +701,7 @@ export default function Slots() {
     setSaid(null);
     setProblem(null);
     setAwarded(0);
-    scattered.current = 0;
+    scattered.current.reset();
   };
 
   const pull = () => {
@@ -691,6 +719,13 @@ export default function Slots() {
     setLines([]);
     setLit(false);
     setSaid(null);
+    /*
+     * The run of rising notes belongs to this spin and no other. Left to
+     * carry over, the first bonus of the evening is the only one that sounds
+     * its own note: every spin after it starts wherever the last one stopped,
+     * and once five have landed the pitch is pinned at the top for good.
+     */
+    scattered.current.reset();
     // A spin the machine already owes takes nothing, so nothing goes down.
     setPending(freeLeft > 0 ? 0 : total);
     setHolds([0, 0, 0, 0, 0]);
@@ -892,6 +927,7 @@ export default function Slots() {
                     total={total}
                     onPull={pull}
                     canPull={canPull}
+                    freeLeft={freeLeft}
                     auto={auto}
                     onAuto={() => setAuto((on) => !on)}
                   />
@@ -1312,7 +1348,7 @@ function ModeSwitch({
  *
  * A stake stays put between spins, because a slot machine keeps your bet.
  */
-function Controls({
+export function Controls({
   stake,
   onAdd,
   onClear,
@@ -1328,6 +1364,7 @@ function Controls({
   canPull,
   auto,
   onAuto,
+  freeLeft,
 }: {
   stake: number;
   onAdd: (amount: number) => void;
@@ -1339,6 +1376,8 @@ function Controls({
   forFun: boolean;
   lineCount: number;
   onLines: (lines: number) => void;
+  /** Free spins the machine still owes, counted down as they are used. */
+  freeLeft: number;
   total: number;
   onPull: () => void;
   canPull: boolean;
@@ -1351,8 +1390,11 @@ function Controls({
   if (cap < MIN_STAKE) {
     return (
       <p className="slots__shut">
+        {/* Derived, not typed in. This read 1296 until the paytable was
+            retuned for the bonus, at which point it was quietly understating
+            what the bank needs by about a tenth. */}
         The bank cannot cover a {exact(MIN_STAKE)} spin yet. It needs{" "}
-        {exact(MIN_STAKE * 1296)} in it before the smallest chip goes on.
+        {exact(MIN_STAKE * STAKE_DIVISOR)} in it before the smallest chip goes on.
       </p>
     );
   }
@@ -1423,11 +1465,27 @@ function Controls({
       <div className="slots__go">
         <button
           type="button"
-          className={`spin${busy ? " spin--going" : ""}`}
+          className={`spin${busy ? " spin--going" : ""}${freeLeft > 0 ? " spin--free" : ""}`}
           onClick={onPull}
           disabled={!canPull}
         >
-          <span className="spin__face">{busy ? "Spinning" : "Spin"}</span>
+          {/*
+           * The button says what the press will cost, because that is the
+           * question the player is actually asking of it. The screen above
+           * carries the count too, but a player mid-run is looking at the
+           * thing they are about to hit, not at the top of the machine.
+           */}
+          <span className="spin__face">
+            {busy ? "Spinning" : freeLeft > 0 ? "Free spin" : "Spin"}
+          </span>
+          {freeLeft > 0 && (
+            <span className="spin__left">
+              {freeLeft}
+              {/* Said in full for anybody not looking at it: a bare numeral on
+                  a button reads as nothing on its own. */}
+              <span className="spin__said"> free spins left</span>
+            </span>
+          )}
         </button>
 
         {/* Beside the handle, not instead of it: this arms the same press. */}

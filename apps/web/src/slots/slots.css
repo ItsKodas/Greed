@@ -426,6 +426,47 @@
     0 1px 0 rgb(0 0 0 / 0.35);
 }
 
+/*
+ * What the press will cost, on the thing being pressed.
+ *
+ * Gold rather than the room's neon, because it is the bonus's own colour — the
+ * star on the reels is the only other gold on the glass, and the two being the
+ * same colour is what says they are the same thing.
+ */
+.spin__left {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 12px;
+  min-width: 24px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd24a, #d98a10);
+  color: #2a1704;
+  font-size: var(--gr-text-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  box-shadow:
+    0 0 12px rgb(255 210 74 / 0.55),
+    inset 0 1px 0 rgb(255 255 255 / 0.6);
+}
+
+/* Said in full for anybody not looking at it. A numeral alone is not a count. */
+.spin__said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The whole slab warms towards the bonus while a run is being played out. */
+.spin--free {
+  background: #2a1608;
+}
+
 .spin:hover:not(:disabled) {
   filter: brightness(1.08) saturate(1.06);
 }
