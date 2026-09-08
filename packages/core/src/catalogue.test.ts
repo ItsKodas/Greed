@@ -49,3 +49,34 @@ describe("the games that are coming", () => {
     }
   });
 });
+
+/*
+ * The three kinds of thing this building holds.
+ *
+ * The room groups by shape and draws each group its own way, so a shape it has
+ * never heard of is a game that renders nowhere — listed by the server,
+ * invisible on the page, and impossible to notice from either end alone.
+ */
+describe("the shapes a game can be", () => {
+  it("gives every coming game one the room knows how to draw", () => {
+    const drawn = new Set(["table", "machine", "party"]);
+    for (const game of COMING) {
+      expect(drawn.has(game.shape)).toBe(true);
+    }
+  });
+
+  it("has a party game that is not played for chips", () => {
+    /*
+     * The point of the section. A drawing game is won by whoever draws and
+     * guesses best, which is a contest of skill between friends — put chips on
+     * it and the good drawer is taking money off the others every round.
+     */
+    const party = COMING.filter((game) => game.shape === "party");
+    expect(party.length).toBeGreaterThan(0);
+    for (const game of party) {
+      // Wants a crowd rather than a duel: the race between guessers is the game.
+      expect(game.minSeats).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+

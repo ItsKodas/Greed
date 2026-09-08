@@ -1687,6 +1687,20 @@
 }
 
 /*
+ * The same tiles, in a section that may hold only one.
+ *
+ * auto-fit collapses the columns nothing is in, which is right for the felt —
+ * eight games fill the row — and wrong here, where a single card would stretch
+ * the whole width and read as a banner rather than as one of the same things.
+ * auto-fill keeps the empty tracks, so the first card is the width a card is.
+ */
+.room__few {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: var(--gr-space-3);
+}
+
+/*
  * A game's own corner of the building.
  *
  * Painted in that game's colours — the theme files light anything carrying

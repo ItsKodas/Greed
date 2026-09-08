@@ -14,7 +14,7 @@ interface GameOnOffer {
   blurb: string;
   /** How the game writes its own name, if it writes it any particular way. */
   mark?: { text: string; accentAt: number };
-  shape: "table" | "machine";
+  shape: "table" | "machine" | "party";
   open: boolean;
   tables: number;
   seated: number;
@@ -59,6 +59,7 @@ export function Room() {
 
   const tables = games.filter((game) => game.shape === "table");
   const machines = games.filter((game) => game.shape === "machine");
+  const party = games.filter((game) => game.shape === "party");
 
   return (
     <main className="room">
@@ -77,6 +78,19 @@ export function Room() {
           <div className="room__machines">
             {machines.map((game) => (
               <Cabinet key={game.id} game={game} />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {/* Its own section, and last, because it is the part of the building
+          that is not about money at all. */}
+      {party.length > 0 ? (
+        <>
+          <p className="room__label">In the back</p>
+          <div className="room__few">
+            {party.map((game) => (
+              <TableTile key={game.id} game={game} />
             ))}
           </div>
         </>

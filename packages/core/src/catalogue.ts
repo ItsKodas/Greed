@@ -21,8 +21,13 @@ export interface GameListing {
    * played alone against the house — no seats, no turns, no opponents. The two
    * share a purse and nothing else, and forcing a machine through a table
    * would bend both out of shape.
+   *
+   * A party game is a third thing again: everybody plays at once rather than
+   * in turn, it wants a crowd rather than a full table, and it is not played
+   * for chips at all. Grouping it with the felt would put a game you play with
+   * friends on a shelf next to the ones that take your money.
    */
-  shape: "table" | "machine";
+  shape: "table" | "machine" | "party";
   minSeats: number;
   /** Never more than {@link MAX_SEATS}; a game may want fewer. */
   maxSeats: number;
