@@ -2,7 +2,14 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { Face } from "@backroom/game-slots";
-import { HOLD_MS, holdsFor, Marquee, PaylineOverlay, winningCells } from "./Slots.js";
+import {
+  celebrationMs,
+  HOLD_MS,
+  holdsFor,
+  Marquee,
+  PaylineOverlay,
+  winningCells,
+} from "./Slots.js";
 
 describe("a win", () => {
   it("lights every line that paid", () => {
@@ -151,6 +158,8 @@ describe("the machine's screen", () => {
         lines={[]}
         wasJackpot={false}
         showing={false}
+        awarded={0}
+        freeLeft={0}
       />,
     );
     expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
@@ -189,6 +198,8 @@ describe("the machine's screen", () => {
         lines={[tumblerLine(0)]}
         wasJackpot={false}
         showing={false}
+        awarded={0}
+        freeLeft={0}
       />,
     );
     expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
@@ -267,6 +278,8 @@ describe("the machine's screen", () => {
         lines={[]}
         wasJackpot={false}
         showing={false}
+        awarded={0}
+        freeLeft={0}
       />,
     );
     expect(container.querySelector(".screen__note--said")?.textContent).toBe("The bank is empty.");
@@ -331,5 +344,86 @@ describe("the faces that won", () => {
     // index off the end of the list would be a crash on the winning spin.
     expect(() => winningCells([line(99, 5)])).not.toThrow();
     expect(winningCells([line(99, 5)])[0]).toEqual([false, false, false]);
+  });
+});
+
+/*
+ * The bonus, on the screen.
+ *
+ * A spin can win a run of free spins and pay nothing at all — which is one of
+ * the better things that happens at this machine, and exactly the case a
+ * screen that only ever asks "did a line pay?" shows as an ordinary loss.
+ */
+describe("the machine's screen on a bonus", () => {
+  const screen = (props: Partial<Parameters<typeof Marquee>[0]>) =>
+    render(
+      <Marquee
+        bank={8_000_000}
+        jackpot={3_200_000}
+        forFun={false}
+        said={null}
+        problem={null}
+        lines={[]}
+        wasJackpot={false}
+        showing={true}
+        awarded={0}
+        freeLeft={0}
+        {...props}
+      />,
+    );
+
+  it("says what the bonus won even though no line paid", () => {
+    const { container } = screen({ awarded: 8 });
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Bonus");
+    expect(container.querySelector(".roll__said")?.textContent).toBe("8");
+    expect(container.querySelector(".screen__note")?.textContent).toContain("free spins");
+  });
+
+  it("puts the bonus ahead of the lines when a spin did both", () => {
+    const { container } = screen({
+      awarded: 12,
+      said: "6,000",
+      lines: [{ line: 0, face: "tumbler" as const, length: 3, pay: 6000 }],
+    });
+    // The run of spins is the bigger news, so it takes the figure.
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Bonus");
+    expect(container.querySelector(".roll__said")?.textContent).toBe("12");
+    // And the money is still said, rather than being lost behind it.
+    expect(container.querySelector(".screen__note")?.textContent).toContain("6,000");
+  });
+
+  it("says nothing about a bonus until the reels have stopped", () => {
+    // Same rule as every other outcome: the screen must not give away what the
+    // last reel is still hiding.
+    const { container } = screen({ awarded: 8, showing: false });
+    expect(container.querySelector(".screen__label")?.textContent).not.toBe("Bonus");
+  });
+
+  it("counts down what is left once the news is over", () => {
+    const { container } = screen({ awarded: 0, freeLeft: 7 });
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Free spins left");
+    expect(container.querySelector(".roll__said")?.textContent).toBe("7");
+  });
+
+  it("goes back to the jackpot when nothing is owed", () => {
+    const { container } = screen({ awarded: 0, freeLeft: 0 });
+    expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
+  });
+});
+
+describe("how long the machine holds the lever down", () => {
+  it("gives a spin that only won free spins its moment", () => {
+    /*
+     * The lever comes straight back when nothing happened. Winning eight free
+     * spins and no chips is not nothing, and treating "paid zero" as "nothing
+     * happened" would snatch the best news on this machine off the screen
+     * before it could be read.
+     */
+    expect(celebrationMs(0, false, 0, 8)).toBeGreaterThan(0);
+    expect(celebrationMs(0, false, 0, 0)).toBe(0);
+  });
+
+  it("still holds longest for a jackpot", () => {
+    expect(celebrationMs(1000, true, 1, 8)).toBeGreaterThan(celebrationMs(0, false, 0, 8));
   });
 });

@@ -56,12 +56,28 @@ export const LINE_LIGHT_MS = 420;
  * last one is hurrying you past the only part worth watching. So the lever
  * stays down until the lines have lit and the coins have finished.
  */
-export function celebrationMs(won: number, jackpot: boolean, lit: number): number {
-  if (won <= 0) {
+export function celebrationMs(
+  won: number,
+  jackpot: boolean,
+  lit: number,
+  /**
+   * Free spins this pull just won.
+   *
+   * A spin can win a run of them and pay nothing at all, and that is one of
+   * the better things that happens on this machine — so it cannot be the case
+   * that "paid nothing" means "nothing to watch".
+   */
+  awarded = 0,
+): number {
+  if (won <= 0 && awarded <= 0) {
     return 0;
   }
   if (jackpot) {
     return 2600;
+  }
+  if (awarded > 0) {
+    // Long enough to read the number and understand what just happened.
+    return 2000;
   }
   // The lines light one after another, so more of them is a longer look.
   return Math.min(2200, LINE_LIGHT_MS + 700 + lit * 90);
@@ -292,7 +308,13 @@ export default function Slots() {
   const reelsLoop = useRef<(() => void) | null>(null);
   const rising = useRef<(() => void) | null>(null);
   /** The result, kept for the moment the last reel finally settles. */
-  const landed = useRef<{ won: number; jackpot: boolean; stake: number; lit: number } | null>(
+  const landed = useRef<{
+    won: number;
+    jackpot: boolean;
+    stake: number;
+    lit: number;
+    awarded: number;
+  } | null>(
     null,
   );
   const [said, setSaid] = useState<string | null>(null);
@@ -307,6 +329,23 @@ export default function Slots() {
    * the answer lands and the real balance replaces it.
    */
   const [pending, setPending] = useState(0);
+  /**
+   * Free spins the machine owes, as the server last counted them.
+   *
+   * Shown, never trusted. The server decides whether a pull costs anything and
+   * says so in the answer; this is only what the cabinet puts on the glass so
+   * the player knows what is happening. A client that decided its own spins
+   * were free would be a client that decided a balance.
+   */
+  const [freeLeft, setFreeLeft] = useState(0);
+  /**
+   * Free spins this pull just won, as opposed to how many are left.
+   *
+   * Its own number because the screen says something different about each:
+   * "eight free spins" is news, "seven left" is a status. Cleared when the
+   * next pull starts, the way every other thing the screen says is.
+   */
+  const [awarded, setAwarded] = useState(0);
   const socketRef = useRef<SpinSocket | null>(null);
 
   useEffect(() => {
@@ -365,14 +404,22 @@ export default function Slots() {
    * worth more rather than making the spin cheaper.
    */
   const total = stake * lineCount;
+  /*
+   * A spin the machine already owes is pullable on its own. Nothing is being
+   * staked, so a tray that cannot cover one, a line count nobody has chosen
+   * and a cap below the replayed bet are all beside the point — the server
+   * plays the bet that won the free spins and checks the bank itself.
+   */
+  const owedSpin = freeLeft > 0;
   const canPull =
     connected &&
     !settling &&
-    lineCount >= 1 &&
-    stake >= MIN_STAKE &&
-    total <= cap &&
-    balance !== null &&
-    total <= balance;
+    (owedSpin ||
+      (lineCount >= 1 &&
+        stake >= MIN_STAKE &&
+        total <= cap &&
+        balance !== null &&
+        total <= balance));
 
   /** Whether one more of this chip could go on: the bank's ceiling and yours. */
   /*
@@ -440,6 +487,7 @@ export default function Slots() {
       }
       // The last one. Everything that was running stops.
       hush();
+      play("spinEnd");
       setStopped(true);
     },
     [holds, hush],
@@ -472,7 +520,7 @@ export default function Slots() {
      * that should.
      */
     const result = landed.current;
-    if (result === null || result.won <= 0) {
+    if (result === null || (result.won <= 0 && result.awarded <= 0)) {
       // Nothing to watch, so the lever comes straight back.
       setSettling(false);
       return;
@@ -489,7 +537,14 @@ export default function Slots() {
        * jackpot is a barrage. The same show every time would make every win
        * feel identical, which is the one thing a payout must not do.
        */
-      setShowSize(result.jackpot ? 3 : result.won >= result.stake * 20 ? 2 : 1);
+      /*
+       * Sized against what the spin cost, which is nothing on a free one — so
+       * "twenty times the stake" has to be asked as a question with an answer.
+       * Left as a bare comparison it reads as true for every free spin,
+       * including the ones that paid nothing at all.
+       */
+      const big = result.stake > 0 && result.won >= result.stake * 20;
+      setShowSize(result.jackpot ? 3 : big || result.awarded > 0 ? 2 : 1);
       setFired((n) => n + 1);
       if (result.jackpot) {
         setJackpotFired((n) => n + 1);
@@ -507,8 +562,21 @@ export default function Slots() {
         payingOut(2400);
         return;
       }
+      /*
+       * The bonus, which is worth a noise of its own whatever else the spin
+       * did. Ahead of the win sound because a run of free spins is the bigger
+       * news, and a player who has just triggered one should hear that first.
+       */
+      if (result.awarded > 0) {
+        play("bonus");
+        if (result.won > 0) {
+          play("spinWin");
+        }
+        payingOut(1800);
+        return;
+      }
       play("spinWin");
-      if (result.won >= result.stake * 20) {
+      if (big) {
         // Not a bonus round — the machine has none. A flourish for a win big
         // enough to deserve one.
         play("bonus");
@@ -526,7 +594,7 @@ export default function Slots() {
      */
     const done = window.setTimeout(
       () => setSettling(false),
-      LINE_LIGHT_MS + celebrationMs(result.won, result.jackpot, result.lit),
+      LINE_LIGHT_MS + celebrationMs(result.won, result.jackpot, result.lit, result.awarded),
     );
     return () => {
       window.clearTimeout(show);
@@ -579,6 +647,7 @@ export default function Slots() {
     setWasJackpot(false);
     setSaid(null);
     setProblem(null);
+    setAwarded(0);
   };
 
   const pull = () => {
@@ -596,7 +665,8 @@ export default function Slots() {
     setLines([]);
     setLit(false);
     setSaid(null);
-    setPending(total);
+    // A spin the machine already owes takes nothing, so nothing goes down.
+    setPending(freeLeft > 0 ? 0 : total);
     setHolds([0, 0, 0, 0, 0]);
     setSettling(true);
     setStopped(false);
@@ -650,6 +720,8 @@ export default function Slots() {
       }
       const grid = result.grid as Face[][];
       setGrid(grid);
+      setFreeLeft(result.freeLeft);
+      setAwarded(result.awarded);
       setLines(result.lines);
       /*
        * Set with the grid, in the same render, so the reels read their hold
@@ -661,8 +733,9 @@ export default function Slots() {
       landed.current = {
         won: result.won,
         jackpot: result.jackpot,
-        stake: total,
+        stake: result.wasFree ? 0 : total,
         lit: result.lines.length,
+        awarded: result.awarded,
       };
       if (forFun) {
         setFunPurse(result.balance);
@@ -749,6 +822,8 @@ export default function Slots() {
                   lines={lines}
                   wasJackpot={wasJackpot}
                   showing={lit}
+                  awarded={awarded}
+                  freeLeft={freeLeft}
                 />
               </div>
 
@@ -1025,6 +1100,8 @@ export function Marquee({
   lines,
   wasJackpot,
   showing,
+  awarded,
+  freeLeft,
 }: {
   bank: number;
   jackpot: number;
@@ -1037,8 +1114,19 @@ export function Marquee({
   wasJackpot: boolean;
   /** Whether the reels have finished and the outcome may be shown. */
   showing: boolean;
+  /** Free spins this pull won, which is news rather than a status. */
+  awarded: number;
+  /** Free spins still owed, which is a status rather than news. */
+  freeLeft: number;
 }) {
-  const outcome = showing && (lines.length > 0 || wasJackpot);
+  /*
+   * The bonus takes the screen when it happens, ahead of whatever the lines
+   * paid. A run of free spins is the bigger thing, and a spin can win one
+   * while paying nothing at all — which the old condition, "did any line
+   * pay?", would have shown as an ordinary losing spin.
+   */
+  const bonus = showing && awarded > 0;
+  const outcome = showing && !bonus && (lines.length > 0 || wasJackpot);
   /*
    * Kept apart from the outcome on purpose. The answer is in long before the
    * reels finish saying it, so a screen that printed the figure as soon as it
@@ -1052,7 +1140,19 @@ export function Marquee({
       className={`screen${forFun ? " screen--fun" : ""}${wasJackpot && showing ? " screen--jackpot" : ""}`}
       aria-live="polite"
     >
-      {outcome ? (
+      {bonus ? (
+        <>
+          <span className="screen__label">Bonus</span>
+          <strong className="screen__figure">
+            <Digits value={String(awarded)} />
+          </strong>
+          <p className="screen__note">
+            {lines.length > 0 || wasJackpot
+              ? `free spins, and ${said ?? "0"} on the lines`
+              : "free spins, on the house"}
+          </p>
+        </>
+      ) : outcome ? (
         <>
           <span className="screen__label">{wasJackpot ? "Jackpot" : "Paid"}</span>
           <strong className="screen__figure">
@@ -1064,6 +1164,16 @@ export function Marquee({
         <>
           <span className="screen__label">The machine says</span>
           <p className="screen__note screen__note--said">{problem}</p>
+        </>
+      ) : freeLeft > 0 ? (
+        <>
+          {/* What the machine owes takes the screen over what it is playing
+              for: a player mid-run needs to know how much of it is left. */}
+          <span className="screen__label">Free spins left</span>
+          <strong className="screen__figure">
+            <Digits value={String(freeLeft)} />
+          </strong>
+          <p className="screen__note">pull for the next one — it costs nothing</p>
         </>
       ) : (
         <>

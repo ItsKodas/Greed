@@ -297,7 +297,14 @@
   animation: mk-tube 1.3s steps(1, end) infinite;
 }
 
+/*
+ * Its own origin, like the stone's: the shared .mk-move one is measured from
+ * the corner of the box, and a star that grows away from a corner reads as
+ * flying up and to the left rather than as swelling where it is.
+ */
 .mock__face--won .mk-move--bonus {
+  transform-box: view-box;
+  transform-origin: 0 0;
   animation: mk-pop 1.5s cubic-bezier(0.16, 1.4, 0.3, 1) infinite;
 }
 
@@ -375,16 +382,95 @@
   46%, 100% { opacity: 1; }
 }
 
-/* Out and big, which is what the one you are hunting for should do. */
+/* Big for a moment, and back. It swells where it is; it does not travel. */
 @keyframes mk-pop {
-  0%, 100% { transform: scale(1) rotate(0deg); }
-  35% { transform: scale(1.45) rotate(14deg); }
-  60% { transform: scale(1.25) rotate(-8deg); }
+  0%, 100% { transform: scale(1); }
+  35% { transform: scale(1.42); }
+  60% { transform: scale(1.18); }
+}
+
+
+/*
+ * The star shimmers whether or not it has won anything.
+ *
+ * It is the one face worth noticing on its own, so the light crosses it and
+ * the sparkles come off its points on four separate clocks — one blink from
+ * the whole symbol would read as a rendering glitch rather than as gold.
+ */
+.mk-star-shine {
+  transform: rotate(14deg);
+  transform-origin: 0 0;
+  animation: mk-shimmer 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.mk-spark {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: mk-twinkle 2.6s ease-in-out infinite;
+}
+
+/*
+ * The first <g> here holds the shimmer, so the sparkles start at the second —
+ * which is why these count from three. Counting from two, the delays still
+ * landed on four different sparkles, but by accident: the last one fell
+ * through to nought and matched the first.
+ */
+.mk-move--bonus g:nth-of-type(3) .mk-spark {
+  animation-delay: 0.62s;
+}
+
+.mk-move--bonus g:nth-of-type(4) .mk-spark {
+  animation-delay: 1.18s;
+}
+
+.mk-move--bonus g:nth-of-type(5) .mk-spark {
+  animation-delay: 1.74s;
+}
+
+/* Light travelling across the gold, and not coming back. */
+@keyframes mk-shimmer {
+  0% {
+    opacity: 0;
+    transform: rotate(14deg) translateX(0);
+  }
+  14% {
+    opacity: 0.85;
+  }
+  46% {
+    opacity: 0.85;
+    transform: rotate(14deg) translateX(62px);
+  }
+  58%,
+  100% {
+    opacity: 0;
+    transform: rotate(14deg) translateX(62px);
+  }
+}
+
+/* Out of nothing, bright, and gone. A sparkle has no resting size. */
+@keyframes mk-twinkle {
+  0%,
+  62%,
+  100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  16% {
+    opacity: 1;
+    transform: scale(1) rotate(35deg);
+  }
+  38% {
+    opacity: 0;
+    transform: scale(0.35) rotate(70deg);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mock__face--won .mk-move,
   .mock__face--won .mk-move--diamond,
+  .mock__face--won .mk-move--bonus,
+  .mk-star-shine,
+  .mk-spark,
   .mock__face--won .mk-die,
   .mock__face--won .mk-ember,
   .mock__face--won .mk-shine {

@@ -194,15 +194,21 @@ export const SPIN_FACES = [
   "spade",
   "diamond",
   "seven",
+  "bonus",
 ] as const;
 
 export type SpinFace = (typeof SPIN_FACES)[number];
 
-/** One payline that paid, and what it paid. */
+/**
+ * One payline that paid, and what it paid.
+ *
+ * Never the bonus. It pays for turning up anywhere rather than for landing in
+ * a row, so it is counted as a scatter and reported separately.
+ */
 export interface SpinLine {
   /** Which of the nine lines, so the glass can light the right one. */
   line: number;
-  face: SpinFace;
+  face: Exclude<SpinFace, "bonus">;
   length: number;
   pay: number;
 }
@@ -241,6 +247,21 @@ export type SpinResult =
       bank: number;
       /** The player's balance now, for the same reason. */
       balance: number;
+      /** How many reels showed a bonus, so the glass can make a noise about it. */
+      scatters: number;
+      /**
+       * Free spins this pull awarded, and how many are left after it.
+       *
+       * `awarded` is only ever non-zero on the spin that triggered them, so
+       * the client can tell "you have just won eight" from "you have seven
+       * left" without keeping a tally the server would then have to agree
+       * with. `freeLeft` is the server's count, and the only one that decides
+       * whether the next pull costs anything.
+       */
+      awarded: number;
+      freeLeft: number;
+      /** Whether this spin was itself a free one, and so cost nothing. */
+      wasFree: boolean;
     }
   | { ok: false; error: string };
 

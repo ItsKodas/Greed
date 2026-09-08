@@ -10,7 +10,18 @@
  * and a type that shadows one produces error messages about the wrong thing.
  */
 
-export type Face = "tumbler" | "cigar" | "dice" | "spade" | "diamond" | "seven";
+export type Face = "tumbler" | "cigar" | "dice" | "spade" | "diamond" | "seven" | "bonus";
+
+/**
+ * Every face that pays for landing in a row.
+ *
+ * The bonus is not one of them: it pays for turning up anywhere at all, which
+ * is a different question, asked in scatter.ts. Splitting the type is what
+ * stops the paytable ever being asked what three bonuses in a row are worth —
+ * a question with no sensible answer that would otherwise be a runtime
+ * undefined rather than a red squiggle.
+ */
+export type PayingFace = Exclude<Face, "bonus">;
 
 /** The whole loop, and the denominator of every probability in this game. */
 export const STOPS = 32;
@@ -23,7 +34,13 @@ export const FACES: readonly Face[] = [
   "spade",
   "diamond",
   "seven",
+  "bonus",
 ];
+
+/** The same list without the scatter, for anything reading the paytable. */
+export const PAYING_FACES: readonly PayingFace[] = FACES.filter(
+  (face): face is PayingFace => face !== "bonus",
+);
 
 /**
  * How many of the 32 stops each face holds.
@@ -33,12 +50,24 @@ export const FACES: readonly Face[] = [
  * rather than trusting this table.
  */
 export const WEIGHTS: Record<Face, number> = {
-  tumbler: 9,
+  tumbler: 8,
   cigar: 7,
   dice: 6,
   spade: 4,
   diamond: 3,
   seven: 3,
+  /*
+   * One stop, and the whole feel of the bonus comes out of that number. A reel
+   * covers three consecutive stops, so a single stop shows up on three windows
+   * in thirty-two — and three reels of five doing that is about one spin in a
+   * hundred and forty. Two stops made it one in eleven, which is not a bonus,
+   * it is the game.
+   *
+   * It came out of the tumbler's nine rather than being added to the strip,
+   * because thirty-two stops is what makes every probability here an exact
+   * fraction.
+   */
+  bonus: 1,
 };
 
 /** The stops laid out in order, so a reel can be read as a window on it. */

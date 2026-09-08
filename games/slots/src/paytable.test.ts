@@ -85,12 +85,13 @@ describe("evaluating a spin", () => {
   });
 
   it("still pays the other lines when one of them is the jackpot", () => {
-    // Sevens along the middle, bells top and bottom: one jackpot line and two
-    // lines of five bells. The jackpot must not swallow the rest.
+    // Sevens along the middle, diamonds top and bottom: one jackpot line and
+    // two lines of five diamonds. The jackpot must not swallow the rest.
     const g = grid([d, s, d], [d, s, d], [d, s, d], [d, s, d], [d, s, d]);
     const result = evaluate(g, 900);
     expect(result.jackpot).toBe(true);
-    expect(result.fixed).toBe(2 * 875 * 100);
+    const top = PAYS.diamond[5] as number;
+    expect(result.fixed).toBe(2 * top * 100);
   });
 
   it("names the line it paid on, so the glass can light the right one", () => {

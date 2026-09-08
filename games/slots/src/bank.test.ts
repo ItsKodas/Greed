@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { JACKPOT_SHARE, jackpotPay, maxStake, STAKE_DIVISOR, worstCase } from "./bank.js";
+import {
+  FREE_STAKE_DIVISOR,
+  JACKPOT_SHARE,
+  jackpotPay,
+  MAX_LINE_PAY,
+  maxFreeStake,
+  maxStake,
+  STAKE_DIVISOR,
+  worstCase,
+} from "./bank.js";
+import { LINE_COUNT } from "./paylines.js";
 
 /**
  * The property this whole game rests on.
@@ -22,8 +32,11 @@ describe("the stake cap", () => {
   });
 
   it("rises as the bank fills", () => {
-    expect(maxStake(50_000)).toBe(38);
-    expect(maxStake(1_000_000)).toBe(771);
+    expect(maxStake(50_000)).toBe(Math.floor(50_000 / STAKE_DIVISOR));
+    expect(maxStake(1_000_000)).toBe(Math.floor(1_000_000 / STAKE_DIVISOR));
+    // Both non-trivial, so this cannot pass by everything being zero.
+    expect(maxStake(1_000_000)).toBeGreaterThan(maxStake(50_000));
+    expect(maxStake(50_000)).toBeGreaterThan(0);
   });
 
   it("never offers a stake on a negative bank", () => {
@@ -86,9 +99,60 @@ describe("the stake cap", () => {
      * fixed wins are drawing on — and it is the larger of the two that has to
      * set the cap.
      */
-    expect(STAKE_DIVISOR).toBe(1296);
-    const allFixed = 9 * Math.floor((875 * 1) / 9);
-    expect(worstCase(1296, 1)).toBeGreaterThan(allFixed);
+    const allFixed = LINE_COUNT * Math.floor(MAX_LINE_PAY / LINE_COUNT);
+    expect(STAKE_DIVISOR).toBeGreaterThan(allFixed);
+    expect(worstCase(STAKE_DIVISOR, 1)).toBeGreaterThan(allFixed);
+    // Derived from the paytable rather than typed in, so a retune moves it.
+    expect(STAKE_DIVISOR).toBe(Math.ceil(((8 * MAX_LINE_PAY) / 9 / 0.6) as number) - 1);
+  });
+
+  /*
+   * A free spin takes nothing, so the stake is missing from both sides of the
+   * jackpot case and the bank has to be one stake deeper to cover the same
+   * worst spin. One chip in thirteen hundred, and the difference between a
+   * promise that holds and one that nearly does.
+   */
+  it("asks a little more of the bank for a spin nobody paid for", () => {
+    expect(FREE_STAKE_DIVISOR).toBe(STAKE_DIVISOR + 1);
+    for (const bank of [FREE_STAKE_DIVISOR, 50_000, 1_000_000, 50_000_000]) {
+      expect(maxFreeStake(bank)).toBeLessThanOrEqual(maxStake(bank));
+    }
+  });
+
+  it("never lets a free spin outrun the bank it is paid from", () => {
+    /*
+     * The paid case has the stake to spend as well as the bank; this one has
+     * only the bank. Same worst spin, one fewer stake to cover it with — so
+     * this asserts against `bank` where the paid sweep asserts against
+     * `bank + stake`.
+     */
+    for (let bank = FREE_STAKE_DIVISOR; bank < 400_000; bank += 997) {
+      const stake = maxFreeStake(bank);
+      if (stake < 1) {
+        continue;
+      }
+      expect(worstCase(bank, stake) - stake).toBeLessThanOrEqual(bank);
+    }
+  });
+
+  it("walks a whole run of free spins down without ever going short", () => {
+    /*
+     * The reason the cap is re-read before every free spin rather than once
+     * when they were awarded. Twenty free spins each paying the worst the
+     * machine can pay: the bank shrinks under them, and the cap has to shrink
+     * with it.
+     */
+    let bank = 4_000_000;
+    for (let spin = 0; spin < 20; spin += 1) {
+      const stake = maxFreeStake(bank);
+      if (stake < 1) {
+        break;
+      }
+      const owed = worstCase(bank, stake) - stake;
+      expect(owed).toBeLessThanOrEqual(bank);
+      bank -= owed;
+      expect(bank).toBeGreaterThanOrEqual(0);
+    }
   });
 });
 

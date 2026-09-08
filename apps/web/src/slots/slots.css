@@ -959,6 +959,58 @@
   animation: sf-tube 1.3s steps(1, end) infinite;
 }
 
+/*
+ * The bonus, which is the one face that does not wait to be told it won.
+ *
+ * Everything else here hangs on [data-won], because everything else only
+ * matters once the lines are read. A bonus is worth something the moment it
+ * lands, and two of them showing while the fifth reel is still turning is the
+ * best moment this machine has — so it pops as it arrives and keeps breathing
+ * afterwards, on the settled cell rather than on the winning one.
+ */
+[data-final] .sf-star {
+  transform-box: view-box;
+  /*
+   * The star's own middle, which in this group's coordinates is nought — the
+   * group above it has already put nought in the middle of the box. Written as
+   * 30px 30px it resolves to the corner of the box instead, and the star grows
+   * away from that corner: it reads as flying up and to the left rather than
+   * as swelling where it landed.
+   */
+  transform-origin: 0 0;
+  animation:
+    sf-land 0.62s cubic-bezier(0.16, 1.5, 0.3, 1) 1 both,
+    sf-breathe 1.9s ease-in-out 0.62s infinite;
+}
+
+/* Bigger for a moment, and back to its own size. It swells; it does not go
+   anywhere. */
+@keyframes sf-land {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  55% {
+    transform: scale(1.34);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Still worth looking at once it has landed, without shouting about it. */
+@keyframes sf-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.09);
+  }
+}
+
 /* The whole glass rattled on the bar, and settling. */
 @keyframes sf-slosh {
   0%,
@@ -1119,6 +1171,82 @@
   46%,
   100% {
     opacity: 1;
+  }
+}
+
+
+/*
+ * The star shimmers whether or not it has won anything.
+ *
+ * It is the one face worth noticing on its own, so the light crosses it and
+ * the sparkles come off its points on four separate clocks — one blink from
+ * the whole symbol would read as a rendering glitch rather than as gold.
+ */
+.sf-star-shine {
+  transform: rotate(14deg);
+  transform-origin: 0 0;
+  animation: sf-shimmer 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.sf-spark {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: sf-twinkle 2.6s ease-in-out infinite;
+}
+
+/*
+ * The first <g> here holds the shimmer, so the sparkles start at the second —
+ * which is why these count from three. Counting from two, the delays still
+ * landed on four different sparkles, but by accident: the last one fell
+ * through to nought and matched the first.
+ */
+.sf-star g:nth-of-type(3) .sf-spark {
+  animation-delay: 0.62s;
+}
+
+.sf-star g:nth-of-type(4) .sf-spark {
+  animation-delay: 1.18s;
+}
+
+.sf-star g:nth-of-type(5) .sf-spark {
+  animation-delay: 1.74s;
+}
+
+/* Light travelling across the gold, and not coming back. */
+@keyframes sf-shimmer {
+  0% {
+    opacity: 0;
+    transform: rotate(14deg) translateX(0);
+  }
+  14% {
+    opacity: 0.85;
+  }
+  46% {
+    opacity: 0.85;
+    transform: rotate(14deg) translateX(62px);
+  }
+  58%,
+  100% {
+    opacity: 0;
+    transform: rotate(14deg) translateX(62px);
+  }
+}
+
+/* Out of nothing, bright, and gone. A sparkle has no resting size. */
+@keyframes sf-twinkle {
+  0%,
+  62%,
+  100% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0deg);
+  }
+  16% {
+    opacity: 1;
+    transform: scale(1) rotate(35deg);
+  }
+  38% {
+    opacity: 0;
+    transform: scale(0.35) rotate(70deg);
   }
 }
 
@@ -1395,6 +1523,11 @@
   [data-won] .sf-gem,
   [data-won] .sf-ember,
   [data-won] .sf-shine,
+  [data-final] .sf-star,
+  [data-final] .sf-star-shine,
+  [data-final] .sf-spark,
+  [data-final] .sf-star-shine,
+  [data-final] .sf-spark,
 
   .feed__row,
   .won__row {

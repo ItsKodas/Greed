@@ -30,6 +30,7 @@ export type Cue =
   /* The machine: the lever, a reel settling, and what it pays. */
   | "lever"
   | "reelStop"
+  | "spinEnd"
   | "spinWin"
   | "jackpot"
   | "bonus"
@@ -487,6 +488,25 @@ export function play(cue: Cue): void {
       void sample(pickNamed("slots", "spinner_stop"), 0.5).then((played) => {
         if (!played) {
           noise(0.035, 900, 0.14, 0.8);
+        }
+      });
+      break;
+    case "spinEnd":
+      /*
+       * The last reel, which is a different event from a reel stopping —
+       * "that one has landed" happens five times, "the spin is over" happens
+       * once. It rides on top of that fifth reelStop rather than replacing it,
+       * so the reel still lands and the spin still closes.
+       *
+       * "spin_end" and "spinner_stop" are different files and neither name
+       * contains the other, which is what keeps the two cues apart: the
+       * matcher falls back to the whole folder when nothing matches, and a
+       * near-miss here would play a random slots sample forever without an
+       * error.
+       */
+      void sample(pickNamed("slots", "spin_end"), 0.6).then((played) => {
+        if (!played) {
+          tone({ frequency: 320, duration: 0.22, type: "sine", gain: 0.1 });
         }
       });
       break;

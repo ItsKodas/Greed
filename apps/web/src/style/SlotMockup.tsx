@@ -57,6 +57,9 @@ export const CURRENT = FACES;
 /** The gem, kept in one place: the shine is a bar slid across behind it. */
 const GEM = "M-9 -14 L9 -14 L18 -4 L0 19 L-18 -4 Z";
 
+/** The star, likewise, because its shimmer is clipped to its own outline. */
+const STAR = "M0 -19 L5.6 -6.2 L19.5 -4.7 L9.2 4.8 L12 18.4 L0 11.6 L-12 18.4 L-9.2 4.8 L-19.5 -4.7 L-5.6 -6.2 Z";
+
 /** Shading shared by every proposed face, mounted once. */
 function Defs() {
   return (
@@ -112,6 +115,9 @@ function Defs() {
           */}
         <clipPath id="mk-gem-clip">
           <path d={GEM} />
+        </clipPath>
+        <clipPath id="mk-star-clip">
+          <path d={STAR} />
         </clipPath>
       </defs>
     </svg>
@@ -308,15 +314,30 @@ const ART: Record<Proposed, React.ReactNode> = {
   bonus: (
     <>
       <Ground rx={18} />
-      <g className="mk-move mk-move--bonus">
+      <g className="mk-move--bonus">
         <path
-          d="M0 -19 L5.6 -6.2 L19.5 -4.7 L9.2 4.8 L12 18.4 L0 11.6 L-12 18.4 L-9.2 4.8 L-19.5 -4.7 L-5.6 -6.2 Z"
+          d={STAR}
           fill="url(#mk-star)"
           stroke="#8a5200"
           strokeWidth="1.2"
           strokeLinejoin="round"
         />
         <path d="M0 -14 L3.6 -5.4 L-3.6 -5.4 Z" fill="#fff" opacity="0.45" />
+        <g clipPath="url(#mk-star-clip)">
+          <rect className="mk-star-shine" x="-36" y="-40" width="11" height="80" fill="#fffbe8" />
+        </g>
+        <g transform="translate(13 -12) scale(1.0)">
+          <path className="mk-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+        </g>
+        <g transform="translate(-14 7) scale(0.78)">
+          <path className="mk-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+        </g>
+        <g transform="translate(4 16) scale(0.62)">
+          <path className="mk-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+        </g>
+        <g transform="translate(-8 -14) scale(0.55)">
+          <path className="mk-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+        </g>
       </g>
     </>
   ),

@@ -10,33 +10,48 @@ export const MAX_LINE_PAY = PAYS.diamond[5] as number;
 /**
  * What the bank has to hold per chip staked.
  *
- * Derived rather than chosen. There are two candidate worst spins, and it is
- * the second that binds:
+ * Derived rather than chosen, and derived *here* rather than in a comment:
+ * MAX_LINE_PAY comes out of the paytable, and a retune that raises the top
+ * line has to raise this with it or the guarantee quietly stops holding.
  *
- *   nine top lines          9 * 875 * stake/9  =  875 * stake
- *                           needs bank >= 874 * stake
+ * There are two candidate worst spins, and it is the second that binds:
  *
- *   one jackpot, eight top  0.4*(bank + stake) + 8*875*stake/9
- *                           0.4*bank + 0.4*stake + 777.8*stake <= bank + stake
- *                                                777.2*stake  <=  0.6 * bank
- *                                                       bank  >=  1295.3 * stake
+ *   nine top lines          9 * MAX * stake/9  =  MAX * stake
+ *                           needs bank >= (MAX - 1) * stake
  *
- * Rounded up to 1296, because a cap a fraction of a chip too generous is a cap
- * that does not hold.
+ *   one jackpot, eight top  J*(bank + stake) + 8*MAX*stake/9  <=  bank + stake
+ *                           bank >= stake * ( (8*MAX/9)/(1-J) - 1 )
+ *
+ * Rounded up, because a cap a fraction of a chip too generous is a cap that
+ * does not hold.
  *
  * The stake appears on both sides of that second line, and getting it onto
  * only one is how this was wrong the first time. The stake enters the bank
  * before the reels resolve, so it is part of the room a payout has — and it is
  * also part of the bank the jackpot takes its share of. Taking the share of
- * the bank as it stood before the pull makes 1295 look sufficient, and it is
- * not: at a stake of 1000 that machine owes 176 chips it does not have.
+ * the bank as it stood before the pull makes the divisor one smaller, and that
+ * is not sufficient: at a stake of 1000 that machine owes chips it has not
+ * got.
  *
  * This is deliberately the true worst case rather than a percentile. All
- * fifteen cells landing on bells has a probability of about one in 10^15, and
- * capping against it is absurdly conservative in exactly the way a chip
+ * fifteen cells landing on diamonds has a probability of about one in 10^15,
+ * and capping against it is absurdly conservative in exactly the way a chip
  * economy should be.
  */
-export const STAKE_DIVISOR = 1296;
+const TOP_EIGHT = ((LINE_COUNT - 1) * MAX_LINE_PAY) / LINE_COUNT / (1 - JACKPOT_SHARE);
+
+export const STAKE_DIVISOR = Math.ceil(TOP_EIGHT - 1);
+
+/**
+ * The same, for a spin nobody paid for.
+ *
+ * A free spin can pay everything a paid one can, but no stake enters the bank
+ * on the way in — so the stake is missing from both sides of that second line
+ * and the bank has to be one stake deeper to cover the same worst case. One
+ * chip in thirteen hundred, and worth having as its own number rather than
+ * reusing the paid one and being nearly right.
+ */
+export const FREE_STAKE_DIVISOR = Math.ceil(TOP_EIGHT);
 
 /**
  * The largest stake this bank can certainly pay out on.
@@ -48,6 +63,19 @@ export const STAKE_DIVISOR = 1296;
  */
 export function maxStake(bank: number): number {
   return Math.max(0, Math.floor(Math.max(0, bank) / STAKE_DIVISOR));
+}
+
+/**
+ * The largest stake this bank can certainly pay a *free* spin out on.
+ *
+ * Free spins take nothing and can give everything, so a run of them walks the
+ * bank down with nothing walking it back up. Checked before each one rather
+ * than once when they were awarded: the bank at the eighth free spin is not
+ * the bank that awarded it, and the promise this machine makes is about the
+ * bank it is actually paying from.
+ */
+export function maxFreeStake(bank: number): number {
+  return Math.max(0, Math.floor(Math.max(0, bank) / FREE_STAKE_DIVISOR));
 }
 
 /** What a jackpot pays out of this bank: whole chips, never more than it holds. */

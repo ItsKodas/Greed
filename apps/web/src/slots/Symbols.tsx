@@ -29,6 +29,9 @@ export const FACE_SIZE = 60;
 /** The gem, kept in one place: the shine is a bar slid across behind it. */
 const GEM = "M-9 -14 L9 -14 L18 -4 L0 19 L-18 -4 Z";
 
+/** The star, likewise, because its shimmer is clipped to its own outline. */
+const STAR = "M0 -19 L5.6 -6.2 L19.5 -4.7 L9.2 4.8 L12 18.4 L0 11.6 L-12 18.4 L-9.2 4.8 L-19.5 -4.7 L-5.6 -6.2 Z";
+
 /**
  * The shading, mounted once by the cabinet.
  *
@@ -63,6 +66,11 @@ export function FaceDefs() {
           <stop offset="45%" stopColor="#8fd4ea" />
           <stop offset="100%" stopColor="#3f8fb4" />
         </linearGradient>
+        <linearGradient id="sf-star" x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0%" stopColor="#fff6d8" />
+          <stop offset="45%" stopColor="#ffd24a" />
+          <stop offset="100%" stopColor="#d98a10" />
+        </linearGradient>
         <linearGradient id="sf-neon" x1="0.2" y1="0" x2="0.8" y2="1">
           <stop offset="0%" stopColor="var(--gr-color-neon-core, #ffe8f7)" />
           <stop offset="55%" stopColor="var(--gr-color-neon-hi, #ff86d4)" />
@@ -85,6 +93,10 @@ export function FaceDefs() {
          */}
         <clipPath id="sf-gem-clip">
           <path d={GEM} />
+        </clipPath>
+        {/* The star, for the same reason: a shimmer has to stay on the gold. */}
+        <clipPath id="sf-star-clip">
+          <path d={STAR} />
         </clipPath>
       </defs>
     </svg>
@@ -287,6 +299,57 @@ const DRAWN: Record<Face, { title: string; art: React.ReactNode }> = {
           />
           <g clipPath="url(#sf-gem-clip)">
             <rect className="sf-shine" x="-34" y="-40" width="9" height="80" fill="#fff" />
+          </g>
+        </g>
+      </>
+    ),
+  },
+  bonus: {
+    title: "Bonus",
+    art: (
+      <>
+        <Ground rx={18} />
+        {/*
+         * The one a player is hunting for, and it has to be unmistakable at a
+         * glance from the corner of the eye — three of these anywhere on the
+         * glass is a run of spins nobody paid for. Nothing else on the strip
+         * is a burst, and nothing else is gold.
+         *
+         * It moves whenever it lands, not only when it wins: two on the glass
+         * with a reel still turning is the most interesting moment this
+         * machine has, and a symbol that sat still through it would be
+         * throwing that away.
+         */}
+        <g className="sf-star">
+          <path
+            d={STAR}
+            fill="url(#sf-star)"
+            stroke="#8a5200"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          <path d="M0 -14 L3.6 -5.4 L-3.6 -5.4 Z" fill="#fff" opacity="0.45" />
+          {/* The shimmer: light crossing the gold, kept on it by the clip. */}
+          <g clipPath="url(#sf-star-clip)">
+            <rect className="sf-star-shine" x="-36" y="-40" width="11" height="80" fill="#fffbe8" />
+          </g>
+          {/*
+           * And the sparkle, which is the part that says "look at this one".
+           * Four of them, off the points rather than on them and each on its
+           * own clock, so they read as catching the light one after another
+           * rather than as the whole symbol blinking.
+           */}
+          <g transform="translate(13 -12) scale(1.0)">
+            <path className="sf-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+          </g>
+          <g transform="translate(-14 7) scale(0.78)">
+            <path className="sf-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+          </g>
+          <g transform="translate(4 16) scale(0.62)">
+            <path className="sf-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
+          </g>
+          <g transform="translate(-8 -14) scale(0.55)">
+            <path className="sf-spark" d="M0 -6.5 L1.5 -1.5 L6.5 0 L1.5 1.5 L0 6.5 L-1.5 1.5 L-6.5 0 L-1.5 -1.5 Z" fill="#fff8dc" />
           </g>
         </g>
       </>

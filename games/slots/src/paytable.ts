@@ -1,5 +1,5 @@
 import { LINE_COUNT, PAYLINES, runOn } from "./paylines.js";
-import type { Face } from "./strip.js";
+import type { Face, PayingFace } from "./strip.js";
 
 /**
  * What each run is worth, as a multiple of the line bet.
@@ -13,21 +13,31 @@ import type { Face } from "./strip.js";
  * Five sevens is null rather than a large number, because the jackpot is a
  * share of the bank. A multiplier here would be a second way to pay it, and
  * two ways to pay one thing is two numbers that can disagree.
+ *
+ * There is no row for the bonus, and the type is what enforces that: it pays
+ * for turning up anywhere rather than for landing in a row, so asking this
+ * table what a row of them is worth is a question with no answer.
+ *
+ * These went up by about an eighth when the bonus arrived. Free spins are
+ * return the paytable does not know it is giving, so the paytable had to give
+ * less to keep the machine on 90% — `machineRtp` in rtp.ts is what holds the
+ * two halves to that total.
  */
-export const PAYS: Record<Face, Record<3 | 4 | 5, number | null>> = {
-  tumbler: { 3: 4, 4: 22, 5: 109 },
-  cigar: { 3: 7, 4: 33, 5: 164 },
-  dice: { 3: 11, 4: 55, 5: 273 },
-  spade: { 3: 18, 4: 88, 5: 438 },
-  diamond: { 3: 33, 4: 164, 5: 875 },
-  seven: { 3: 55, 4: 328, 5: null },
+export const PAYS: Record<PayingFace, Record<3 | 4 | 5, number | null>> = {
+  tumbler: { 3: 4, 4: 26, 5: 122 },
+  cigar: { 3: 8, 4: 37, 5: 183 },
+  dice: { 3: 12, 4: 61, 5: 305 },
+  spade: { 3: 20, 4: 98, 5: 485 },
+  diamond: { 3: 37, 4: 183, 5: 977 },
+  seven: { 3: 61, 4: 366, 5: null },
 };
 
 /** One line that paid, and what it paid. */
 export interface WinningLine {
   /** Index into PAYLINES, so the glass can light the right one. */
   line: number;
-  face: Face;
+  /** Never the bonus: that one is counted as a scatter, not read along a line. */
+  face: PayingFace;
   length: number;
   pay: number;
 }
@@ -61,6 +71,15 @@ export function evaluate(
     const line = PAYLINES[index] as readonly number[];
     const { face, length } = runOn(grid, line);
     if (length < 3) {
+      continue;
+    }
+    if (face === "bonus") {
+      /*
+       * Three bonuses happening to land in a row from the left. They are
+       * already being counted as scatters, and paying them here as well would
+       * pay the same three symbols twice — with a multiplier this table does
+       * not have.
+       */
       continue;
     }
     const multiplier = PAYS[face][length as 3 | 4 | 5];

@@ -1,6 +1,13 @@
 import type { AddressInfo } from "node:net";
 import { MemoryStore } from "@backroom/economy";
-import { FUN_PURSE } from "@backroom/game-slots";
+import {
+  FUN_PURSE,
+  MAX_LINE_PAY,
+  maxStake,
+  STOPS,
+  STRIP,
+  type Face,
+} from "@backroom/game-slots";
 import type { ClientToServer, ServerToClient, SpinNews, SpinResult } from "@backroom/shared";
 import type { Socket } from "socket.io-client";
 import { io as connect } from "socket.io-client";
@@ -108,20 +115,32 @@ async function another(base: string): Promise<Client> {
   return socket;
 }
 
-/**
- * Reels that cannot pay.
+/*
+ * Reels that cannot pay and cannot trigger the bonus.
  *
- * Stop 0 shows three chips and stop 29 shows three sevens, so alternating them
- * puts a chip reel beside a seven reel all the way across. Every payline reads
- * one face and then a different one, which is a run of one on all nine.
+ * Alternating stops on two faces that never meet, so no payline reads a run of
+ * two, let alone three — and neither window touches the bonus stop, which sits
+ * alone at the end of the strip. Both of those matter: a "losing" reel that
+ * quietly scattered three bonuses would hand out free spins, and a test
+ * counting what a purse paid for would then be counting spins nobody paid for.
  */
 function losing(): () => number {
   let call = 0;
   return () => {
     call += 1;
-    return call % 2 === 1 ? 0 : 29 / 32;
+    return call % 2 === 1 ? TUMBLERS : DICE;
   };
 }
+
+/*
+ * Windows onto the strip, named rather than written as fractions at the call
+ * site. FACES runs commonest first and WEIGHTS says how many stops each holds,
+ * so these are where each face's run begins — and a reel shows three
+ * consecutive stops from wherever it lands.
+ */
+const TUMBLERS = 0;
+const DICE = 15 / 32;
+const SEVENS = 28 / 32;
 
 function spin(client: Client, stake: number): Promise<SpinResult> {
   return new Promise((resolve) => client.emit("slots:spin", { stake }, resolve));
@@ -151,7 +170,7 @@ describe("a spin", () => {
     const after = (await store.get(userId))?.chips ?? 0;
     // Whatever the reels did: ten chips left, and anything won came back.
     expect(after).toBeGreaterThanOrEqual(before - 10);
-    expect(after).toBeLessThanOrEqual(before - 10 + 875 * 10);
+    expect(after).toBeLessThanOrEqual(before - 10 + MAX_LINE_PAY * 10);
   });
 
   it("mints nothing, ever", async () => {
@@ -190,8 +209,14 @@ describe("a spin", () => {
       const result = await spin(client, 5);
       const after = (await store.get(userId))?.chips ?? 0;
       if (result.ok) {
-        // The number on the glass is the number in the account.
-        expect(after - before).toBe(result.won - 5);
+        /*
+         * The number on the glass is the number in the account. A free spin
+         * cost nothing, so what it moved is the whole of what it won — and
+         * fifty spins is long enough that the bonus turns up often enough for
+         * assuming otherwise to be a test that fails one run in three.
+         */
+        const cost = result.wasFree ? 0 : 5;
+        expect(after - before).toBe(result.won - cost);
         expect(result.balance).toBe(after);
         expect(result.bank).toBe(await store.bank());
       }
@@ -199,9 +224,8 @@ describe("a spin", () => {
   });
 
   it("refuses a stake above what the bank can cover", async () => {
-    // maxStake(50_000) is 38.
     const { client } = await openMachine({ bank: 50_000 });
-    const result = await spin(client, 39);
+    const result = await spin(client, maxStake(50_000) + 1);
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.error).toMatch(/bank/i);
   });
@@ -211,7 +235,7 @@ describe("a spin", () => {
     const before = (await store.get(userId))?.chips ?? 0;
     const bank = await store.bank();
 
-    await spin(client, 39);
+    await spin(client, maxStake(50_000) + 1);
 
     expect((await store.get(userId))?.chips).toBe(before);
     expect(await store.bank()).toBe(bank);
@@ -284,8 +308,9 @@ describe("stocking the bank", () => {
 
     expect(response.status).toBe(200);
     expect(response.body["bank"]).toBe(50_000);
-    // 50,000 / 1296, which is what the machine may then offer.
-    expect(response.body["maxStake"]).toBe(38);
+    // What the machine may then offer, derived from the paytable's top line.
+    expect(response.body["maxStake"]).toBe(maxStake(50_000));
+    expect(response.body["maxStake"]).toBeGreaterThan(0);
     expect(await store.bank()).toBe(50_000);
   });
 
@@ -326,7 +351,10 @@ describe("stocking the bank", () => {
     process.env["ADMIN_DISCORD_IDS"] = "d-admin";
     const { base } = await openMachine({ bank: 1_000_000, discordId: "d-admin" });
     const response = await fetch(`${base}/api/admin/bank`);
-    expect(await response.json()).toEqual({ bank: 1_000_000, maxStake: 771 });
+    expect(await response.json()).toEqual({
+      bank: 1_000_000,
+      maxStake: maxStake(1_000_000),
+    });
   });
 });
 
@@ -367,7 +395,7 @@ describe("the jackpot", () => {
    * with sevens and lights all nine paylines at once — one spin in 10^15,
    * and the only arrangement that could make this machine mint chips.
    */
-  const allSevens = () => 29 / 32;
+  const allSevens = () => SEVENS;
 
   it("pays a share of the bank the stake has just gone into", async () => {
     const { client, store, userId } = await openMachine({
@@ -413,8 +441,8 @@ describe("the jackpot", () => {
       chips: 10_000_000,
       spinRandom: allSevens,
     });
-    // floor(500000 / 1296) — the most this bank can certainly cover.
-    const result = await spin(client, 385);
+    // The most this bank can certainly cover.
+    const result = await spin(client, maxStake(bank));
     expect(result.ok).toBe(true);
     expect(await store.bank()).toBeGreaterThanOrEqual(0);
   });
@@ -426,7 +454,7 @@ describe("the sign on the machine", () => {
     // advertises nothing.
     const { base } = await openMachine({ bank: 250_000, signedIn: false });
     const body = await (await fetch(`${base}/api/slots`)).json();
-    expect(body).toEqual({ bank: 250_000, maxStake: 192, jackpot: 100_000 });
+    expect(body).toEqual({ bank: 250_000, maxStake: maxStake(250_000), jackpot: 100_000 });
   });
 
   it("says nothing about who is playing", async () => {
@@ -697,3 +725,203 @@ describe("buying fewer lines", () => {
   });
 });
 
+/*
+ * The windows the scripted reels above point at, checked against the strip
+ * itself.
+ *
+ * These tests script the reels by handing the machine a number and relying on
+ * where that lands. That is the strip's layout, and the strip is a table
+ * somebody may retune — when the bonus went in, one stop came out of the
+ * tumbler's nine and every window after it moved by one, which silently turned
+ * "all sevens" into two sevens and a bonus and "losing" into a bonus trigger
+ * every other spin. Both tests still passed something; neither tested what it
+ * said. This is what makes that fail loudly instead.
+ */
+describe("the scripted reels", () => {
+  const windowAt = (value: number): Face[] => {
+    const at = Math.floor(value * STOPS) % STOPS;
+    return [0, 1, 2].map((offset) => STRIP[(at + offset) % STOPS] as Face);
+  };
+
+  it("lands three sevens where the tests say it does", () => {
+    expect(windowAt(SEVENS)).toEqual(["seven", "seven", "seven"]);
+  });
+
+  it("lands the losing reels on two faces that never meet, and never on a bonus", () => {
+    expect(windowAt(TUMBLERS)).toEqual(["tumbler", "tumbler", "tumbler"]);
+    expect(windowAt(DICE)).toEqual(["dice", "dice", "dice"]);
+    for (const window of [windowAt(TUMBLERS), windowAt(DICE), windowAt(SEVENS)]) {
+      expect(window).not.toContain("bonus");
+    }
+  });
+});
+
+/*
+ * The bonus.
+ *
+ * Three of them anywhere on the glass and the machine owes a run of spins
+ * nobody paid for. Which makes this the one feature here that can pay out
+ * without anything coming in, so what it must never do is more interesting
+ * than what it does.
+ */
+describe("the free spins", () => {
+  /** A reel that lands the bonus on the first three reels and nothing after. */
+  function scatters(count: number): () => number {
+    let reel = 0;
+    return () => {
+      const at = reel < count ? 31 / 32 : TUMBLERS;
+      reel = (reel + 1) % 5;
+      return at;
+    };
+  }
+
+  it("awards a run of spins for three bonuses anywhere", async () => {
+    const { client } = await openMachine({
+      bank: 5_000_000,
+      chips: 100_000,
+      spinRandom: scatters(3),
+    });
+    const result = await spin(client, 10);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.scatters).toBe(3);
+    expect(result.awarded).toBeGreaterThan(0);
+    expect(result.freeLeft).toBe(result.awarded);
+    expect(result.wasFree).toBe(false);
+  });
+
+  it("takes nothing from the player for the spins it owes them", async () => {
+    const { client, store, userId } = await openMachine({
+      bank: 5_000_000,
+      chips: 100_000,
+      spinRandom: scatters(3),
+    });
+    await spin(client, 10);
+    const after = (await store.get(userId))?.chips ?? 0;
+    const bankAfter = await store.bank();
+
+    const free = await spin(client, 10);
+
+    expect(free.ok).toBe(true);
+    if (!free.ok) {
+      return;
+    }
+    expect(free.wasFree).toBe(true);
+    // The player is no poorer and the bank is no richer: nothing was staked.
+    expect((await store.get(userId))?.chips).toBe(after + free.won);
+    expect(await store.bank()).toBe(bankAfter - free.won);
+  });
+
+  it("counts them down and stops", async () => {
+    const { client } = await openMachine({
+      bank: 5_000_000,
+      chips: 100_000,
+      spinRandom: scatters(3),
+    });
+    const trigger = await spin(client, 10);
+    expect(trigger.ok).toBe(true);
+    if (!trigger.ok) {
+      return;
+    }
+
+    let left = trigger.freeLeft;
+    while (left > 0) {
+      const free = await spin(client, 10);
+      expect(free.ok).toBe(true);
+      if (!free.ok) {
+        return;
+      }
+      expect(free.wasFree).toBe(true);
+      expect(free.freeLeft).toBe(left - 1);
+      left = free.freeLeft;
+    }
+
+    // And the next one is a spin the player pays for again.
+    const paid = await spin(client, 10);
+    expect(paid.ok && paid.wasFree).toBe(false);
+  });
+
+  it("does not let free spins award more free spins", async () => {
+    /*
+     * Every reel scattering on every spin. If a free spin could retrigger,
+     * this would never end and the return would be a series rather than a
+     * sum — so the count has to come down even when the reels are handing out
+     * five bonuses a spin.
+     */
+    const { client } = await openMachine({
+      bank: 5_000_000,
+      chips: 100_000,
+      spinRandom: () => 31 / 32,
+    });
+    const trigger = await spin(client, 10);
+    expect(trigger.ok).toBe(true);
+    if (!trigger.ok) {
+      return;
+    }
+    expect(trigger.scatters).toBe(5);
+
+    let left = trigger.freeLeft;
+    for (let n = 0; n < trigger.freeLeft; n += 1) {
+      const free = await spin(client, 10);
+      expect(free.ok).toBe(true);
+      if (!free.ok) {
+        return;
+      }
+      expect(free.scatters).toBe(5);
+      expect(free.awarded).toBe(0);
+      expect(free.freeLeft).toBeLessThan(left);
+      left = free.freeLeft;
+    }
+    expect(left).toBe(0);
+  });
+
+  it("replays the bet that won them rather than one chosen afterwards", async () => {
+    /*
+     * Otherwise the play is to trigger the bonus on the smallest stake the
+     * machine takes and claim the eight on the largest — being paid at a stake
+     * nobody ever put up, which is the one thing this whole game is built not
+     * to allow.
+     */
+    const { client, store, userId } = await openMachine({
+      bank: 5_000_000,
+      chips: 10_000_000,
+      spinRandom: scatters(3),
+    });
+    await spin(client, 10);
+    const before = (await store.get(userId))?.chips ?? 0;
+
+    const free = await spin(client, 3000);
+
+    expect(free.ok).toBe(true);
+    if (!free.ok) {
+      return;
+    }
+    // The stake it actually played, not the one that was asked for.
+    expect(free.stake).toBe(10);
+    // And nothing was taken for it either way.
+    expect((await store.get(userId))?.chips).toBe(before + free.won);
+  });
+
+  it("never pays out more than the bank holds, however long the run", async () => {
+    /*
+     * The property the whole machine rests on, asked of the one thing that can
+     * pay without anything coming in. Every reel sevens, so every free spin
+     * takes the jackpot's share of a bank nothing is refilling.
+     */
+    const { client, store } = await openMachine({
+      bank: 500_000,
+      chips: 10_000_000,
+      spinRandom: () => SEVENS,
+    });
+    for (let n = 0; n < 12; n += 1) {
+      const result = await spin(client, maxStake(await store.bank()));
+      if (!result.ok) {
+        break;
+      }
+      expect(await store.bank()).toBeGreaterThanOrEqual(0);
+    }
+    expect(await store.bank()).toBeGreaterThanOrEqual(0);
+  });
+});

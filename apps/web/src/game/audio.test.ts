@@ -65,6 +65,12 @@ describe("the words the cues search for still find files", () => {
     ["reveal", "cards", "placing"],
     ["bet / bank", "chips", "placing"],
     ["payout", "chips", "counting"],
+    ["lever", "slots", "lever"],
+    ["reelStop", "slots", "spinner_stop"],
+    ["spinEnd", "slots", "spin_end"],
+    ["spinWin", "slots", "win_sequence"],
+    ["bonus", "slots", "bonus"],
+    ["coin", "slots", "coin"],
   ];
 
   for (const [cue, folder, word] of wanted) {
@@ -90,5 +96,34 @@ describe("the words the cues search for still find files", () => {
     }
     // A hand is four sounds drawn at random; one file would machine-gun.
     expect(cards.length).toBeGreaterThan(1);
+  });
+});
+
+/*
+ * The two that are one character apart.
+ *
+ * "spinner_stop" is a reel landing and fires five times a spin; "spin_end" is
+ * the spin being over and fires once. Both live in the same folder and both
+ * start with "spin", so a word that matched the wrong file — or both — would
+ * play a reel click as the closing flourish, or the flourish five times a
+ * spin. Neither would look like a bug; both would sound like one.
+ */
+describe("the slots cues that nearly collide", () => {
+  it("keeps the reel landing and the spin ending apart", () => {
+    const files = group("slots");
+    if (files.length === 0) {
+      return;
+    }
+    const landing = preferring(files, "spinner_stop");
+    const ending = preferring(files, "spin_end");
+    expect(landing.length).toBeGreaterThan(0);
+    expect(ending.length).toBeGreaterThan(0);
+    for (const file of landing) {
+      expect(ending).not.toContain(file);
+    }
+    // And the spinning loop is a third thing again, not either of these.
+    const loop = preferring(files, "spinning_loop");
+    expect(loop).not.toEqual(landing);
+    expect(loop).not.toEqual(ending);
   });
 });
