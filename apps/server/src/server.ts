@@ -1946,6 +1946,31 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       // Captured, so the timer below is not re-reading a field that has since
       // been narrowed away by the watcher check above.
       const seatId = seat.seatId;
+
+      /*
+       * Only if this socket still holds the seat.
+       *
+       * A browser that drops and comes straight back reclaims its seat on the
+       * new connection, and the old connection's disconnect can arrive long
+       * afterwards — socket.io does not give up on a socket until it has timed
+       * out pinging it. Unconditionally, that late event marked the seat gone
+       * out from under the connection that now owned it: the player showed as
+       * dropped out for the rest of the session, every hand of theirs was
+       * marked done so the table skipped them, and nothing ever set it back,
+       * while betting carried on taking their chips because a bet never asked
+       * whether they were connected.
+       *
+       * This socket's own entry has already been deleted above, so anything
+       * still pointing at the seat is somebody else's live connection.
+       */
+      const heldByAnother = [...sockets.values()].some(
+        (other) => other.code === seat.code && other.seatId === seatId,
+      );
+      if (heldByAnother) {
+        broadcast(seat.code);
+        return;
+      }
+
       room.table.disconnect(seatId);
       broadcast(seat.code);
 
@@ -1960,6 +1985,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         const held = still.table.seats.find((candidate) => candidate.id === seatId);
         if (held?.connected === true) {
           return; // they came back
+        }
+        // Or came back on a connection this timer has never heard of.
+        if ([...sockets.values()].some((o) => o.code === seat.code && o.seatId === seatId)) {
+          return;
         }
         still.table.removeSeat(seatId);
         broadcast(seat.code);

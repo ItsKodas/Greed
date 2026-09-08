@@ -186,3 +186,71 @@ describe("leaving a game and coming back to it", () => {
     expect(room.seats).toHaveLength(2);
   });
 });
+
+/*
+ * A dropped connection arriving after the replacement has already sat down.
+ *
+ * A browser that blips and comes straight back reclaims its seat on the new
+ * connection, and the old connection's disconnect can turn up a long time
+ * afterwards — socket.io does not give up on a socket until it has timed out
+ * pinging it. Handled unconditionally, that late event marked the seat gone
+ * out from under the connection that now owned it.
+ *
+ * It is a nasty one because the table half-works afterwards. The player shows
+ * as dropped out and every hand of theirs is marked done, so the table skips
+ * them for good — but betting never asked whether they were connected, so it
+ * carried on taking their chips for hands they were never allowed to play.
+ */
+describe("a stale disconnect from a connection that has been replaced", () => {
+  it("does not unseat the player who has already come back", async () => {
+    const port = await start(["Ada", "Bram", "Ada"]);
+    const ada = await client(port);
+    const bram = await client(port);
+
+    const opened = await create(ada, "Ada");
+    const code = opened.ok ? opened.code : "";
+    const seatWas = opened.ok ? opened.seatId : "";
+    await join(bram, "Bram", code);
+    await stateWhere(ada, (room) => room.seats.length === 2);
+
+    // Ada comes back on a second connection without the first having dropped
+    // yet, which is what a refresh over a flaky line actually looks like.
+    const again = await client(port);
+    const rejoined = await join(again, "Ada", code);
+    expect(rejoined.ok && rejoined.seatId).toBe(seatWas);
+
+    // And only now does the old connection give up.
+    ada.close();
+
+    /*
+     * Watched from Bram, who is a third party to all of it. A stretch with no
+     * disconnection reported is the assertion: the old socket's death must not
+     * reach the seat the new one is holding.
+     */
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const room = await stateWhere(bram, () => true, 2000);
+    const hers = room.seats.find((seat) => seat.id === seatWas);
+    expect(hers?.connected).toBe(true);
+    expect(room.seats).toHaveLength(2);
+  });
+
+  it("still marks the seat gone when nobody has taken it over", async () => {
+    // The other half of the same rule: a genuine disconnection, with no
+    // replacement, must still be noticed. A guard that never fired would make
+    // a table full of ghosts.
+    const port = await start(["Ada", "Bram"]);
+    const ada = await client(port);
+    const bram = await client(port);
+
+    const opened = await create(ada, "Ada");
+    const code = opened.ok ? opened.code : "";
+    await join(bram, "Bram", code);
+    await stateWhere(ada, (room) => room.seats.length === 2);
+
+    ada.close();
+
+    const room = await stateWhere(bram, (view) => view.seats.some((seat) => !seat.connected), 3000);
+    expect(room.seats.some((seat) => !seat.connected)).toBe(true);
+  });
+});
+
