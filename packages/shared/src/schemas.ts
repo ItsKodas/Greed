@@ -114,3 +114,16 @@ export const actionSchema = z
   .catchall(z.unknown());
 
 export type ActionPayload = z.infer<typeof actionSchema>;
+
+/**
+ * One pull of the lever.
+ *
+ * The upper bound is the house's, not the machine's: what a bank can actually
+ * cover is decided by the stake cap at spin time, and this only stops a
+ * nonsense number reaching that arithmetic at all.
+ */
+export const spinSchema = z.object({
+  stake: z.number().int().min(1).max(1_000_000),
+});
+
+export type SpinPayload = z.infer<typeof spinSchema>;

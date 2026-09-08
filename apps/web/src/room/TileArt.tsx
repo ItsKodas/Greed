@@ -135,6 +135,98 @@ export function ChipsArt() {
   );
 }
 
+/** A chip, seen face on. */
+function ChipFace({ y }: { y: number }) {
+  return (
+    <g transform={`translate(0 ${y})`}>
+      <circle cx="0" cy="0" r="15" fill="#e0b048" />
+      <circle cx="0" cy="0" r="15" fill="none" stroke="#171b22" strokeWidth="2.5" strokeDasharray="5 4" />
+      <circle cx="0" cy="0" r="7" fill="#171b22" opacity="0.45" />
+    </g>
+  );
+}
+
+/** The seven, drawn rather than typed: a glyph is only as good as its font. */
+function SevenFace({ y }: { y: number }) {
+  return (
+    <path
+      transform={`translate(0 ${y})`}
+      d="M-9 -14 L9 -14 L9 -9 L1 14 L-5 14 L3 -9 L-9 -9 Z"
+      fill="#ff86d4"
+    />
+  );
+}
+
+function BellFace({ y }: { y: number }) {
+  return (
+    <g transform={`translate(0 ${y})`}>
+      <path
+        d="M0 -15 C 7 -15, 11 -9, 11 -2 C 11 5, 13 8, 14 10 L -14 10 C -13 8, -11 5, -11 -2 C -11 -9, -7 -15, 0 -15 Z"
+        fill="#e8c168"
+      />
+      <circle cx="0" cy="13" r="3" fill="#e8c168" />
+    </g>
+  );
+}
+
+/**
+ * The machine against the wall.
+ *
+ * Three reels behind a window, each carrying more faces than the window shows,
+ * so the roll on hover has somewhere to come from and somewhere to go. Its
+ * motion is in game.css beside the cabinet: a reel rolls, it does not fly out
+ * of a corner like the furniture on a table game's tile.
+ */
+export function ReelsArt() {
+  const reels = [20, 76, 132];
+  return (
+    <svg viewBox="0 0 200 160" role="img" aria-hidden="true" focusable="false">
+      <defs>
+        {reels.map((x, index) => (
+          <clipPath key={x} id={`reel-window-${index}`}>
+            <rect x={x} y="18" width="48" height="124" rx="6" />
+          </clipPath>
+        ))}
+      </defs>
+      {reels.map((x, index) => (
+        <g key={x}>
+          <rect x={x} y="18" width="48" height="124" rx="6" fill="#0f0a14" />
+          <g clipPath={`url(#reel-window-${index})`}>
+            {/*
+             * Two groups, not one. The stylesheet rolls the inner one with a
+             * CSS transform, and a CSS transform *replaces* an element's
+             * transform attribute rather than composing with it — so putting
+             * this reel across on the same group would have the roll wipe out
+             * the placement and stack all three reels at x=0, outside their
+             * own windows.
+             */}
+            <g transform={`translate(${x + 24} 0)`}>
+              {/* Numbered so the stylesheet can roll each one a beat apart. */}
+              <g className={`art__piece art__piece--${index + 1}`}>
+                <ChipFace y={40} />
+                <SevenFace y={80} />
+                <BellFace y={120} />
+                <ChipFace y={160} />
+                <SevenFace y={200} />
+              </g>
+            </g>
+          </g>
+          <rect
+            x={x}
+            y="18"
+            width="48"
+            height="124"
+            rx="6"
+            fill="none"
+            stroke="#3a2749"
+            strokeWidth="2"
+          />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 /** The furniture a game keeps, by which game it is. */
 export function TileArt({ game }: { game: string }) {
   if (game === "greed") {
@@ -142,6 +234,9 @@ export function TileArt({ game }: { game: string }) {
   }
   if (game === "blackjack") {
     return <CardsArt />;
+  }
+  if (game === "slots") {
+    return <ReelsArt />;
   }
   return <ChipsArt />;
 }

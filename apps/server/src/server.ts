@@ -10,6 +10,7 @@ import type { Store } from "@backroom/economy";
 import { judgeDaily, MemoryStore } from "@backroom/economy";
 import { BLACKJACK, blackjackAdapter } from "@backroom/game-blackjack";
 import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
+import { drawGrid, evaluate, jackpotPay, maxStake, SLOTS } from "@backroom/game-slots";
 import type { Die } from "@backroom/rules";
 
 import type { Ack, ClientToServer, ServerToClient, TableOnOffer } from "@backroom/shared";
@@ -29,6 +30,7 @@ import {
   setListedSchema,
   setRulesSchema,
   watchSchema,
+  spinSchema,
 } from "@backroom/shared/schemas";
 import express from "express";
 import session from "express-session";
@@ -49,25 +51,35 @@ import { Avatars, Cards } from "./og.js";
  * carry, so a game cannot be advertised here with a name, a seat count or an
  * open sign that differs from the one it is actually played under.
  */
-const CATALOGUE = new Catalogue()
-  .add(GREED)
-  .add(BLACKJACK)
-  .add({
-    id: "slots",
-    name: "Slots",
-    blurb: "One player, one lever.",
-    shape: "machine",
-    minSeats: 1,
-    maxSeats: 1,
-    open: false,
-    // The room's own colours until it has any of its own to be painted in.
-    theme: { wall: "#141822", felt: "#1b2130", accent: "#2e7bff", accentHi: "#7ba9ff" },
-  });
+const CATALOGUE = new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS);
 
+
+/**
+ * Where the reels get their randomness.
+ *
+ * Not Math.random. V8 implements that as xorshift128+, whose internal state
+ * can be recovered from a modest run of observed outputs — and this machine
+ * hands the player the whole grid after every spin, which is precisely the
+ * observation that attack needs. Predicting the reels here is worth real
+ * money: the jackpot is 40% of the bank, and the stake cap rises as the bank
+ * does, so somebody who knew when it was coming could bet the maximum into it.
+ *
+ * 2^32 divides the 32-stop strip exactly, so scaling a uniform 32-bit integer
+ * down to [0, 1) introduces no modulo bias.
+ */
+function secureRandom(): number {
+  return randomInt(0, 2 ** 32) / 2 ** 32;
+}
 
 export interface BackRoomServerOptions {
   /** Injected so tests can roll deterministically. */
   roll?: (count: number) => Die[];
+  /**
+   * Where the slot machine's reels come from. Injected for the same reason as
+   * `roll`: a jackpot is one spin in fifteen thousand, and a payout that rare
+   * cannot be tested against real randomness.
+   */
+  spinRandom?: () => number;
   /** How long the busting dice stay on screen before play moves on. */
   farklePauseMs?: number;
   /**
@@ -184,6 +196,7 @@ export const CLIENT_ROUTE = /^(?!\/(?:healthz|auth|api|og|socket\.io)\b).*/;
 export function createBackRoomServer(options: BackRoomServerOptions = {}): BackRoomServer {
   const {
     roll = defaultRoll,
+    spinRandom = secureRandom,
     farklePauseMs = 2200,
     bettingMs,
     settleMs,
@@ -752,6 +765,49 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     void (async () => {
       const done = await store.revokeCode(String(request.params["code"] ?? ""));
       response.status(done ? 200 : 404).json({ revoked: done });
+    })();
+  });
+
+  /**
+   * What the machine is worth playing for.
+   *
+   * Public, and deliberately so: the bank is the whole appeal of this game and
+   * a sign nobody can read until they have signed in advertises nothing. It
+   * carries no one's balance and says nothing about who is playing.
+   */
+  app.get("/api/slots", (_request, response) => {
+    void (async () => {
+      const bank = await store.bank();
+      response.json({ bank, maxStake: maxStake(bank), jackpot: jackpotPay(bank) });
+    })();
+  });
+
+  /**
+   * The one place chips enter the slot machine's bank from outside play.
+   *
+   * Behind the same allowlist that mints redemption codes, because it is the
+   * same power: this adds chips to the building that nobody won. It is a
+   * deliberate act rather than something automatic because an empty bank
+   * offers a stake of zero — somebody has to strike the match — and because a
+   * named human doing it is auditable in a way a mechanism is not.
+   */
+  app.get("/api/admin/bank", requireAdmin, (_request, response) => {
+    void (async () => {
+      const bank = await store.bank();
+      response.json({ bank, maxStake: maxStake(bank) });
+    })();
+  });
+
+  app.post("/api/admin/bank", requireAdmin, (request, response) => {
+    void (async () => {
+      const amount = (request.body as { amount?: unknown })?.amount;
+      if (typeof amount !== "number" || !Number.isInteger(amount) || amount < 1) {
+        response.status(400).json({ error: "That is not an amount." });
+        return;
+      }
+      await store.bankAdd(amount);
+      const bank = await store.bank();
+      response.json({ bank, maxStake: maxStake(bank) });
     })();
   });
 
@@ -1443,6 +1499,92 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         text: parsed.data.text,
         at: Date.now(),
       });
+    });
+
+    /**
+     * One pull of the lever.
+     *
+     * Not a game:action, because there is no table for one to act on: a
+     * machine has no seats, no turns and no opponents, and catalogue.ts
+     * already says that forcing one through a table would bend both out of
+     * shape.
+     *
+     * The order below is the entire safety argument and must not be
+     * rearranged. The stake is taken from the player and put into the bank
+     * *before* the reels are drawn, so by the time anything is owed, the money
+     * to pay it is already there — including the jackpot's share, which is a
+     * share of the bank as it stands with the stake in it.
+     */
+    socket.on("slots:spin", (payload, ack) => {
+      void (async () => {
+        const userId = socket.data.identity?.userId ?? null;
+        if (userId === null) {
+          ack({ ok: false, error: "Sign in to play for chips." });
+          return;
+        }
+        const parsed = spinSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack({ ok: false, error: "That is not a stake." });
+          return;
+        }
+        const stake = parsed.data.stake;
+
+        const cap = maxStake(await store.bank());
+        if (stake > cap) {
+          ack({
+            ok: false,
+            error:
+              cap < 1
+                ? "The bank is empty. Nothing to play for yet."
+                : `The bank covers ${cap} a spin at the moment.`,
+          });
+          return;
+        }
+
+        if (!(await deps.take(userId, stake))) {
+          ack({ ok: false, error: "Not enough chips." });
+          return;
+        }
+        await store.bankAdd(stake);
+
+        const grid = drawGrid(spinRandom);
+        const { lines, fixed, jackpot } = evaluate(grid, stake);
+        const won = fixed + (jackpot ? jackpotPay(await store.bank()) : 0);
+
+        /*
+         * Paid out of the bank, and only if the bank actually has it. The
+         * stake cap means this cannot refuse, which is exactly why it is
+         * checked: the alternative to checking is a bank that goes negative in
+         * silence and a machine that has quietly started minting chips.
+         */
+        if (won > 0 && !(await store.bankTake(won))) {
+          await store.bankAdd(-stake);
+          await deps.give(userId, stake);
+          ack({ ok: false, error: "The bank is short. Nothing was staked." });
+          return;
+        }
+        if (won > 0) {
+          await deps.give(userId, won);
+        }
+
+        await deps.record(userId, {
+          shared: { games: 1, wins: won > stake ? 1 : 0, chipsWon: won - stake },
+          game: SLOTS.id,
+          add: { spins: 1, staked: stake, jackpots: jackpot ? 1 : 0 },
+          // A best spin is a maximum, and only the machine knows that.
+          max: { bestSpin: won },
+        });
+
+        ack({
+          ok: true,
+          grid,
+          lines,
+          won,
+          jackpot,
+          bank: await store.bank(),
+          balance: (await store.get(userId))?.chips ?? 0,
+        });
+      })();
     });
 
     socket.on("disconnect", () => {

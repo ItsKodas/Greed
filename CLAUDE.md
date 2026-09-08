@@ -35,6 +35,25 @@ It follows that:
 - **Play money never touches an account.** A for-fun table's purse lives at
   that table and is gone when it closes.
 
+**A machine is the one exception, and only on these terms.** A game played
+alone against the house would be a button that mints chips, so a machine may
+run for one player *if and only if*:
+
+- it pays from a bank that players alone fill, chip for chip, and every stake
+  enters that bank before the game decides anything;
+- it can never pay out more than the bank holds, and its stakes are capped so
+  that this is arithmetically impossible rather than merely unlikely — the cap
+  comes from the worst outcome the game can produce, not from a percentile;
+- the only chips entering that bank from outside play are an admin's deliberate
+  float, by the same authority that mints redemption codes;
+- its outcomes come from a cryptographic source. A machine hands the player its
+  whole result every round, which is exactly the run of observations needed to
+  recover `Math.random`'s state and predict the next one.
+
+On those terms a win at a machine still comes from real people: everybody who
+played it before you. Slots is the only game in the building on this footing,
+and a second one would have to earn it the same way.
+
 ### The server is the only authority
 
 A game may ask the economy to move chips; it may not reach the store, and it
@@ -123,6 +142,7 @@ packages/shared    the socket protocol and its zod schemas
 packages/ui        design tokens and procedural textures
 games/greed        six dice, bank it or lose it
 games/blackjack    beat the dealer to twenty-one
+games/slots        five reels, nine lines, one shared bank
 apps/server        express + socket.io, one game:action envelope
 apps/web           react client
 ```

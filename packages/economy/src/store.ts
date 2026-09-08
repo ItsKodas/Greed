@@ -106,6 +106,20 @@ export interface Store {
   bumpStats(id: string, bump: StatBump): Promise<void>;
   recordGame(record: GameRecord): Promise<void>;
 
+  /**
+   * The slot machine's bank: chips players have staked and not yet won back.
+   *
+   * It lives here rather than at the machine because it is real money and has
+   * to survive a restart. Nothing in the building may add to it except a spin
+   * and an admin's deliberate float — a bank that could be topped up from
+   * anywhere is a house that mints chips, which is the one thing this casino
+   * must not contain.
+   */
+  bank(): Promise<number>;
+  bankAdd(delta: number): Promise<void>;
+  /** Pays out, or returns false rather than overdrawing. */
+  bankTake(amount: number): Promise<boolean>;
+
   /** Puts a new code into circulation. */
   mintCode(input: {
     chips: number;
@@ -168,6 +182,24 @@ export class MemoryStore implements Store {
   readonly kind = "memory" as const;
   private readonly people = new Map<string, Profile>();
   private readonly games: GameRecord[] = [];
+  /** The slot machine's bank. A number, because that is all it ever is. */
+  private house = 0;
+
+  async bank(): Promise<number> {
+    return this.house;
+  }
+
+  async bankAdd(delta: number): Promise<void> {
+    this.house += delta;
+  }
+
+  async bankTake(amount: number): Promise<boolean> {
+    if (amount > this.house) {
+      return false;
+    }
+    this.house -= amount;
+    return true;
+  }
 
   async upsertDiscordUser(input: {
     discordId: string;

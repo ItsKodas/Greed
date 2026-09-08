@@ -3,6 +3,7 @@ export {
   CODE_LENGTH,
   MAX_SEATS,
   MIN_SEATS,
+  SPIN_FACES,
   type Ack,
   type BotSkill,
   type ChatMessage,
@@ -16,5 +17,8 @@ export {
   type TableState,
   type SeatView,
   type ServerToClient,
+  type SpinFace,
+  type SpinLine,
+  type SpinResult,
   type TurnView,
 } from "./protocol.js";

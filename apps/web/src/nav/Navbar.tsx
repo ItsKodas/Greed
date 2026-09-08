@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ChipMark } from "../chips/Chip.js";
 import { Avatar } from "../game/Avatar.js";
+import { compact, exact } from "../game/money.js";
 import { Sign } from "../game/Sign.js";
 import type { Account } from "../game/useAccount.js";
 import { CopyCode } from "./CopyCode.js";
@@ -142,7 +144,16 @@ function Who({ account }: { account: Account }) {
           className="me__face"
         />
         <span className="me__name">{account.profile.name}</span>
-        <span className="me__chips">{account.profile.chips.toLocaleString("en-US")}</span>
+        {/*
+          * Short, because this is glanced at rather than read: at seven digits
+          * the exact figure is not what the glance is for, and the pill grows
+          * every time somebody wins. The full number stays on the title, and
+          * the profile page it links to writes it out.
+          */}
+        <span className="me__chips" title={`${exact(account.profile.chips)} chips`}>
+          <ChipMark />
+          {compact(account.profile.chips)}
+        </span>
       </Link>
       {low ? (
         <button type="button" className="btn btn--ghost btn--small" onClick={account.claimDaily}>

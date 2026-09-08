@@ -48,11 +48,15 @@ export const PLAIN: Face = { body: "#3b4250", trim: "#e6ebf2", spots: 6 };
 /**
  * What can be pushed onto the felt, largest first.
  *
- * Only these four. The big two exist for counting a balance, the way a cage
- * holds plates nobody bets directly — putting them in the betting tray would
- * let one press stake more than the table's limit.
+ * The twenty-five is missing on purpose, and it is the only one that is: a
+ * table's maximum is ten thousand, so a single press of that plate would stake
+ * more than the house allows and the chip would spend its life disabled. Five
+ * thousand is exactly half the maximum, so two of them make it.
+ *
+ * The cage still counts a balance on the full LADDER below, the way a real one
+ * holds plates nobody bets directly.
  */
-export const MINTED = [1000, 500, 250, 100];
+export const MINTED = [5000, 1000, 500, 250, 100];
 
 /** Every denomination, for showing what somebody has rather than what they bet. */
 export const LADDER = [25000, 5000, 1000, 500, 250, 100];
@@ -77,6 +81,7 @@ export function ChipFace({
   amount,
   showValue = false,
   lift,
+  face: painted,
 }: {
   cx: number;
   cy: number;
@@ -85,8 +90,10 @@ export function ChipFace({
   showValue?: boolean;
   /** The id of a gradient to lay over the top, if the caller has made one. */
   lift?: string;
+  /** Paint it in something other than its denomination's clay. */
+  face?: Face;
 }) {
-  const face = FACES[amount] ?? PLAIN;
+  const face = painted ?? FACES[amount] ?? PLAIN;
   const scale = r / 48;
   const label = amount.toLocaleString("en-US");
   // The number sizes to its own length: "1,000" cannot wear "100"'s size.
@@ -142,6 +149,45 @@ export function ChipFace({
         </text>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The house's own clay, for a chip that stands for money rather than for an
+ * amount.
+ *
+ * A balance is not a denomination — nobody holds "ten thousand" as one plate —
+ * so a mark beside a figure is painted in the gold that means money at every
+ * table in the building rather than borrowing some particular chip's colour.
+ */
+const HOUSE: Face = {
+  body: "var(--gr-color-chip)",
+  trim: "var(--gr-color-chip-dim)",
+  spots: 6,
+};
+
+/**
+ * A chip as a mark, small, beside a figure.
+ *
+ * No value printed on it: ChipFace already refuses below about twenty pixels,
+ * because a number that small reads as dirt rather than as a denomination —
+ * and the figure it sits beside is the number anyway.
+ *
+ * aria-hidden, for the same reason. The balance is already announced by the
+ * text; a second reading of it as "chip" is noise to anybody listening.
+ */
+export function ChipMark({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      className="chip-mark"
+      viewBox="0 0 100 100"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <ChipFace cx={50} cy={50} r={48} amount={0} face={HOUSE} />
+    </svg>
   );
 }
 

@@ -152,7 +152,62 @@ export interface ClientToServer {
    */
   "game:action": (payload: { type: string; [key: string]: unknown }, ack?: () => void) => void;
   "chat:send": (payload: { text: string }) => void;
+  /**
+   * One pull of the lever at the slot machine.
+   *
+   * An event of its own rather than a game:action, because there is no table
+   * for one to act on: a machine has no seats, no turns and no opponents, and
+   * catalogue.ts already says that forcing one through a table would bend both
+   * out of shape.
+   */
+  "slots:spin": (payload: { stake: number }, ack: (result: SpinResult) => void) => void;
 }
+
+/**
+ * The faces on the reels, as they travel over the wire.
+ *
+ * Written out here as well as in games/slots because shared sits beneath the
+ * games and cannot import from one. They have to agree, and a test in
+ * games/slots fails if they stop agreeing — a face this end does not know
+ * renders as a blank reel, which reads as a broken machine rather than a
+ * broken build.
+ */
+export const SPIN_FACES = [
+  "chip",
+  "dice",
+  "spade",
+  "horseshoe",
+  "bell",
+  "seven",
+] as const;
+
+export type SpinFace = (typeof SPIN_FACES)[number];
+
+/** One payline that paid, and what it paid. */
+export interface SpinLine {
+  /** Which of the nine lines, so the glass can light the right one. */
+  line: number;
+  face: SpinFace;
+  length: number;
+  pay: number;
+}
+
+/** What the machine did with a pull of the lever. */
+export type SpinResult =
+  | {
+      ok: true;
+      /** Five columns of three, top row first. */
+      grid: SpinFace[][];
+      lines: SpinLine[];
+      /** Everything won, jackpot included. */
+      won: number;
+      jackpot: boolean;
+      /** What the bank holds now, so the sign can be right without a refetch. */
+      bank: number;
+      /** The player's balance now, for the same reason. */
+      balance: number;
+    }
+  | { ok: false; error: string };
 
 export interface ServerToClient {
   /**

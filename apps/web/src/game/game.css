@@ -295,10 +295,20 @@
 
 /* Gold, because it is money. */
 .me__chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
   font-size: var(--gr-text-sm);
   color: var(--gr-color-chip);
+}
+
+/* Sits on the type's own baseline rather than the line box's, so the chip
+   reads as part of the figure instead of floating above it. */
+.chip-mark {
+  display: block;
+  flex: none;
 }
 
 /* ------------------------------------------------------------- icon buttons */
@@ -1850,15 +1860,28 @@
 }
 
 .cabinet {
-  width: 132px;
+  width: 148px;
   display: flex;
   flex-direction: column;
   gap: var(--gr-space-2);
-  padding: var(--gr-space-3) var(--gr-space-3) var(--gr-space-2);
+  padding: var(--gr-space-3) var(--gr-space-3) var(--gr-space-3);
   border: var(--gr-edge-soft);
   border-radius: var(--gr-radius-md) var(--gr-radius-md) var(--gr-radius-sm) var(--gr-radius-sm);
-  background: linear-gradient(180deg, var(--gr-color-smoke), var(--gr-color-shadow));
+  background:
+    radial-gradient(80% 60% at 50% -10%, var(--gr-color-smoke-lit) 0%, transparent 70%),
+    linear-gradient(180deg, var(--gr-color-smoke), var(--gr-color-shadow));
   text-align: center;
+  text-decoration: none;
+  color: inherit;
+}
+
+.cabinet:hover {
+  border-color: color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+}
+
+.cabinet:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 2px;
 }
 
 .cabinet--shut {
@@ -1866,29 +1889,83 @@
 }
 
 .cabinet__screen {
-  height: 74px;
+  height: 84px;
   border-radius: var(--gr-radius-sm);
   background:
-    repeating-linear-gradient(180deg, rgb(0 0 0 / 0.6) 0 3px, rgb(0 0 0 / 0.4) 3px 6px),
+    repeating-linear-gradient(180deg, rgb(0 0 0 / 0.35) 0 3px, transparent 3px 6px),
     var(--gr-color-night);
   border: 1px solid rgb(0 0 0 / 0.7);
   display: grid;
   place-items: center;
+  overflow: hidden;
   font-family: var(--gr-font-data);
   font-size: var(--gr-text-lg);
   letter-spacing: 0.1em;
   color: var(--gr-color-ink-faint);
 }
 
+.cabinet__screen svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * The reels roll rather than fly.
+ *
+ * The tile art on a table game throws its furniture out of the corner; a
+ * machine has none to throw. Each reel steps down by exactly one face — 40
+ * units in the drawing's own coordinates — and the strip carries two spare
+ * faces so there is always something arriving and something leaving.
+ */
+.cabinet .art__piece {
+  transform: translateY(0);
+  transition: transform 520ms cubic-bezier(0.16, 1.06, 0.28, 1);
+}
+
+.cabinet:hover .art__piece--1,
+.cabinet:focus-visible .art__piece--1 {
+  transform: translateY(-40px);
+}
+
+.cabinet:hover .art__piece--2,
+.cabinet:focus-visible .art__piece--2 {
+  transform: translateY(-80px);
+  transition-delay: 70ms;
+}
+
+.cabinet:hover .art__piece--3,
+.cabinet:focus-visible .art__piece--3 {
+  transform: translateY(-40px);
+  transition-delay: 140ms;
+}
+
 .cabinet__name {
   font-family: var(--gr-font-display);
-  font-size: var(--gr-text-base);
-  color: var(--gr-color-ink-dim);
+  font-size: var(--gr-text-lg);
+  line-height: 1;
+  color: var(--gr-color-ink-lit);
+}
+
+/* The one letter a game picks out, in the colour its own room is lit. */
+.cabinet__name em {
+  font-style: normal;
+  color: var(--gr-color-neon);
 }
 
 .cabinet__note {
   font-size: var(--gr-text-xs);
   color: var(--gr-color-ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cabinet .art__piece,
+  .cabinet:hover .art__piece--1,
+  .cabinet:hover .art__piece--2,
+  .cabinet:hover .art__piece--3 {
+    transition: none;
+    transform: none;
+  }
 }
 
 /* ---------------------------------------------------------------- profile */
@@ -2249,4 +2326,15 @@
 
 .gate .panel__note a:hover {
   color: var(--gr-color-neon-hi);
+}
+
+/* What the slot machine's bank holds, on the admin desk. */
+.bank__held {
+  margin: 0 0 var(--gr-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xl);
+  font-variant-numeric: tabular-nums;
 }

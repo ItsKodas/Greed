@@ -911,8 +911,7 @@ describe("what the room offers", () => {
     expect(ids).toContain("greed");
     expect(body.games.find((game) => game.id === "greed")?.open).toBe(true);
     expect(body.games.find((game) => game.id === "blackjack")?.open).toBe(true);
-    // Listed but not yet openable, so the room can show what is coming.
-    expect(body.games.find((game) => game.id === "slots")?.open).toBe(false);
+    expect(body.games.find((game) => game.id === "slots")?.open).toBe(true);
     // A machine is not a table, and says so.
     expect(body.games.find((game) => game.id === "slots")?.shape).toBe("machine");
   });
@@ -992,11 +991,16 @@ describe("what a link to this place looks like", () => {
     const body = await (await fetch(at("/sitemap.xml"))).text();
 
     expect(body).toContain("<loc>http://localhost");
-    expect(body).toContain("/greed</loc>");
+    // Every game somebody can actually sit down at, and nothing else. Written
+    // against the catalogue rather than a hand-listed set, so a game added
+    // later is either on the map or fails here — the previous version of this
+    // named the one game that happened to be unopenable at the time, and went
+    // stale the moment it opened.
+    for (const game of ["greed", "blackjack", "slots"]) {
+      expect(body).toContain(`/${game}</loc>`);
+    }
     // A table is a room that will not exist next week.
     expect(body).not.toContain(code);
-    // And a game nobody can sit down at yet is not a page worth finding.
-    expect(body).not.toContain("/slots</loc>");
   });
 });
 
@@ -1032,3 +1036,70 @@ describe("which addresses belong to the client", () => {
     expect(CLIENT_ROUTE.test("/ogre")).toBe(true);
   });
 });
+
+describe("somebody who walks away without saying so", () => {
+  it("keeps their seat for a moment, so a refresh can reclaim it", async () => {
+    await start();
+    const host = await client();
+    const ack = await create(host, "Ada");
+    const guest = await client();
+    await join(guest, "Bo", (ack as { code: string }).code);
+    await stateWhere(host, (state) => state.seats.length === 2);
+
+    guest.close();
+
+    // Marked gone at once, so the table can say what happened rather than
+    // pretending they are still there deciding.
+    const gone = await stateWhere(host, (state) =>
+      state.seats.some((seat) => seat.name === "Bo" && !seat.connected),
+    );
+    expect(gone.seats).toHaveLength(2);
+  });
+
+  it("gives the seat up once they have not come back", async () => {
+    /*
+     * A dropped connection is the ordinary way people leave — a closed laptop,
+     * a train tunnel, a phone going to sleep. Holding their seat forever leaves
+     * a table that cannot fill and, at a chips table, one that cannot deal for
+     * want of a second player who is not actually there.
+     *
+     * The grace period is 90 seconds in production and 300ms here.
+     */
+    await start();
+    const host = await client();
+    const ack = await create(host, "Ada");
+    const guest = await client();
+    await join(guest, "Bo", (ack as { code: string }).code);
+    await stateWhere(host, (state) => state.seats.length === 2);
+
+    guest.close();
+
+    const alone = await stateWhere(host, (state) => state.seats.length === 1, 4000);
+    expect(alone.seats[0]?.name).toBe("Ada");
+  });
+
+  it("keeps the seat of somebody who comes straight back", async () => {
+    await start();
+    const host = await client();
+    const ack = await create(host, "Ada");
+    const code = (ack as { code: string }).code;
+    const guest = await client();
+    const seated = await join(guest, "Bo", code);
+    await stateWhere(host, (state) => state.seats.length === 2);
+
+    guest.close();
+    const back = await client();
+    await new Promise<void>((resolve) => {
+      back.emit("lobby:resume", { seatId: (seated as { seatId: string }).seatId, code }, () =>
+        resolve(),
+      );
+    });
+
+    // Past the grace period, and still two: the timer must not take a seat
+    // whose owner has already reclaimed it.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const state = await stateWhere(host, () => true);
+    expect(state.seats).toHaveLength(2);
+  });
+});
+
