@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LADDER } from "./Chip.js";
 import { columnsFor } from "./ChipColumns.js";
 import { FACES } from "./Chip.js";
-import { chipsFor } from "./ChipStack.js";
+import { chipsFor, pileUp } from "./ChipStack.js";
 
 describe("counting a wager out in chips", () => {
   it("uses the biggest chips first, the way anybody counts", () => {
@@ -149,5 +149,55 @@ describe("counting in a game's own chips", () => {
     }
     // And they are told apart, which is what the colour is for.
     expect(FACES[10]?.body).not.toBe(FACES[20]?.body);
+  });
+});
+
+/*
+ * How a heap of chips is arranged.
+ *
+ * Nobody builds one column of twenty: past about five it stops standing up and
+ * stops being countable at a glance, which are the two things a stack is for.
+ */
+describe("arranging a heap", () => {
+  it("leaves a small handful as one stack", () => {
+    expect(pileUp([1000, 500, 250], 5)).toEqual([[1000, 500, 250]]);
+  });
+
+  it("goes sideways rather than up once a stack is full", () => {
+    const heap = pileUp([1000, 1000, 1000, 500, 250, 100], 5);
+    expect(heap).toHaveLength(2);
+  });
+
+  it("levels the stacks rather than leaving one chip beside a full one", () => {
+    /*
+     * Six into stacks of five is the case that gives it away: filling greedily
+     * makes a stack of five and a stack of one, which reads as a mistake
+     * rather than as money.
+     */
+    expect(pileUp([1, 2, 3, 4, 5, 6], 5).map((one) => one.length)).toEqual([3, 3]);
+    expect(pileUp([1, 2, 3, 4, 5, 6, 7], 5).map((one) => one.length)).toEqual([4, 3]);
+    expect(pileUp([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], 5).map((one) => one.length)).toEqual([
+      4, 4, 3,
+    ]);
+  });
+
+  it("never puts more in a stack than it was told to", () => {
+    for (let count = 1; count <= 40; count += 1) {
+      for (const tallest of [2, 3, 4, 5, 8]) {
+        const chips = Array.from({ length: count }, (_, at) => at);
+        const heap = pileUp(chips, tallest);
+        expect(Math.max(...heap.map((one) => one.length))).toBeLessThanOrEqual(tallest);
+        // And no chip is dropped or duplicated on the way in.
+        expect(heap.flat()).toEqual(chips);
+      }
+    }
+  });
+
+  it("keeps the biggest plates together rather than mixing every stack", () => {
+    // Sorted largest first on the way in, so a stack is of a kind — which is
+    // both how people sort them and what makes a heap readable by colour.
+    const heap = pileUp([1000, 1000, 1000, 100, 100, 100], 3);
+    expect(heap[0]).toEqual([1000, 1000, 1000]);
+    expect(heap[1]).toEqual([100, 100, 100]);
   });
 });

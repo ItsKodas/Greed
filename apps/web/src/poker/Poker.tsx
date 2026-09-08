@@ -165,7 +165,7 @@ export function Felt({
             <strong>{fmt(state.pot)}</strong>
             {state.pot > 0 ? (
               <span className="pk__pot-chips">
-                <ChipStack amount={state.pot} width={20} ladder={TABLE_CHIPS} most={4} />
+                <ChipStack amount={state.pot} width={19} ladder={TABLE_CHIPS} most={15} tallest={5} />
               </span>
             ) : null}
           </p>
@@ -214,7 +214,7 @@ export function Felt({
                 * in for what before either number has been — and the figure is
                 * what settles it once you care about the exact amount.
                 */}
-              <ChipStack amount={chips} width={18} ladder={TABLE_CHIPS} most={5} />
+              <ChipStack amount={chips} width={16} ladder={TABLE_CHIPS} most={12} tallest={4} />
               <span className="pk__bet-figure">{fmt(chips)}</span>
             </span>
           ) : null;
@@ -332,7 +332,7 @@ function Seat({
             */}
           {seat.stack > 0 ? (
             <span className="pk__pile">
-              <ChipStack amount={seat.stack} width={13} ladder={TABLE_CHIPS} most={4} />
+              <ChipStack amount={seat.stack} width={11} ladder={TABLE_CHIPS} most={9} tallest={3} />
             </span>
           ) : null}
           {fmt(seat.stack)}
