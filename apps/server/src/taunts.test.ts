@@ -18,9 +18,16 @@ import type { BackRoomServer } from "./server.js";
  * ends, and that a settled hand pays the pool out and throws the emote back.
  */
 
+/** Enough of any game's view for these tests: the room's own fields plus the
+    one blackjack field they steer by. */
+type View = RoomView & {
+  taunts?: Array<{ seatId: string; chips: number }>;
+  phase?: string;
+};
+
 type Client = Socket<ServerToClient, ClientToServer> & {
-  latest?: RoomView & { taunts?: Array<{ seatId: string; chips: number }> };
-  seen: Array<RoomView & { taunts?: Array<{ seatId: string; chips: number }> }>;
+  latest?: View;
+  seen: View[];
   read: number;
   taunts: TauntPlay[];
 };
@@ -98,6 +105,10 @@ function client(port: number): Promise<Client> {
     socket.on("connect", () => resolve(socket));
   });
 }
+
+/** Sends a move and waits for the server to say it has dealt with it. */
+const act = (socket: Client, action: Record<string, unknown>) =>
+  new Promise<void>((resolve) => socket.emit("game:action", action, () => resolve()));
 
 /** The next state that matches, reading forward from where the last wait stopped. */
 function stateWhere(
@@ -510,4 +521,124 @@ describe("when the hand settles", () => {
     expect(await chipsOf(store, adaId)).toBe(STARTING_CHIPS - 250);
     expect(await chipsOf(store, boId)).toBe(STARTING_CHIPS);
   });
+});
+
+/**
+ * A pool that has to survive the table moving on underneath it.
+ *
+ * Blackjack settles a hand, pays it out, and then clears the felt on its own
+ * clock. Settling talks to the economy, so it yields — and against a real
+ * database it yields for as long as the round trips take, which is easily
+ * longer than the beat before the next hand opens.
+ *
+ * That is what broke this in production. Who won was being asked of the table
+ * *after* settling had finished, by which time `beginBetting` had emptied
+ * every seat's hands, so the table answered "nobody won" and every pool was
+ * burned: no chips to the person who had been mocked, and no emote thrown
+ * back at whoever mocked them. `settle` in the game itself carries a comment
+ * warning about precisely this hazard, and this is the same mistake one layer
+ * out.
+ *
+ * The shoe is fixed here rather than dealt for, so the hand below has one
+ * outcome and the test is about the pool rather than about luck.
+ */
+describe("a pool at a table that deals itself", () => {
+  /** The constant that deals this seat a hand it wins, every time. */
+  const A_WINNING_SHOE = 0.7;
+
+  /**
+   * A store that answers as slowly as a real one across a network.
+   *
+   * Not an exaggeration for effect: settling a hand is several round trips per
+   * seat, and the whole failure is settling outlasting the beat before the
+   * next hand. MemoryStore answers within the same tick, which is exactly why
+   * this went unnoticed everywhere but production.
+   */
+  function slow(store: MemoryStore, ms: number): MemoryStore {
+    const wait = () => new Promise((resolve) => setTimeout(resolve, ms));
+    return new Proxy(store, {
+      get(target, key: string | symbol) {
+        const value = Reflect.get(target, key) as unknown;
+        if (typeof value !== "function") {
+          return value;
+        }
+        const call = value.bind(target) as (...args: unknown[]) => unknown;
+        if (key !== "adjustChips" && key !== "bumpStats" && key !== "recordGame") {
+          return call;
+        }
+        return async (...args: unknown[]) => {
+          await wait();
+          return call(...args);
+        };
+      },
+    }) as MemoryStore;
+  }
+
+  it("pays and throws back even when settling outlasts the felt being cleared", async () => {
+    const store = new MemoryStore();
+    await store.bankAdd("blackjack", 5_000_000);
+    const ids: string[] = [];
+    for (const [index, name] of ["Ada", "Bo"].entries()) {
+      const profile = await store.upsertDiscordUser({
+        discordId: `bj${index}`,
+        name,
+        avatar: null,
+        accentColor: null,
+      });
+      ids.push(profile.id);
+    }
+    const made = await emote(store, 250);
+
+    let seen = 0;
+    server = createBackRoomServer({
+      store: slow(store, 120),
+      auth: null,
+      serveClient: false,
+      spinRandom: () => A_WINNING_SHOE,
+      // The felt clears almost at once, and settling takes far longer. That
+      // ordering is the bug, so it is the ordering the test arranges.
+      settleMs: 30,
+      bettingMs: 30_000,
+      identify: () => {
+        const id = ids[seen] ?? null;
+        seen += 1;
+        return id;
+      },
+    });
+    await new Promise<void>((resolve) => server?.http.listen(0, () => resolve()));
+    const port = (server.http.address() as AddressInfo).port;
+
+    const ada = await client(port);
+    const created = await new Promise<Ack>((resolve) =>
+      ada.emit("lobby:create", { name: "Ada", game: "blackjack" }, resolve),
+    );
+    const code = created.ok ? created.code : "";
+    const adaSeat = created.ok ? created.seatId : "";
+    const bo = await client(port);
+    const joined = await join(bo, "Bo", code);
+    const boSeat = joined.ok ? joined.seatId : "";
+    await stateWhere(ada, (state) => state.seats.length === 2);
+
+    // Bo mocks Ada, and Ada is about to win the hand.
+    expect((await throwAt(bo, made.id, adaSeat)).ok).toBe(true);
+
+    await act(ada, { type: "bet", amount: 500 });
+    await act(ada, { type: "deal" });
+    const dealt = await stateWhere(ada, (state) => state.phase !== "betting", 4000);
+    if (dealt.phase === "playing") {
+      await act(ada, { type: "stand" });
+    }
+
+    const back = await tauntWhere(bo, (one) => one.revenge, 8000);
+
+    expect(back).toMatchObject({
+      revenge: true,
+      atSeatId: boSeat,
+      fromSeatId: adaSeat,
+      chips: 250,
+    });
+    // And the chips actually reached the person who was mocked and then won.
+    const settled = await chipsOf(store, ids[0] as string);
+    expect(settled).toBeGreaterThanOrEqual(STARTING_CHIPS + 250);
+  }, 20_000);
 });
