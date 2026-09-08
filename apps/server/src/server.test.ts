@@ -1036,3 +1036,70 @@ describe("which addresses belong to the client", () => {
     expect(CLIENT_ROUTE.test("/ogre")).toBe(true);
   });
 });
+
+describe("somebody who walks away without saying so", () => {
+  it("keeps their seat for a moment, so a refresh can reclaim it", async () => {
+    await start();
+    const host = await client();
+    const ack = await create(host, "Ada");
+    const guest = await client();
+    await join(guest, "Bo", (ack as { code: string }).code);
+    await stateWhere(host, (state) => state.seats.length === 2);
+
+    guest.close();
+
+    // Marked gone at once, so the table can say what happened rather than
+    // pretending they are still there deciding.
+    const gone = await stateWhere(host, (state) =>
+      state.seats.some((seat) => seat.name === "Bo" && !seat.connected),
+    );
+    expect(gone.seats).toHaveLength(2);
+  });
+
+  it("gives the seat up once they have not come back", async () => {
+    /*
+     * A dropped connection is the ordinary way people leave — a closed laptop,
+     * a train tunnel, a phone going to sleep. Holding their seat forever leaves
+     * a table that cannot fill and, at a chips table, one that cannot deal for
+     * want of a second player who is not actually there.
+     *
+     * The grace period is 90 seconds in production and 300ms here.
+     */
+    await start();
+    const host = await client();
+    const ack = await create(host, "Ada");
+    const guest = await client();
+    await join(guest, "Bo", (ack as { code: string }).code);
+    await stateWhere(host, (state) => state.seats.length === 2);
+
+    guest.close();
+
+    const alone = await stateWhere(host, (state) => state.seats.length === 1, 4000);
+    expect(alone.seats[0]?.name).toBe("Ada");
+  });
+
+  it("keeps the seat of somebody who comes straight back", async () => {
+    await start();
+    const host = await client();
+    const ack = await create(host, "Ada");
+    const code = (ack as { code: string }).code;
+    const guest = await client();
+    const seated = await join(guest, "Bo", code);
+    await stateWhere(host, (state) => state.seats.length === 2);
+
+    guest.close();
+    const back = await client();
+    await new Promise<void>((resolve) => {
+      back.emit("lobby:resume", { seatId: (seated as { seatId: string }).seatId, code }, () =>
+        resolve(),
+      );
+    });
+
+    // Past the grace period, and still two: the timer must not take a seat
+    // whose owner has already reclaimed it.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const state = await stateWhere(host, () => true);
+    expect(state.seats).toHaveLength(2);
+  });
+});
+

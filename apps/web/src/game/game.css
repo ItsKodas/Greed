@@ -295,10 +295,20 @@
 
 /* Gold, because it is money. */
 .me__chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
   font-size: var(--gr-text-sm);
   color: var(--gr-color-chip);
+}
+
+/* Sits on the type's own baseline rather than the line box's, so the chip
+   reads as part of the figure instead of floating above it. */
+.chip-mark {
+  display: block;
+  flex: none;
 }
 
 /* ------------------------------------------------------------- icon buttons */

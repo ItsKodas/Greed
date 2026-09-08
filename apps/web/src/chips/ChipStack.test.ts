@@ -21,8 +21,8 @@ describe("counting a wager out in chips", () => {
 
   it("keeps an odd remainder as a chip rather than losing it", () => {
     /*
-     * Nothing at this table can stake seventy — bets are built out of the four
-     * denominations — but a stack that quietly dropped it would be a stack
+     * Nothing at this table can stake seventy — bets are built out of the
+     * minted denominations — but a stack that quietly dropped it would be one
      * that disagreed with the figure printed next to it, which is the one
      * failure worth ruling out entirely.
      */
@@ -49,11 +49,11 @@ describe("counting a wager out in chips", () => {
 
 describe("counting a balance in the bigger plates", () => {
   it("uses the plates a wager cannot", () => {
-    // The betting tray holds four denominations; a balance is counted on all
-    // of them, or forty thousand would be forty identical chips.
+    // The twenty-five is the one plate a wager cannot use, because a single
+    // one of them would stake more than a table's ten-thousand maximum.
     expect(chipsFor(40_000, LADDER)).toEqual([25000, 5000, 5000, 5000]);
-    // The same balance on the betting ladder: forty chips of one colour.
-    expect(chipsFor(40_000)).toHaveLength(40);
+    // The same balance on the betting ladder, which tops out at five thousand.
+    expect(chipsFor(40_000)).toHaveLength(8);
   });
 
   it("still adds up, on the long ladder as on the short one", () => {

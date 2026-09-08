@@ -150,13 +150,51 @@
  *
  * Only ever drawn when there is more than one: with a single hand the seat's
  * own border already says whose turn it is, and saying it twice would make the
- * ordinary case look like the exception.
+ * ordinary case look like the exception. So the padding and the border sit on
+ * the split container, and a seat holding one hand is untouched.
  */
-.bj__hand--live {
-  margin-left: calc(var(--gr-space-2) * -1);
-  padding-left: var(--gr-space-2);
-  border-left: 2px solid var(--gr-color-neon);
+.bj__hands--split .bj__hand {
+  padding: var(--gr-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--gr-radius-sm);
+  transition:
+    opacity 180ms ease,
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
+
+/*
+ * The hand not being played steps back, and the live one is lit.
+ *
+ * This was a two-pixel rule down the left, which is the same amount of ink
+ * whether it is there or not — you had to go looking for it to find out which
+ * hand you were being asked about. Contrast is what carries at a glance, so
+ * the quiet one goes quiet.
+ *
+ * The lit half borrows the treatment a seat already uses for whose turn it is,
+ * rather than inventing a second way of saying the same thing one level down.
+ */
+.bj__hands--split .bj__hand:not(.bj__hand--live) {
+  opacity: 0.45;
+}
+
+/*
+ * Matched through the container rather than on its own, so it out-ranks the
+ * transparent border set just above by weight rather than by !important. A
+ * bare .bj__hand--live is one class against two and loses, which is the same
+ * specificity trap that once shipped Greed lit blue.
+ */
+.bj__hands--split .bj__hand--live {
+  opacity: 1;
+  border-color: var(--gr-color-neon);
+  background-color: color-mix(in srgb, var(--gr-color-neon) 14%, transparent);
+}
+
+/*
+ * No glow on it, deliberately. The seat is already pulsing to say it is
+ * waiting on you; a second pulse inside it would be two motions arguing over
+ * one thing. This says *which*, and the seat says *now*.
+ */
 
 /* What this hand alone has on the felt, when the seat has more than one. */
 .bj__stake-small {
@@ -854,6 +892,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .bj__hands--split .bj__hand {
+    transition: none;
+  }
+
   .bj-card--deal,
   .bj-card--turn,
   .bj-card--fold,

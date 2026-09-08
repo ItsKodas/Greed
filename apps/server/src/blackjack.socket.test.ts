@@ -66,7 +66,13 @@ async function startRoom(
    * actions they are trying to take; the one test that is about the loop
    * turns it right down.
    */
-  timings: { bettingMs?: number; settleMs?: number; turnMs?: number; lastCallMs?: number } = {},
+  timings: {
+    bettingMs?: number;
+    settleMs?: number;
+    turnMs?: number;
+    lastCallMs?: number;
+    reconnectGraceMs?: number;
+  } = {},
   // A long window for bets so the table does not deal underneath a test that
   // is still setting itself up, and almost no wait between rounds so one that
   // needs several hands is not sitting through six seconds of each.
@@ -103,6 +109,9 @@ async function startRoom(
     settleMs,
     ...(timings.turnMs === undefined ? {} : { turnMs: timings.turnMs }),
     ...(timings.lastCallMs === undefined ? {} : { lastCallMs: timings.lastCallMs }),
+    ...(timings.reconnectGraceMs === undefined
+      ? {}
+      : { reconnectGraceMs: timings.reconnectGraceMs }),
     identify: () => {
       const id = ids[seen] ?? null;
       seen += 1;
@@ -640,3 +649,37 @@ describe("chips are only won from real people", () => {
     expect(dealt.seats[0]?.hands[0]?.cards.length).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe("a player who drops out without leaving", () => {
+  it("gives up their seat, and the table stops dealing for chips", async () => {
+    /*
+     * The ordinary way people leave a table: a closed laptop, a tunnel, a
+     * phone going to sleep. Nobody presses leave.
+     *
+     * At a chips table this matters more than tidiness. A seat held by
+     * somebody who is not there still counts towards the two real players the
+     * house requires, so a table that never gave it up would happily deal on
+     * — one live player against a ghost, which is exactly the arrangement
+     * "chips are only won from real people" exists to forbid.
+     */
+    const { port } = await startRoom(["Ada", "Bo"], { reconnectGraceMs: 250 });
+    const ada = await client(port);
+    await open_(ada, "Ada");
+    const code = (await stateWhere(ada, (view) => view.seats.length === 1)).code;
+
+    const bo = await client(port);
+    await new Promise<void>((resolve) =>
+      bo.emit("lobby:join", { name: "Bo", code }, () => resolve()),
+    );
+    await stateWhere(ada, (view) => view.seats.length === 2);
+
+    bo.close();
+
+    // Marked gone at once, then released once they have not come back.
+    const alone = await stateWhere(ada, (view) => view.seats.length === 1, 4000);
+    expect(alone.seats[0]?.name).toBe("Ada");
+    // And with one real player left, the table will not deal for chips.
+    expect(alone.waitingForPlayers).toBe(true);
+  });
+});
+

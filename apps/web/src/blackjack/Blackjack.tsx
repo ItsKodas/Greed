@@ -3,7 +3,7 @@ import { LAST_CALL_MS, value, WINDOWS } from "@backroom/game-blackjack";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Chip } from "../chips/Chip.js";
+import { Chip, MINTED } from "../chips/Chip.js";
 import { ChipStack } from "../chips/ChipStack.js";
 import { Avatar } from "../game/Avatar.js";
 import { play } from "../game/audio.js";
@@ -37,8 +37,15 @@ import "./blackjack.css";
 type Table = TableSocketHook<TableView>;
 
 const fmt = (n: number) => n.toLocaleString("en-US");
-/** Denominations you can stack, not amounts you can pick from. */
-const CHIPS = [100, 250, 500, 1000];
+/*
+ * Denominations you can stack, not amounts you can pick from — smallest first,
+ * because the tray reads left to right.
+ *
+ * Taken from MINTED rather than listed again here. It was listed again here,
+ * and a second list of what a player may bet with is a second thing to keep in
+ * step with the chips that actually exist.
+ */
+const CHIPS = [...MINTED].reverse();
 
 export function Blackjack() {
   const navigate = useNavigate();
@@ -204,7 +211,7 @@ function Felt({
             {/* One block per hand. Usually one; two after a split, and then
                 the live one is marked, because "your turn" is no longer enough
                 to say which cards you are being asked about. */}
-            <div className="bj__hands">
+            <div className={`bj__hands${seat.hands.length > 1 ? " bj__hands--split" : ""}`}>
               {seat.hands.map((hand, index) => (
                 <div
                   // Position is the identity: hands are appended and never

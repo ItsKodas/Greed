@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ChipMark } from "../chips/Chip.js";
 import { Avatar } from "../game/Avatar.js";
 import { compact, exact } from "../game/money.js";
 import { Sign } from "../game/Sign.js";
@@ -150,6 +151,7 @@ function Who({ account }: { account: Account }) {
           * the profile page it links to writes it out.
           */}
         <span className="me__chips" title={`${exact(account.profile.chips)} chips`}>
+          <ChipMark />
           {compact(account.profile.chips)}
         </span>
       </Link>
