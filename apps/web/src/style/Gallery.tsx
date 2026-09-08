@@ -1,8 +1,10 @@
 import { Sign } from "../game/Sign.js";
 import { Deck } from "./Deck.js";
+import { SlotMockup } from "./SlotMockup.js";
 import { Swatches } from "./Swatches.js";
 import { TextureTiles } from "./TextureTiles.js";
 import { TypeSpecimen } from "./TypeSpecimen.js";
+import "@backroom/game-slots/theme.css";
 import "./gallery.css";
 
 export function Gallery() {
@@ -21,6 +23,7 @@ export function Gallery() {
       <TypeSpecimen />
       <TextureTiles />
       <Deck />
+      <SlotMockup />
     </main>
   );
 }
