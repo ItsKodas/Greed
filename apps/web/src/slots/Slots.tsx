@@ -21,6 +21,7 @@ import { ChipStack } from "../chips/ChipStack.js";
 import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
+import { Digits } from "./Digits.js";
 import { Reel, REEL_STAGGER_MS } from "./Reel.js";
 import "@backroom/game-slots/theme.css";
 import "./slots.css";
@@ -442,9 +443,16 @@ export default function Slots() {
     landed.current = null;
 
     play("lever");
-    // Under the whole spin, and stopped by whichever reel settles last.
+    /*
+     * Under the whole spin, and stopped by whichever reel settles last.
+     *
+     * Seven tenths of where the one-shots sit. It is a bed rather than an
+     * event: it runs for two solid seconds every pull, and anything loud
+     * enough to notice becomes the thing you hear instead of the five reel
+     * stops landing on top of it.
+     */
     reelsLoop.current?.();
-    reelsLoop.current = startLoop("reels");
+    reelsLoop.current = startLoop("reels", 0.32);
 
     /*
      * An answer that never comes. The house rule is that anything shown early
@@ -839,7 +847,9 @@ export function Marquee({
       {outcome ? (
         <>
           <span className="screen__label">{wasJackpot ? "Jackpot" : "Paid"}</span>
-          <strong className="screen__figure">{said ?? ""}</strong>
+          <strong className="screen__figure">
+            <Digits value={said ?? "0"} />
+          </strong>
           <WinBreakdown lines={lines} jackpot={wasJackpot} />
         </>
       ) : message ? (
@@ -850,7 +860,9 @@ export function Marquee({
       ) : (
         <>
           <span className="screen__label">Jackpot</span>
-          <strong className="screen__figure">{exact(jackpot)}</strong>
+          <strong className="screen__figure">
+            <Digits value={exact(jackpot)} />
+          </strong>
           <p className="screen__note">
             {forFun
               ? `of ${exact(bank)} in the bank — play money, and none of it anybody's`

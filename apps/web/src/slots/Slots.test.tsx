@@ -154,7 +154,9 @@ describe("the machine's screen", () => {
       />,
     );
     expect(container.querySelector(".screen__label")?.textContent).toBe("Jackpot");
-    expect(container.querySelector(".screen__figure")?.textContent).toBe("3,200,000");
+    // The figure rolls, so the readable value is the one held for a screen
+    // reader rather than the ten digits sitting on each column's strip.
+    expect(container.querySelector(".roll__said")?.textContent).toBe("3,200,000");
   });
 
   it("shows the outcome once the reels have finished", () => {
@@ -171,7 +173,7 @@ describe("the machine's screen", () => {
       />,
     );
     expect(container.querySelector(".screen__label")?.textContent).toBe("Paid");
-    expect(container.querySelector(".screen__figure")?.textContent).toBe("6,000");
+    expect(container.querySelector(".roll__said")?.textContent).toBe("6,000");
   });
 
   it("keeps the jackpot up until the reels have actually stopped", () => {
