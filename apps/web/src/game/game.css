@@ -1963,6 +1963,25 @@
   transition-delay: 140ms;
 }
 
+/*
+ * One rule per reel, and there are five of them.
+ *
+ * These stopped at three when the drawing did, so the two new reels sat
+ * perfectly still while the other three rolled — a machine with a broken half.
+ * Nothing failed; there was simply no rule to match them.
+ */
+.cabinet:hover .art__piece--4,
+.cabinet:focus-visible .art__piece--4 {
+  transform: translateY(-80px);
+  transition-delay: 210ms;
+}
+
+.cabinet:hover .art__piece--5,
+.cabinet:focus-visible .art__piece--5 {
+  transform: translateY(-40px);
+  transition-delay: 280ms;
+}
+
 .cabinet__name {
   font-family: var(--gr-font-display);
   font-size: var(--gr-text-lg);
@@ -1985,7 +2004,9 @@
   .cabinet .art__piece,
   .cabinet:hover .art__piece--1,
   .cabinet:hover .art__piece--2,
-  .cabinet:hover .art__piece--3 {
+  .cabinet:hover .art__piece--3,
+  .cabinet:hover .art__piece--4,
+  .cabinet:hover .art__piece--5 {
     transition: none;
     transform: none;
   }
