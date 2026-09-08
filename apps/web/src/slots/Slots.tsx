@@ -210,11 +210,29 @@ export function winningCells(lines: readonly SpinLine[]): boolean[][] {
  */
 const PATIENCE_MS = 10_000;
 
-/** How much longer a reel is held when the answer is still riding on it. */
-export const HOLD_MS = 900;
+/** How much longer the first held reel takes when the answer rides on it. */
+export const HOLD_MS = 1300;
 
 /**
- * Which reels to take your time over.
+ * How much longer again each further held reel takes.
+ *
+ * The tease has to get worse, not merely continue. Two reels held for the same
+ * length is a machine that has slowed down; each one taking longer than the
+ * last is a machine drawing it out, which is the thing being paid for.
+ */
+export const HOLD_STEP_MS = 550;
+
+/**
+ * Longer still when what is riding on it is the jackpot face.
+ *
+ * Sevens are the only face whose five-across is not in the paytable at all —
+ * it pays a share of the bank instead — so a live run of them is the biggest
+ * moment this machine has, and the one worth making somebody wait for.
+ */
+export const HOLD_TOP_MS = 550;
+
+/**
+ * Which reels to take your time over, and for how long.
  *
  * The server has already said what every reel holds, so nothing here is
  * guessed — this only chooses how long the machine takes to say it, which is
@@ -222,19 +240,60 @@ export const HOLD_MS = 900;
  *
  * Worth holding for: a big face already three across, or anything four across
  * with one reel left. Small faces three across are a win but not a moment.
+ *
+ * The length is not flat, and that is the whole point of it. A hold that was
+ * the same 900ms whether you were one reel from three cheap ones or one reel
+ * from the jackpot said the same thing about both, which is to say it said
+ * nothing. The wait now grows with how much is actually riding on it: further
+ * along the run, and longer again when the run is sevens.
  */
 export function holdsFor(grid: Face[][]): number[] {
   let best = 0;
+  /* Whether any live run is on the jackpot face, which is worth extra rope. */
+  let jackpot = false;
   for (const line of PAYLINES) {
     const { face, length } = runOn(grid, line);
     const worth = length >= 4 || (length >= 3 && (face === "seven" || face === "diamond"));
     if (worth) {
       best = Math.max(best, length);
+      jackpot ||= face === "seven";
     }
   }
   // The deciding reel is the one the run has reached; hold it, and reel four
   // as well once the run is long enough to still be alive when it lands.
-  return [0, 1, 2, 3, 4].map((reel) => (reel >= 3 && reel <= best ? HOLD_MS : 0));
+  return [0, 1, 2, 3, 4].map((reel) =>
+    reel >= 3 && reel <= best
+      ? HOLD_MS + (reel - 3) * HOLD_STEP_MS + (jackpot ? HOLD_TOP_MS : 0)
+      : 0,
+  );
+}
+
+/**
+ * How long there is left to tease, from the moment one reel lands.
+ *
+ * The rising note is supposed to climb for exactly as long as the answer is
+ * still out, and it was being handed the wrong number: the next reel's hold,
+ * which is not a gap between two landings but a total measured from the start
+ * of the spin. So the sweep finished early and then sat at the top droning
+ * until the last reel arrived — the sound stopped rising well before the thing
+ * it was supposed to be raising the tension of.
+ *
+ * A reel lands at `SPIN_UP_MS + index * REEL_STAGGER_MS + hold`, so the gap
+ * between two of them is the difference, and the common start cancels out.
+ * Zero when nothing further is being held, which is the caller's signal that
+ * there is nothing to play.
+ */
+export function teaseMs(holds: readonly number[], from: number): number {
+  let last = -1;
+  for (let reel = from + 1; reel < holds.length; reel += 1) {
+    if ((holds[reel] ?? 0) > 0) {
+      last = reel;
+    }
+  }
+  if (last === -1) {
+    return 0;
+  }
+  return (last - from) * REEL_STAGGER_MS + (holds[last] ?? 0) - (holds[from] ?? 0);
 }
 
 /**
@@ -639,10 +698,16 @@ export default function Slots() {
         play("bonusAppear", scattered.current.landed());
       }
 
-      // The next reel is being held, which means the answer still rides on it.
-      const next = holds[index + 1] ?? 0;
-      if (next > 0 && rising.current === null) {
-        rising.current = riser((next + REEL_STAGGER_MS) / 1000);
+      /*
+       * The answer still rides on a reel that has not landed, so the note
+       * starts climbing — and climbs for the whole of what is left rather than
+       * for the next reel alone. With two reels held it used to top out
+       * somewhere in the middle and drone at its peak through the very moment
+       * it was there to build up to.
+       */
+      const left = teaseMs(holds, index);
+      if (left > 0 && rising.current === null) {
+        rising.current = riser(left / 1000);
       }
 
       if (index < 4) {

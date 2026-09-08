@@ -2429,3 +2429,65 @@
   height: 1em;
   line-height: 1;
 }
+
+/* --- paying another player ---------------------------------------------
+ *
+ * Lives here rather than in its own sheet because it is part of the profile,
+ * and game.css is what the profile is already dressed in. (This file is
+ * imported by main.tsx; there have been orphan stylesheets in this repo.)
+ */
+
+.send__found {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-1);
+}
+
+.send__person {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  /* A thumb's worth: picking the wrong person here sends real chips. */
+  min-height: 44px;
+  padding: var(--gr-space-1) var(--gr-space-2);
+  background: var(--gr-color-smoke);
+  border: 1px solid transparent;
+  border-radius: var(--gr-radius-md);
+  color: var(--gr-color-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.send__person:hover,
+.send__person:focus-visible {
+  border-color: var(--gr-color-neon);
+  background: var(--gr-color-smoke-lit);
+}
+
+.send__picked {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  padding: var(--gr-space-2);
+  background: var(--gr-color-smoke);
+  border-radius: var(--gr-radius-md);
+}
+
+.send__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.send__face {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}

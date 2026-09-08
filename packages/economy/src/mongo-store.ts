@@ -1,8 +1,18 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { judgeCode, mintCodeText, normaliseCode } from "./codes.js";
 import type { CodeRecord, RedeemResult } from "./codes.js";
-import type { BankName } from "./store.js";
+import { judgeEmote } from "./emotes.js";
+import type {
+  EmoteAsset,
+  EmoteRecord,
+  ImageMime,
+  NewEmote,
+  SoundMime,
+} from "./emotes.js";
+import { judgeSend, leftToSend, SEND_WINDOW_MS } from "./transfers.js";
+import type { SendResult, Transfer } from "./transfers.js";
+import type { BankName, PublicPlayer } from "./store.js";
 import type { Model } from "mongoose";
 import {
   DAILY_FLOOR,
@@ -149,6 +159,137 @@ function bankId(which: BankName): string {
   return which === "slots" ? "bank" : which;
 }
 
+/**
+ * An emote, files and all, in one document.
+ *
+ * The bytes live in the document rather than in GridFS because they are
+ * capped at two megabytes and one, well inside Mongo's sixteen — and GridFS
+ * would be a second collection, a chunking scheme and a cleanup problem in
+ * exchange for a limit nothing is near.
+ *
+ * The sizes are stored beside the files rather than measured off them, so the
+ * list can be answered without reading a single byte of picture.
+ */
+interface EmoteDoc {
+  _id: string;
+  name: string;
+  cost: number;
+  imageMime: ImageMime;
+  soundMime: SoundMime | null;
+  image: Buffer;
+  sound: Buffer | null;
+  imageBytes: number;
+  soundBytes: number | null;
+  createdBy: string;
+  createdAt: number;
+  retired: boolean;
+}
+
+const emoteSchema = new mongoose.Schema<EmoteDoc>(
+  {
+    _id: { type: String, required: true },
+    name: { type: String, required: true },
+    cost: { type: Number, required: true },
+    imageMime: { type: String, required: true },
+    soundMime: { type: String, default: null },
+    image: { type: Buffer, required: true },
+    sound: { type: Buffer, default: null },
+    imageBytes: { type: Number, required: true },
+    soundBytes: { type: Number, default: null },
+    createdBy: { type: String, required: true },
+    createdAt: { type: Number, required: true },
+    retired: { type: Boolean, default: false },
+  },
+  { timestamps: false },
+);
+
+/** Newest first is how both the picker and the admin list read them. */
+emoteSchema.index({ createdAt: -1 });
+
+/** The record without the files, which is all anything but the two asset routes wants. */
+const EMOTE_FIELDS = "-image -sound";
+
+/**
+ * The bytes out of a BSON binary field, whatever shape they arrive in.
+ *
+ * This exists because of a bug that served every emote as an empty file while
+ * answering 200 with the right content type — a broken image and a silent
+ * sound, and nothing anywhere saying why.
+ *
+ * `.lean()` hands back what the driver produced rather than what Mongoose
+ * would have cast it to, and for a binary field that is a `Binary`, not a
+ * `Buffer`. The trap is that `Binary` has a `length` *method*. `Uint8Array.from`
+ * reads `.length` as a number, gets `NaN` from a function, and quietly returns
+ * an empty array — no throw, no warning, nothing to notice in a log.
+ *
+ * So every shape is handled explicitly rather than trusted to be array-like,
+ * and anything unrecognised throws instead of becoming a silent empty file.
+ * A loud failure here is worth far more than a quiet one: the quiet one
+ * reached production.
+ */
+export function bytesOf(value: unknown): Uint8Array {
+  // A Buffer already is a Uint8Array, so this covers both.
+  if (value instanceof Uint8Array) {
+    return Uint8Array.from(value);
+  }
+  const held = (value as { buffer?: unknown } | null)?.buffer;
+  // What the driver actually returns: a BSON Binary wrapping the bytes.
+  if (held instanceof Uint8Array) {
+    return Uint8Array.from(held);
+  }
+  // A document that has been through JSON, where a Buffer becomes this.
+  const data = (value as { type?: string; data?: unknown } | null)?.data;
+  if (Array.isArray(data)) {
+    return Uint8Array.from(data as number[]);
+  }
+  throw new TypeError(
+    `emote bytes came back as ${Object.prototype.toString.call(value)}, which this does not know how to read`,
+  );
+}
+
+/** One transfer, written down and never edited. */
+interface TransferDoc {
+  _id: string;
+  fromId: string;
+  fromName: string;
+  toId: string;
+  toName: string;
+  amount: number;
+  at: number;
+}
+
+const transferSchema = new mongoose.Schema<TransferDoc>(
+  {
+    _id: { type: String, required: true },
+    fromId: { type: String, required: true },
+    fromName: { type: String, required: true },
+    toId: { type: String, required: true },
+    toName: { type: String, required: true },
+    amount: { type: Number, required: true },
+    at: { type: Number, required: true },
+  },
+  { timestamps: false },
+);
+/* The two questions ever asked of it: what one account has sent lately, and
+   everything either end of an account's transfers. */
+transferSchema.index({ fromId: 1, at: -1 });
+transferSchema.index({ toId: 1, at: -1 });
+
+function toEmote(doc: EmoteDoc): EmoteRecord {
+  return {
+    id: doc._id,
+    name: doc.name,
+    cost: doc.cost,
+    imageMime: doc.imageMime,
+    soundMime: doc.soundMime,
+    imageBytes: doc.imageBytes,
+    soundBytes: doc.soundBytes,
+    createdBy: doc.createdBy,
+    createdAt: doc.createdAt,
+    retired: doc.retired,
+  };
+}
+
 function toProfile(doc: UserDoc): Profile {
   return {
     id: doc._id.toString(),
@@ -181,6 +322,8 @@ export class MongoStore implements Store {
   private readonly codes: Model<CodeRecord>;
   private readonly redemptions: Model<RedemptionDoc>;
   private readonly house: Model<HouseDoc>;
+  private readonly emotes: Model<EmoteDoc>;
+  private readonly ledger: Model<TransferDoc>;
 
   private constructor(private readonly connection: mongoose.Connection) {
     this.users = connection.model<UserDoc>("User", userSchema);
@@ -188,6 +331,8 @@ export class MongoStore implements Store {
     this.codes = connection.model<CodeRecord>("Code", codeSchema);
     this.redemptions = connection.model<RedemptionDoc>("Redemption", redemptionSchema);
     this.house = connection.model<HouseDoc>("House", houseSchema);
+    this.emotes = connection.model<EmoteDoc>("Emote", emoteSchema);
+    this.ledger = connection.model<TransferDoc>("Transfer", transferSchema);
   }
 
   /**
@@ -485,6 +630,181 @@ export class MongoStore implements Store {
     await this.adjustChips(userId, record.chips);
     const after = await this.get(userId);
     return { ok: true, chips: record.chips, balance: after?.chips ?? record.chips };
+  }
+
+  async findPlayers(prefix: string, limit: number): Promise<PublicPlayer[]> {
+    const wanted = prefix.trim();
+    if (wanted.length === 0) {
+      return [];
+    }
+    /*
+     * Anchored, and the input escaped before it is ever a pattern. A name is
+     * whatever somebody typed into Discord, and a name containing regex
+     * punctuation must be a name to search for rather than a pattern to run.
+     */
+    const safe = wanted.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const docs = await this.users
+      .find({ name: new RegExp(`^${safe}`, "i") })
+      .select("name avatar accentColor")
+      .limit(limit)
+      .lean<Array<UserDoc & { _id: mongoose.Types.ObjectId }>>();
+    return docs.map((doc) => ({
+      id: doc._id.toString(),
+      name: doc.name,
+      avatar: doc.avatar,
+      accentColor: doc.accentColor,
+    }));
+  }
+
+  async sentSince(userId: string, since: number): Promise<number> {
+    const [summed] = await this.ledger.aggregate<{ total: number }>([
+      { $match: { fromId: userId, at: { $gte: since } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
+    ]);
+    return summed?.total ?? 0;
+  }
+
+  async transfers(userId: string, limit: number): Promise<Transfer[]> {
+    const docs = await this.ledger
+      .find({ $or: [{ fromId: userId }, { toId: userId }] })
+      .sort({ at: -1 })
+      .limit(limit)
+      .lean<TransferDoc[]>();
+    return docs.map((doc) => ({
+      id: doc._id,
+      fromId: doc.fromId,
+      fromName: doc.fromName,
+      toId: doc.toId,
+      toName: doc.toName,
+      amount: doc.amount,
+      at: doc.at,
+    }));
+  }
+
+  /**
+   * The order here is the whole safety argument and must not be rearranged.
+   *
+   * The debit goes first and is conditional — `adjustChips` refuses rather
+   * than overdrawing — so by the time anything is owed to the recipient the
+   * chips have already left the sender. Crediting first would mean a failed
+   * debit had handed out chips nobody paid for, which is the one thing this
+   * building must not contain.
+   *
+   * If the credit then fails, the debit is put back. That leaves the pair
+   * either wholly done or wholly undone, which is the most that can be
+   * promised without a transaction — and a refund that itself failed would be
+   * chips destroyed rather than created, which is the safer direction to fail
+   * in.
+   */
+  async send(fromId: string, toId: string, amount: number): Promise<SendResult> {
+    const [from, to] = await Promise.all([this.get(fromId), this.get(toId)]);
+    const sentToday = await this.sentSince(fromId, Date.now() - SEND_WINDOW_MS);
+    const left = leftToSend(sentToday);
+    if (from === null || to === null) {
+      return { ok: false, reason: "no-recipient", leftToday: left };
+    }
+    if (fromId === toId) {
+      return { ok: false, reason: "to-yourself", leftToday: left };
+    }
+    const judged = judgeSend({ amount, balance: from.chips, sentToday });
+    if (!judged.ok) {
+      return { ok: false, reason: judged.reason, leftToday: left };
+    }
+
+    if (!(await this.adjustChips(fromId, -amount))) {
+      // Somebody else spent it between the read above and here.
+      return { ok: false, reason: "not-enough", leftToday: left };
+    }
+    try {
+      await this.adjustChips(toId, amount);
+    } catch (error) {
+      await this.adjustChips(fromId, amount);
+      throw error;
+    }
+
+    await this.ledger.create({
+      _id: randomUUID(),
+      fromId,
+      fromName: from.name,
+      toId,
+      toName: to.name,
+      amount,
+      at: Date.now(),
+    });
+    const after = await this.get(fromId);
+    return {
+      ok: true,
+      balance: after?.chips ?? from.chips - amount,
+      amount,
+      leftToday: left - amount,
+      to: { id: to.id, name: to.name },
+    };
+  }
+
+  async addEmote(input: NewEmote): Promise<EmoteRecord> {
+    // Judged here for the same reason the memory store does it: this is the
+    // last point before the bytes become something every browser will load.
+    const judged = judgeEmote(input);
+    if (!judged.ok) {
+      throw new Error(judged.reason);
+    }
+    const doc: EmoteDoc = {
+      _id: randomUUID(),
+      name: judged.emote.name,
+      cost: judged.emote.cost,
+      imageMime: judged.emote.imageMime,
+      soundMime: judged.emote.soundMime,
+      image: Buffer.from(input.image),
+      sound:
+        judged.emote.soundMime === null || input.sound === null
+          ? null
+          : Buffer.from(input.sound),
+      imageBytes: input.image.length,
+      soundBytes: judged.emote.soundMime === null ? null : (input.sound?.length ?? null),
+      createdBy: input.createdBy,
+      createdAt: Date.now(),
+      retired: false,
+    };
+    await this.emotes.create(doc);
+    return toEmote(doc);
+  }
+
+  async listEmotes(all: boolean): Promise<EmoteRecord[]> {
+    const docs = await this.emotes
+      .find(all ? {} : { retired: false })
+      // Without this every entry drags its picture across the wire, which is
+      // the difference between a list and a download.
+      .select(EMOTE_FIELDS)
+      .sort({ createdAt: -1 })
+      .lean<EmoteDoc[]>();
+    return docs.map(toEmote);
+  }
+
+  async emoteAsset(id: string, which: "image" | "sound"): Promise<EmoteAsset | null> {
+    const doc = await this.emotes
+      .findById(id)
+      .select(which === "image" ? "image imageMime" : "sound soundMime")
+      .lean<EmoteDoc | null>();
+    if (doc === null) {
+      return null;
+    }
+    if (which === "image") {
+      return { mime: doc.imageMime, bytes: bytesOf(doc.image) };
+    }
+    if (doc.sound === null || doc.sound === undefined || doc.soundMime === null) {
+      return null;
+    }
+    return { mime: doc.soundMime, bytes: bytesOf(doc.sound) };
+  }
+
+  async retireEmote(id: string): Promise<boolean> {
+    // Conditional on it not already being retired, so the answer distinguishes
+    // "just withdrawn" from "was withdrawn last week" without a second read.
+    const result = await this.emotes.updateOne(
+      { _id: id, retired: false },
+      { $set: { retired: true } },
+    );
+    return result.modifiedCount > 0;
   }
 
   async close(): Promise<void> {

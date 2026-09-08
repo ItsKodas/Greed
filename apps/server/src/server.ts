@@ -1,11 +1,11 @@
-import { randomInt } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { Server as HttpServer } from "node:http";
 import { createServer as createHttpServer } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
-import { Catalogue, COMING } from "@backroom/core";
+import { Catalogue, COMING, Taunts } from "@backroom/core";
 import type { BankName, Store } from "@backroom/economy";
 import { judgeDaily, MemoryStore } from "@backroom/economy";
 import {
@@ -38,6 +38,7 @@ import type {
   SpinNews,
   SpinResult,
   TableOnOffer,
+  TauntPlay,
 } from "@backroom/shared";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 // From the subpath, not the barrel: the client imports the barrel, and pulling
@@ -54,6 +55,7 @@ import {
   setBuyInSchema,
   setListedSchema,
   setRulesSchema,
+  tauntSchema,
   watchSchema,
   spinSchema,
 } from "@backroom/shared/schemas";
@@ -65,6 +67,8 @@ import { readAdmins } from "./admin.js";
 import type { AuthConfig } from "./auth.js";
 import { mountAuth, readAuthConfig } from "./auth.js";
 import { friendlyRedirect } from "./domains.js";
+import { EMOTE_UPLOAD_PATH, emoteUrls, mountEmotes } from "./emotes.js";
+import { mountTransfers } from "./transfers.js";
 import { inject, pageFor } from "./meta.js";
 import type { CardSpec } from "./og.js";
 import { Avatars, Cards } from "./og.js";
@@ -211,6 +215,16 @@ const RATE_WINDOW_MS = 2000;
 /** Chat is throttled harder, because it is the only thing others must read. */
 const CHAT_EVENTS = 5;
 const CHAT_WINDOW_MS = 5000;
+/**
+ * Taunts are throttled harder still, and on their own budget.
+ *
+ * Harder because one costs chips and lands as a picture over somebody's cards
+ * — a fast enough sender could bury the table under them and be out of pocket
+ * for the privilege, which is not a defence. Its own budget because spending
+ * chips should not use up the allowance for saying "nice hand".
+ */
+const TAUNT_EVENTS = 3;
+const TAUNT_WINDOW_MS = 10_000;
 
 interface Budget {
   count: number;
@@ -318,7 +332,28 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   const redeemBudgets = new Map<string, Budget>();
   /** Tables already paid out, so a re-broadcast cannot pay twice. */
   const settled = new Set<string>();
+  /**
+   * Chips staked on people by whoever paid to mock them.
+   *
+   * Lives here rather than in a game, because no game knows what a taunt is
+   * and every one of them gets taunts anyway — the same reasoning that keeps
+   * `listed` out of the games and in the envelope around them.
+   */
+  const taunts = new Taunts();
   const chatBudgets = new Map<string, Budget>();
+  const tauntBudgets = new Map<string, Budget>();
+  /** Searching for somebody and paying them, budgeted by account. */
+  const sendBudgets = new Map<string, Budget>();
+  /**
+   * The emotes this server has seen thrown, by id.
+   *
+   * A pool holds an emote's id and nothing else, but replaying one needs its
+   * name and its files — and by then it may have been retired, so the
+   * catalogue is no longer a place to look it up. Everything in a pool was
+   * thrown while this process was running, so remembering it on the way past
+   * is all the lookup a replay ever needs.
+   */
+  const emotesSeen = new Map<string, { name: string; image: string; sound: string | null }>();
   /** Every timer we own, so close() can leave no handle behind. */
   const pending = new Set<NodeJS.Timeout>();
 
@@ -337,7 +372,20 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * small on purpose. Without this, request.body is undefined and every POST
    * silently behaves as though it were sent empty.
    */
-  app.use(express.json({ limit: "8kb" }));
+  /*
+   * Every path but one. An emote upload carries a picture, which is several
+   * hundred times this limit — and a body refused at eight kilobytes cannot be
+   * un-refused by a larger parser mounted further down, so the small one has
+   * to decline to look at that route rather than reject it.
+   */
+  const smallJson = express.json({ limit: "8kb" });
+  app.use((request, response, next) => {
+    if (request.path === EMOTE_UPLOAD_PATH) {
+      next();
+      return;
+    }
+    smallJson(request, response, next);
+  });
 
   const trustProxy = resolveTrustProxy(process.env["TRUST_PROXY"]);
   if (trustProxy !== null) {
@@ -842,6 +890,17 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     })();
   };
 
+  mountEmotes(app, { store, requireAdmin, userIdOf: userIdOfRequest });
+  mountTransfers(app, {
+    store,
+    whoIs: async (request) => {
+      const profile = await whoIs(request as express.Request);
+      return profile === null ? null : { id: profile.id, name: profile.name };
+    },
+    tellChips,
+    withinBudget: (id, max, windowMs) => withinBudget(sendBudgets, id, max, windowMs),
+  });
+
   app.get("/api/admin/codes", requireAdmin, (_request, response) => {
     void (async () => {
       response.json({ codes: await store.listCodes(50) });
@@ -1115,9 +1174,82 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         // same reason: it is the room's fact about the table, not the game's.
         game: seated.game.listing.id,
         listed: seated.listed,
+        taunts: seated.table.seats
+          .map((one) => ({ seatId: one.id, chips: taunts.held(code, one.id) }))
+          .filter((stake) => stake.chips > 0),
         ...(seated.table.view(seat) as Record<string, unknown>),
       });
     }
+  }
+
+  /**
+   * Settles the taunts staked at a table that has just finished a hand.
+   *
+   * Everything staked on somebody who won goes to them, and each taunt they
+   * collected on is thrown back at whoever sent it. Everything staked on
+   * anybody else is burned — those chips left an account when the taunt was
+   * thrown and no account receives them, which is the cost of a taunt being
+   * real. Nothing here can mint: a pool is a sum of deposits and pays at most
+   * what it holds, which `Taunts.resolve` guarantees and its tests pin.
+   *
+   * A game that does not say who won gets no settlement at all rather than a
+   * guess, and its pools stay staked until the table closes.
+   */
+  async function payTaunts(
+    code: string,
+    seated: Seated,
+    /**
+     * The seats that won, read off the table *before* it was settled.
+     *
+     * Passed in rather than asked for here, and that is the whole of a bug
+     * this had in production. Settling talks to the economy, so it yields; a
+     * table that deals itself does not stand still while it does, and by the
+     * time the last write came back the felt had been cleared for the next
+     * hand. Asking then got "nobody won", so every pool was burned — no chips
+     * to the person who had been mocked, and no emote thrown back at whoever
+     * mocked them.
+     *
+     * Null for a game that does not say who won; its pools wait for the table
+     * to close rather than being guessed at.
+     */
+    winners: readonly string[] | null,
+  ): Promise<void> {
+    if (winners === null) {
+      return;
+    }
+    const { paid } = taunts.resolve(code, winners);
+    if (paid.length === 0) {
+      // Still worth re-sending: a burned pool has to stop showing on the felt.
+      sendState(code, seated);
+      return;
+    }
+    for (const payout of paid) {
+      await deps.give(payout.userId, payout.chips);
+      for (const one of payout.revenge) {
+        const emote = emotesSeen.get(one.emoteId);
+        if (emote === undefined) {
+          continue;
+        }
+        io.to(code).emit("taunt:play", {
+          // A fresh id: this is a second appearance of the same emote, and a
+          // client keying an animation on it must not take it for a repeat of
+          // the first.
+          id: `${one.id}-back`,
+          emoteId: one.emoteId,
+          name: emote.name,
+          image: emote.image,
+          sound: emote.sound,
+          // Turned around, which is the whole point of it.
+          fromSeatId: one.atSeatId,
+          fromName: one.atName,
+          atSeatId: one.fromSeatId,
+          atName: one.fromName,
+          chips: one.chips,
+          revenge: true,
+        } satisfies TauntPlay);
+      }
+    }
+    sendState(code, seated);
   }
 
   function broadcast(code: string): void {
@@ -1142,8 +1274,24 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       settled.delete(code);
     } else if (!settled.has(code)) {
       settled.add(code);
+      /*
+       * Read before settling, never after. `settle` in the games themselves
+       * carries the same warning about the same hazard: the moment it awaits,
+       * the table is free to move on, and a continuous table clears its felt
+       * on a timer. What the hand came to is a fact now, not somewhere to go
+       * looking once the money has finished moving.
+       */
+      const won = seated.game.winners?.(seated.table) ?? null;
       void seated.game
         .settle(seated.table, deps)
+        /*
+         * After the game has paid, not alongside it. A taunt pays out of chips
+         * that left an account when it was thrown, so the order is not a money
+         * question — but a player watching their balance should see the hand
+         * settle and then the pool come in, rather than the two arriving
+         * interleaved and neither explaining the other.
+         */
+        .then(() => payTaunts(code, seated, won))
         .catch((error) => console.error("settling failed", error));
     }
     /*
@@ -1289,6 +1437,12 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         turnClocks.delete(code);
         pauses.delete(code);
         botMoves.delete(code);
+        /*
+         * Whatever was staked here is burned. The table never reached a
+         * result, so nobody won one — which is the same answer the rules give
+         * for a taunt whose target simply lost.
+         */
+        taunts.forget(code);
         rooms.delete(code);
       }
     }, emptyRoomTtlMs);
@@ -1769,6 +1923,119 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         text: parsed.data.text,
         at: Date.now(),
       });
+    });
+
+    /**
+     * Paying to mock somebody.
+     *
+     * The order below is the safety argument and must not be rearranged. The
+     * chips are taken from the sender *before* anything is staked or shown, so
+     * a taunt that appears on the felt is one that has already been paid for.
+     * Taking last would let a player with an empty account throw as many as
+     * they liked and have every one of them land.
+     *
+     * The cost is read off the emote rather than out of the payload, because a
+     * price a client sends is a price the client chose.
+     */
+    socket.on("taunt:send", (payload, ack) => {
+      void (async () => {
+        const parsed = tauntSchema.safeParse(payload);
+        if (!parsed.success) {
+          ack({ ok: false, error: "That is not a taunt." });
+          return;
+        }
+        const seat = sockets.get(socket.id);
+        if (seat === undefined) {
+          ack({ ok: false, error: "Take a seat first." });
+          return;
+        }
+        if (!withinBudget(tauntBudgets, socket.id, TAUNT_EVENTS, TAUNT_WINDOW_MS)) {
+          ack({ ok: false, error: "Give them a moment." });
+          return;
+        }
+        const seated = rooms.get(seat.code);
+        if (seated === undefined) {
+          ack({ ok: false, error: "That table is gone." });
+          return;
+        }
+        const from = seated.table.seats.find((one) => one.id === seat.seatId);
+        const at = seated.table.seats.find((one) => one.id === parsed.data.seatId);
+        if (from === undefined || at === undefined) {
+          ack({ ok: false, error: "Nobody is sitting there." });
+          return;
+        }
+        if (from.id === at.id) {
+          ack({ ok: false, error: "Taunt somebody else." });
+          return;
+        }
+        /*
+         * Both ends must be a real person with an account, and this is the
+         * building's central rule rather than a convenience. A pool is chips
+         * won from whoever filled it: a bot cannot fill one because it is not
+         * a real person, and a guest can be at neither end because there is no
+         * account for the chips to leave or land in.
+         */
+        if (from.isBot || from.userId === null) {
+          ack({ ok: false, error: "Sign in to throw one of those." });
+          return;
+        }
+        if (at.isBot || at.userId === null) {
+          ack({ ok: false, error: "You can only taunt a signed-in player." });
+          return;
+        }
+
+        const emote = (await store.listEmotes(false)).find(
+          (one) => one.id === parsed.data.emoteId,
+        );
+        if (emote === undefined) {
+          ack({ ok: false, error: "No such emote." });
+          return;
+        }
+
+        // Taken first. Everything after this point is spending chips that are
+        // already gone from the sender's account.
+        if (!(await deps.take(from.userId, emote.cost))) {
+          ack({ ok: false, error: "Not enough chips." });
+          return;
+        }
+
+        const urls = emoteUrls(emote.id, emote.soundMime !== null);
+        emotesSeen.set(emote.id, { name: emote.name, image: urls.image, sound: urls.sound });
+
+        const id = randomUUID();
+        taunts.add(seat.code, {
+          id,
+          emoteId: emote.id,
+          chips: emote.cost,
+          fromSeatId: from.id,
+          fromUserId: from.userId,
+          fromName: from.name,
+          atSeatId: at.id,
+          atUserId: at.userId,
+          atName: at.name,
+          at: Date.now(),
+        });
+
+        io.to(seat.code).emit("taunt:play", {
+          id,
+          emoteId: emote.id,
+          name: emote.name,
+          image: urls.image,
+          sound: urls.sound,
+          fromSeatId: from.id,
+          fromName: from.name,
+          atSeatId: at.id,
+          atName: at.name,
+          chips: emote.cost,
+          revenge: false,
+        } satisfies TauntPlay);
+
+        // The felt has to show what is now riding on that seat.
+        sendState(seat.code, seated);
+
+        const after = await store.get(from.userId);
+        ack({ ok: true, chips: after?.chips ?? 0 });
+      })();
     });
 
     /**

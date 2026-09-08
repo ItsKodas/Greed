@@ -125,22 +125,43 @@ export function pokerAdapter(
     },
 
     /*
-     * Never, in the sense the room means it.
+     * A hand that has finished, which is not the same as chips being owed.
      *
-     * A poker table does not finish — it deals another hand, and the chips a
-     * hand moves never leave the table. What poker owes an account is what
-     * somebody took with them when they stood up, which is a queue rather than
-     * a state, and is paid through `payOut` below. Saying "settled" here
-     * instead would latch that queue: the room settles a table once and will
-     * not settle it again until it stops being settled, so the first person to
-     * stand up would be paid and the second would be swallowed.
+     * The room latches this: once per stretch of being settled, which for
+     * poker is once per showdown, because a showdown stays on screen for a
+     * moment and then the felt clears. That is exactly the shape the latch
+     * wants, and it is what makes `winners` below get asked at all — the room
+     * only asks a settled table who won.
+     *
+     * What poker owes an *account* is a different question with a different
+     * answer, and it is not this one. That is what somebody took with them
+     * when they stood up: a queue rather than a state, paid through `payOut`,
+     * which is deliberately outside the latch. A queue behind a latch pays
+     * whoever was first and swallows everybody behind them.
      */
-    isSettled() {
-      return false;
+    isSettled(table) {
+      return table.street === "showdown";
     },
 
     async settle() {
-      // Nothing: see above.
+      /*
+       * Nothing. A poker hand has already moved its chips by the time it is
+       * settled — they went from stacks into the pot and back into a stack,
+       * and none of that was ever an account's. The table is settled so that
+       * the room knows to ask who won; the money is not the room's business
+       * until somebody stands up.
+       */
+    },
+
+    /**
+     * Who just won, for the things outside the game that ride on it.
+     *
+     * Answered for a for-fun table as well, and that is the point: a taunt
+     * thrown at a player is paid for in real chips whatever the table is
+     * dealing for, so winning a friendly hand has to come good the same way.
+     */
+    winners(table) {
+      return table.paid.map((one) => one.seatId);
     },
 
     async payOut(table, deps) {

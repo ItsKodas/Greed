@@ -1,0 +1,267 @@
+/*
+ * Taunts: the picker at the table, and the picture that lands over it.
+ *
+ * The building's furniture rather than any game's, so it uses the neon and the
+ * chip gold and repaints nothing — a taunt at the dice table and a taunt at the
+ * card table are the same act, and should look it.
+ *
+ * Imported from main.tsx beside game.css, which is what makes these rules
+ * actually load. There have been orphan stylesheets in this repo.
+ */
+
+/*
+ * The chat and the taunt button share a row at the foot of a table: they are
+ * the two ways to say something to the people you are playing against, and one
+ * of them costs money.
+ */
+.play__talk {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--gr-space-2);
+}
+
+.play__talk > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.taunt-picker {
+  position: relative;
+}
+
+.taunt-picker__open {
+  white-space: nowrap;
+}
+
+.taunt-picker__panel {
+  position: absolute;
+  bottom: calc(100% + var(--gr-space-2));
+  right: 0;
+  z-index: 40;
+  width: min(320px, calc(100vw - var(--gr-space-4) * 2));
+  padding: var(--gr-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  background: var(--gr-color-slate);
+  border: 1px solid var(--gr-color-smoke-lit);
+  border-radius: var(--gr-radius-md);
+  box-shadow: 0 18px 40px var(--gr-color-shadow);
+}
+
+.taunt-picker__emotes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Three across at the panel's width, and still three on a narrow phone. */
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gr-space-2);
+}
+
+.taunt-picker__emote {
+  width: 100%;
+  /* A thumb's worth. This gets pressed mid-hand on a phone. */
+  min-height: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gr-space-1);
+  padding: var(--gr-space-2);
+  background: var(--gr-color-smoke);
+  border: 1px solid transparent;
+  border-radius: var(--gr-radius-md);
+  color: var(--gr-color-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.taunt-picker__emote:hover:not(:disabled),
+.taunt-picker__emote:focus-visible {
+  border-color: var(--gr-color-neon);
+  background: var(--gr-color-smoke-lit);
+}
+
+.taunt-picker__emote:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.taunt-picker__art {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+}
+
+.taunt-picker__name {
+  font-size: var(--gr-text-xs);
+  text-align: center;
+  /* A name is capped at 24 characters, which still overruns a third of a panel. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.taunt-picker__cost {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-chip);
+}
+
+.taunt-picker__targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+}
+
+.taunt-picker__target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gr-space-2);
+}
+
+.taunt-picker__riding {
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-chip);
+}
+
+/* --- the picture landing ------------------------------------------------ */
+
+.taunt-stage {
+  position: fixed;
+  left: 50%;
+  top: 38%;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-2);
+  /* Nothing here is reachable, and it must never swallow a press on the felt. */
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: taunt-land 2600ms ease-out forwards;
+}
+
+.taunt-stage__art {
+  width: min(220px, 52vw);
+  max-height: 40vh;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 28px var(--gr-color-shadow));
+}
+
+.taunt-stage__line {
+  margin: 0;
+  padding: var(--gr-space-2) var(--gr-space-3);
+  background: var(--gr-color-night);
+  border: 1px solid var(--gr-color-smoke-lit);
+  border-radius: var(--gr-radius-md);
+  color: var(--gr-color-ink);
+  font-size: var(--gr-text-sm);
+  text-align: center;
+}
+
+.taunt-stage__chips {
+  font-family: var(--gr-font-data);
+  color: var(--gr-color-chip);
+}
+
+/* The pool coming home, so it arrives from the other side and is lit. */
+.taunt-stage--revenge {
+  animation-name: taunt-return;
+}
+
+.taunt-stage--revenge .taunt-stage__line {
+  border-color: var(--gr-color-neon);
+  box-shadow: 0 0 18px var(--gr-color-neon-dim);
+}
+
+@keyframes taunt-land {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4) rotate(-8deg);
+  }
+  /* One overshoot and a settle. Nothing bounces twice. */
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12) rotate(2deg);
+  }
+  34% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94) rotate(0deg);
+  }
+}
+
+@keyframes taunt-return {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4) rotate(8deg);
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.12) rotate(-2deg);
+  }
+  34% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94) rotate(0deg);
+  }
+}
+
+/*
+ * Every keyframe in the building has an off switch, and the page still says
+ * everything it needs to without them: the picture and the line are what
+ * carry the news, so they simply appear and hold instead of flying in.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .taunt-stage,
+  .taunt-stage--revenge {
+    animation: taunt-hold 2600ms steps(1, end) forwards;
+  }
+
+  @keyframes taunt-hold {
+    0%,
+    92% {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%);
+    }
+  }
+}
+
+/* --- what is riding on a seat ------------------------------------------- */
+
+.taunt-riding {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gr-space-1);
+  padding: 0 var(--gr-space-1);
+  border-radius: var(--gr-radius-sm);
+  background: color-mix(in srgb, var(--gr-color-chip) 16%, transparent);
+  color: var(--gr-color-chip);
+  font-family: var(--gr-font-data);
+  font-size: var(--gr-text-xs);
+  white-space: nowrap;
+}

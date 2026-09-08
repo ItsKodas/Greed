@@ -487,3 +487,77 @@ describe("cashing out", () => {
     expect(table.canTakeOff("a")).toBe(false);
   });
 });
+
+/*
+ * Who won, as the room asks it.
+ *
+ * Nothing in poker needs this — a hand pays itself out of its own pot. It is
+ * asked because things outside the game ride on winning: a taunt thrown at a
+ * player is paid for in real chips whatever the table is dealing for, so a
+ * friendly hand has to come good the same way a paid one does.
+ */
+describe("telling the room who won", () => {
+  function played(): Table {
+    let at = 11;
+    const random = () => {
+      at = (at * 1103515245 + 12345) % 2147483648;
+      return at / 2147483648;
+    };
+    const table = new Table("WIN01", random, 50, 100, 6, 30_000, true, 2_000);
+    table.join("a", "Ada", identity("u1"));
+    table.addBot("bot:1", "Pockets", "normal");
+    table.buyIn("a", 2_000);
+    table.deal();
+    while (table.street !== "showdown" && table.toAct !== null) {
+      const seat = table.seats.find((one) => one.id === table.toAct);
+      table.act(table.toAct, table.owed(seat as never) > 0 ? "call" : "check");
+    }
+    return table;
+  }
+
+  it("says nothing while a hand is still being played", () => {
+    const adapter = pokerAdapter();
+    const table = adapter.create("WIN02", { forFun: true }) as Table;
+    table.join("a", "Ada", identity("u1"));
+    table.addBot("bot:1", "Pockets", "normal");
+    table.buyIn("a", 2_000);
+    table.deal();
+
+    // The room only asks a settled table, and a table mid-hand is not one.
+    expect(adapter.isSettled(table)).toBe(false);
+  });
+
+  it("names the seats that took the pot, once the hand is read", () => {
+    const adapter = pokerAdapter();
+    const table = played();
+    expect(table.street).toBe("showdown");
+    expect(adapter.isSettled(table)).toBe(true);
+
+    const won = adapter.winners?.(table) ?? [];
+    expect(won.length).toBeGreaterThan(0);
+    // Everybody named actually has a seat, and actually took chips.
+    for (const seatId of won) {
+      expect(table.seats.some((seat) => seat.id === seatId)).toBe(true);
+      expect(table.paid.some((one) => one.seatId === seatId && one.chips > 0)).toBe(true);
+    }
+  });
+
+  it("stops being settled once the felt is cleared", () => {
+    /*
+     * Which is what lets the room ask again next hand: it latches a settled
+     * table and only unlatches when it stops being one.
+     */
+    const adapter = pokerAdapter();
+    const table = played();
+    table.finish();
+    expect(table.street).toBe("waiting");
+    expect(adapter.isSettled(table)).toBe(false);
+  });
+
+  it("still owes an account nothing for any of it", () => {
+    // Settled here means "a hand finished", not "chips are owed". The pot went
+    // from stacks to stacks; nothing left the table.
+    const table = played();
+    expect(table.owedOut).toEqual([]);
+  });
+});

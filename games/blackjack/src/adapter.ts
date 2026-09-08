@@ -256,6 +256,28 @@ export function blackjackAdapter(
     },
 
     /**
+     * Who beat the dealer, however many hands it took.
+     *
+     * Up on the deal rather than up on a hand, which is the same line `settle`
+     * draws when it records a win: a split that takes one hand and loses more
+     * on the other did not win.
+     *
+     * Unlike `settle`, this answers for a for-fun table too. Nothing is owed
+     * there and nothing is recorded, but somebody still won the hand, and
+     * things outside the game are staked on that — a taunt thrown at a player
+     * is paid for in real chips whatever the table is dealing for.
+     */
+    winners(table) {
+      return table.seats
+        .filter((seat) => {
+          const out = seat.hands.reduce((total, hand) => total + hand.bet, 0);
+          const back = seat.hands.reduce((total, hand) => total + hand.returned, 0);
+          return out > 0 && back > out;
+        })
+        .map((seat) => seat.id);
+    },
+
+    /**
      * The table's own clock, which is what makes it a table rather than a
      * game somebody has to run.
      *

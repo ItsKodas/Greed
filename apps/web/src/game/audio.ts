@@ -1030,3 +1030,34 @@ export function riser(seconds: number): () => void {
     }
   };
 }
+
+/**
+ * A sound somebody uploaded, played the once.
+ *
+ * Emote sounds are not cues: there is no fixed set of them, they arrive as
+ * URLs the server hands over, and a new one can appear without this file
+ * changing. What they share with every other sound in the building is the
+ * thing that matters — they go through the master gain, so the player's own
+ * volume and mute govern them exactly as they govern everything else. An
+ * `<audio>` element would have been fewer lines and would have played on
+ * regardless of both.
+ *
+ * Silently does nothing before the page has been touched, because the browser
+ * would refuse anyway, and a taunt that cannot be heard is not worth an error.
+ */
+export async function playEmoteSound(url: string, gain = 0.7): Promise<void> {
+  if (context === null || master === null) {
+    return;
+  }
+  const audio = await buffer(url);
+  // Decoded and cached by `buffer`, so a taunt thrown twice downloads once.
+  if (audio === null || context === null || master === null) {
+    return;
+  }
+  const source = context.createBufferSource();
+  source.buffer = audio;
+  const level = context.createGain();
+  level.gain.value = gain;
+  source.connect(level).connect(master);
+  source.start();
+}

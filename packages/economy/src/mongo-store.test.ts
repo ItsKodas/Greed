@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import mongoose from "mongoose";
 import { MongoStore } from "./mongo-store.js";
 import { DAILY_GRANT, STARTING_CHIPS } from "./store.js";
+import { DAILY_SEND_CAP } from "./transfers.js";
 
 /**
  * These need a real mongod, so they are skipped unless one is pointed at:
@@ -187,4 +188,234 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     expect(await store.bank("slots")).toBe(0);
   });
 
+  /**
+   * Chips moving between two accounts, against a real database.
+   *
+   * Here for the reason the emote round trip below is: the last thing added to
+   * this store was tested only against MemoryStore, where nothing is encoded
+   * and nothing is queried, and it was broken in production the whole time.
+   * The Mongo half of a transfer is a conditional debit, an aggregate over a
+   * ledger and an anchored regex, none of which the memory store exercises at
+   * all.
+   */
+  describe("sending chips", () => {
+    it("moves them and writes the transfer down", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+
+      const sent = await store.send(ada.id, bo.id, 700);
+
+      expect(sent).toMatchObject({ ok: true, amount: 700 });
+      expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - 700);
+      expect((await store.get(bo.id))?.chips).toBe(STARTING_CHIPS + 700);
+      expect(await store.transfers(bo.id, 5)).toMatchObject([
+        { fromId: ada.id, toId: bo.id, amount: 700 },
+      ]);
+    });
+
+    it("conserves what the pair holds between them", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+      const before = STARTING_CHIPS * 2;
+
+      await store.send(ada.id, bo.id, 900);
+      await store.send(bo.id, ada.id, 250);
+
+      const after = ((await store.get(ada.id))?.chips ?? 0) + ((await store.get(bo.id))?.chips ?? 0);
+      expect(after).toBe(before);
+    });
+
+    it("adds up what one account has sent, and only what it sent", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+
+      await store.send(ada.id, bo.id, 300);
+      await store.send(ada.id, bo.id, 200);
+      await store.send(bo.id, ada.id, 50);
+
+      expect(await store.sentSince(ada.id, 0)).toBe(500);
+      expect(await store.sentSince(bo.id, 0)).toBe(50);
+    });
+
+    it("counts only what falls inside the window", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+      await store.send(ada.id, bo.id, 400);
+
+      expect(await store.sentSince(ada.id, Date.now() + 1000)).toBe(0);
+    });
+
+    /*
+     * Never overdrawn, however many go at once. The debit is a conditional
+     * update for the same reason every other debit here is one: a read
+     * followed by a write is a race by construction.
+     */
+    it("never overdraws, however many transfers race", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+
+      const results = await Promise.all(
+        Array.from({ length: 20 }, () => store.send(ada.id, bo.id, 1000)),
+      );
+
+      const went = results.filter((one) => one.ok).length;
+      expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS - went * 1000);
+      expect((await store.get(bo.id))?.chips).toBe(STARTING_CHIPS + went * 1000);
+      expect((await store.get(ada.id))?.chips).toBeGreaterThanOrEqual(0);
+    });
+
+    it("refuses more than the sender holds, and moves nothing", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+
+      expect(await store.send(ada.id, bo.id, STARTING_CHIPS + 1)).toMatchObject({
+        ok: false,
+        reason: "not-enough",
+      });
+      expect((await store.get(ada.id))?.chips).toBe(STARTING_CHIPS);
+      expect((await store.get(bo.id))?.chips).toBe(STARTING_CHIPS);
+    });
+
+    it("stops at the daily cap", async () => {
+      const ada = await newPlayer();
+      const bo = await newPlayer();
+      await store.adjustChips(ada.id, DAILY_SEND_CAP * 2);
+
+      await store.send(ada.id, bo.id, DAILY_SEND_CAP);
+
+      expect(await store.send(ada.id, bo.id, 1)).toMatchObject({
+        ok: false,
+        reason: "over-cap",
+      });
+    });
+  });
+
+  describe("finding somebody to pay", () => {
+    it("matches the start of a name, whatever the case", async () => {
+      const person = await store.upsertDiscordUser({
+        discordId: `find-${Date.now()}`,
+        name: "Zaphod",
+        avatar: null,
+        accentColor: null,
+      });
+
+      const found = await store.findPlayers("zaph", 5);
+
+      expect(found.some((one) => one.id === person.id)).toBe(true);
+      expect(await store.findPlayers("aphod", 5)).toEqual([]);
+    });
+
+    /*
+     * A name is whatever somebody typed into Discord. One full of regex
+     * punctuation has to be a name to look for rather than a pattern to run,
+     * which is a promise only the Mongo implementation has to keep.
+     */
+    it("treats punctuation in a search as punctuation", async () => {
+      const odd = await store.upsertDiscordUser({
+        discordId: `odd-${Date.now()}`,
+        name: "C++(.*)",
+        avatar: null,
+        accentColor: null,
+      });
+
+      expect((await store.findPlayers("C++(", 5)).some((one) => one.id === odd.id)).toBe(true);
+      expect((await store.findPlayers(".*", 5)).some((one) => one.id === odd.id)).toBe(false);
+    });
+
+    it("never says what anybody holds", async () => {
+      await store.upsertDiscordUser({
+        discordId: `plain-${Date.now()}`,
+        name: "Trillian",
+        avatar: null,
+        accentColor: null,
+      });
+
+      const [found] = await store.findPlayers("trill", 5);
+
+      expect(Object.keys(found ?? {}).sort()).toEqual(["accentColor", "avatar", "id", "name"]);
+    });
+  });
+
+  /**
+   * An emote's files, all the way out and back.
+   *
+   * The other promise MemoryStore cannot keep on Mongo's behalf, and the gap
+   * that let an emote be served as an empty file in production: every test of
+   * the upload path ran against the memory store, where the bytes never leave
+   * the process. Only a real database exercises the encode-and-read that was
+   * actually broken.
+   */
+  describe("an emote's files", () => {
+    /** Not a real JPEG beyond its opening bytes, which is all that is sniffed. */
+    const picture = Uint8Array.from([
+      0xff,
+      0xd8,
+      0xff,
+      0xe0,
+      ...Array.from({ length: 2000 }, (_, index) => index % 256),
+    ]);
+    const noise = Uint8Array.from([
+      0x49,
+      0x44,
+      0x33,
+      ...Array.from({ length: 900 }, (_, index) => (index * 7) % 256),
+    ]);
+
+    it("hands back exactly the bytes that went in", async () => {
+      store ??= await MongoStore.connect(url as string);
+      const made = await store.addEmote({
+        name: "Smug",
+        cost: 250,
+        image: picture,
+        sound: noise,
+        createdBy: "admin",
+      });
+
+      const image = await store.emoteAsset(made.id, "image");
+      const sound = await store.emoteAsset(made.id, "sound");
+
+      /*
+       * Length first and separately. The failure this covers was an empty
+       * file, and "0 bytes" is a far clearer thing to read at the top of a
+       * failure than a diff of two thousand numbers.
+       */
+      expect(image?.bytes.length).toBe(picture.length);
+      expect(sound?.bytes.length).toBe(noise.length);
+      expect(image?.bytes).toEqual(picture);
+      expect(sound?.bytes).toEqual(noise);
+      expect(image?.mime).toBe("image/jpeg");
+      expect(sound?.mime).toBe("audio/mpeg");
+    });
+
+    it("says an emote with no sound has none", async () => {
+      store ??= await MongoStore.connect(url as string);
+      const made = await store.addEmote({
+        name: "Quiet",
+        cost: 10,
+        image: picture,
+        sound: null,
+        createdBy: "admin",
+      });
+
+      expect(await store.emoteAsset(made.id, "sound")).toBeNull();
+      expect((await store.emoteAsset(made.id, "image"))?.bytes.length).toBe(picture.length);
+    });
+
+    it("keeps serving a retired emote's picture, for the replays still owed", async () => {
+      store ??= await MongoStore.connect(url as string);
+      const made = await store.addEmote({
+        name: "Gone",
+        cost: 10,
+        image: picture,
+        sound: null,
+        createdBy: "admin",
+      });
+
+      expect(await store.retireEmote(made.id)).toBe(true);
+
+      expect((await store.emoteAsset(made.id, "image"))?.bytes).toEqual(picture);
+      expect((await store.listEmotes(false)).some((one) => one.id === made.id)).toBe(false);
+      expect((await store.listEmotes(true)).some((one) => one.id === made.id)).toBe(true);
+    });
+  });
 });

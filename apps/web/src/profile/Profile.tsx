@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Avatar } from "../game/Avatar.js";
 import { useAccount } from "../game/useAccount.js";
+import { Send } from "./Send.js";
 import { ChipColumns } from "../chips/ChipColumns.js";
 import { Navbar } from "../nav/Navbar.js";
 import { bundle, signed } from "./history.js";
@@ -65,6 +66,7 @@ export function Profile() {
           dailyDue={account.dailyDue}
           onDaily={account.claimDaily}
           onSignOut={account.signOut}
+          onChips={account.setChips}
         />
       )}
       {account.dailyMessage !== null ? (
@@ -80,12 +82,15 @@ function Signed({
   dailyDue,
   onDaily,
   onSignOut,
+  onChips,
 }: {
   profile: NonNullable<ReturnType<typeof useAccount>["profile"]>;
   history: PlayedGame[];
   dailyDue: boolean;
   onDaily: () => void;
   onSignOut: () => void;
+  /** The balance after chips have moved, so the purse follows without a reload. */
+  onChips: (chips: number) => void;
 }) {
   const { games, wins, chipsWon } = profile.stats;
   const rate = games === 0 ? 0 : Math.round((wins / games) * 100);
@@ -125,6 +130,9 @@ function Signed({
           )}
         </div>
         <Redeem onRedeemed={() => window.location.reload()} />
+        {/* Beside redeeming rather than out on the felt: this is a thing you do
+            about your account, not a move at a table. */}
+        <Send meId={profile.id} chips={profile.chips} onSent={onChips} />
         {/* The way out, kept with everything else about being you rather than
             sitting in the bar beside the volume. Signing out is rare, and it
             is not a thing to have within a slip of the mouse while playing. */}

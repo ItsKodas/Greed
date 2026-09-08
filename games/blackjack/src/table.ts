@@ -86,6 +86,14 @@ export interface SeatView {
   connected: boolean;
   waiting: boolean;
   isBot: boolean;
+  /**
+   * Playing from a profile rather than as a guest.
+   *
+   * Here because things outside the hand turn on it — a taunt is staked in
+   * real chips, so it can only be thrown at somebody with an account for them
+   * to reach. Greed's seat view has said this since it had one.
+   */
+  signedIn: boolean;
   avatar: string | null;
   accentColor: number | null;
   hands: HandView[];
@@ -994,6 +1002,7 @@ export class Table {
         connected: seat.connected,
         waiting: seat.waiting,
         isBot: seat.isBot,
+        signedIn: seat.userId !== null,
         avatar: seat.avatar,
         accentColor: seat.accentColor,
         active: seat.active,

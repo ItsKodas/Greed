@@ -21,9 +21,37 @@ export type {
   GameRecord,
   Profile,
   ProfileStats,
+  PublicPlayer,
   StatBump,
   Store,
 } from "./store.js";
 export { MongoStore } from "./mongo-store.js";
+export {
+  DAILY_SEND_CAP,
+  MIN_SEND,
+  SEND_REFUSALS,
+  SEND_WINDOW_MS,
+  judgeSend,
+  leftToSend,
+} from "./transfers.js";
+export type { SendFailure, SendResult, Transfer } from "./transfers.js";
 export { CODE_ALPHABET, CODE_LENGTH, judgeCode, mintCodeText, normaliseCode } from "./codes.js";
 export type { CodeRecord, RedeemFailure, RedeemResult } from "./codes.js";
+export {
+  MAX_EMOTE_COST,
+  MAX_EMOTE_NAME,
+  MAX_IMAGE_BYTES,
+  MAX_SOUND_BYTES,
+  REFUSALS,
+  judgeEmote,
+  sniffImage,
+  sniffSound,
+} from "./emotes.js";
+export type {
+  EmoteAsset,
+  EmoteRecord,
+  EmoteRefusal,
+  ImageMime,
+  NewEmote,
+  SoundMime,
+} from "./emotes.js";

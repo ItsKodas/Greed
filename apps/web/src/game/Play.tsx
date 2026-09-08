@@ -12,6 +12,8 @@ import { HouseRulesEditor } from "./HouseRulesEditor.js";
 import { Table } from "./Table.js";
 import type { Account } from "./useAccount.js";
 import { useAccount } from "./useAccount.js";
+import { TauntPicker } from "../taunt/TauntPicker.js";
+import { TauntStage } from "../taunt/TauntStage.js";
 import type { RoomActions } from "./useRoom.js";
 import { useRoom } from "./useRoom.js";
 import { SeatCount } from "../table/SeatCount.js";
@@ -29,8 +31,20 @@ export function Play() {
   const account = useAccount();
   // The balance in the corner follows the game: a stake leaves as it is
   // placed and the pot comes back the moment somebody wins it.
-  const { room, listed, heldLocally, pendingRoll, chat, seatId, error, connected, busy, actions } =
-    useRoom(account.setChips);
+  const {
+    room,
+    listed,
+    heldLocally,
+    pendingRoll,
+    chat,
+    seatId,
+    error,
+    connected,
+    busy,
+    landed,
+    stakes,
+    actions,
+  } = useRoom(account.setChips);
   useSound(room, seatId);
 
   /*
@@ -117,7 +131,37 @@ export function Play() {
             heldLocally={heldLocally}
             pendingRoll={pendingRoll}
           />
-          <Chat log={chat} seatId={seatId} onSay={actions.say} />
+          <div className="play__talk">
+            <Chat log={chat} seatId={seatId} onSay={actions.say} />
+            <TauntPicker
+              seats={room.seats}
+              seatId={seatId}
+              chips={account.profile?.chips ?? null}
+              stakes={stakes}
+              onThrow={(emote, at) => {
+                /*
+                 * The cost comes off the corner on the press rather than when
+                 * the server answers. It is the player's own number — they
+                 * chose the emote and it has a price — so showing it at once
+                 * invents nothing, and the ack corrects it either way.
+                 */
+                if (account.profile !== null) {
+                  account.setChips(account.profile.chips - emote.cost);
+                }
+                actions.taunt(emote.id, at, (result) => {
+                  if (result.ok) {
+                    account.setChips(result.chips);
+                  } else {
+                    // Refused, so give the optimistic decrement back.
+                    account.refresh();
+                  }
+                });
+              }}
+            />
+          </div>
+          {/* Over the felt rather than inside it: a taunt belongs to the table,
+              not to the dice. */}
+          <TauntStage landed={landed} />
         </>
       )}
     </main>
