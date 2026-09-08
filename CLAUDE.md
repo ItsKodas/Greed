@@ -48,7 +48,14 @@ run for one player *if and only if*:
   float, by the same authority that mints redemption codes;
 - its outcomes come from a cryptographic source. A machine hands the player its
   whole result every round, which is exactly the run of observations needed to
-  recover `Math.random`'s state and predict the next one.
+  recover `Math.random`'s state and predict the next one;
+- a round it gives away — a free spin, a respin, anything the player did not
+  pay for — is still bound by all of the above, and by two more. It replays a
+  bet the player actually put up rather than one chosen afterwards, or it is a
+  way to be paid at a stake nobody staked. And its cap is re-derived from the
+  bank each time: no stake enters on a free round, so the bank only shrinks
+  under a run of them, and the bank at the eighth is not the bank that awarded
+  it. A machine that cannot cover the rest of a run says so and stops.
 
 On those terms a win at a machine still comes from real people: everybody who
 played it before you. Slots is the only game in the building on this footing,
