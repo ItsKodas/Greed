@@ -34,6 +34,7 @@ export type Cue =
   | "spinWin"
   | "jackpot"
   | "bonus"
+  | "bonusAppear"
   | "coin";
 
 interface Manifest {
@@ -297,8 +298,199 @@ function pickNamed(group: keyof Manifest, word: string): string | null {
   return pick(preferring(all, word));
 }
 
+/**
+ * The same sound at a different pitch, at the same length.
+ *
+ * `playbackRate` and `detune` are the same knob under two names: both resample
+ * the buffer, so a sound an octave up is also a sound at half the length. That
+ * is fine for a rattle and wrong for a run of notes, where the point is that
+ * the *same* sound comes back higher.
+ *
+ * So the buffer is rebuilt out of overlapping windowed grains, read at the
+ * pitch ratio while the read head advances at the original rate — the oldest
+ * trick there is, and enough for a sting under half a second. Kept by url and
+ * interval, because the same five notes play all evening.
+ */
+const shifted = new Map<string, AudioBuffer>();
+
+/**
+ * A Hann window of `size`, which is the envelope every grain is read through.
+ *
+ * At a half-grain hop two of these sum to a flat one, so overlap-adding them
+ * needs no correction at all — which is the entire reason for the half hop.
+ */
+function hann(size: number): Float32Array {
+  const shape = new Float32Array(size);
+  for (let n = 0; n < size; n += 1) {
+    shape[n] = 0.5 - 0.5 * Math.cos((2 * Math.PI * n) / size);
+  }
+  return shape;
+}
+
+/**
+ * The same audio made `factor` times longer, at the same pitch.
+ *
+ * Overlap-add, but with each grain allowed to slide a few milliseconds to
+ * wherever it best lines up with what has already been written. That search is
+ * the whole difference between this working and not: at fixed hops, successive
+ * grains read points in the source that are a fixed distance apart, and for
+ * any tone whose period divides that distance near-evenly the grains land in
+ * antiphase and cancel. On a 440Hz sine at a 50ms grain that cancellation is
+ * near-total — the sound comes out at a fraction of the level it went in, and
+ * which frequencies survive depends on the interval, so the fault arrives as
+ * "the third bonus is oddly quiet" rather than as anything obviously broken.
+ */
+function stretch(from: Float32Array, sampleRate: number, factor: number): Float32Array {
+  const grain = Math.max(64, Math.round(sampleRate * 0.05));
+  const hop = grain >> 1;
+  // How far back through the source to step for each hop forward in the
+  // output. Longer output means smaller steps through the source.
+  const step = Math.max(1, Math.round(hop / factor));
+  /* Three milliseconds either way: more than a period of anything with a
+     pitch, and little enough that nothing audibly jumps. */
+  const search = Math.max(1, Math.round(sampleRate * 0.003));
+
+  const out = new Float32Array(Math.ceil(from.length * factor) + grain);
+  const shape = hann(grain);
+  let at = 0;
+
+  for (let o = 0; o + grain <= out.length; o += hop) {
+    let slide = 0;
+    if (o > 0) {
+      /*
+       * Correlated against the tail already sitting in the output, every
+       * fourth sample. A quarter of the samples is enough to find the peak of
+       * a correlation this broad, and it is the difference between this
+       * costing a millisecond and costing four.
+       */
+      let bestScore = Number.NEGATIVE_INFINITY;
+      for (let d = -search; d <= search; d += 1) {
+        const begin = at + d;
+        if (begin < 0 || begin + hop >= from.length) {
+          continue;
+        }
+        let score = 0;
+        for (let n = 0; n < hop; n += 4) {
+          score += (from[begin + n] as number) * (out[o + n] as number);
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          slide = d;
+        }
+      }
+    }
+
+    const begin = at + slide;
+    for (let n = 0; n < grain; n += 1) {
+      const index = begin + n;
+      if (index < 0 || index >= from.length) {
+        break;
+      }
+      out[o + n] = (out[o + n] as number) + (shape[n] as number) * (from[index] as number);
+    }
+
+    at += step;
+    if (at >= from.length) {
+      break;
+    }
+  }
+  return out;
+}
+
+/**
+ * One channel, raised by `semitones` and left exactly as long as it was.
+ *
+ * Two steps, because the pitch and the length are two separate problems and
+ * doing them at once is what makes granular shifters sound like a bad phone
+ * line. First the audio is stretched to `ratio` times its length at its
+ * original pitch; then it is read back at `ratio` times the rate, which puts
+ * the length back where it started and takes the pitch up with it.
+ *
+ * Exported for the test rather than for a caller: this is the part that can be
+ * subtly wrong — a shift that also stretches, or grains that cancel — in a way
+ * nobody notices under a sound effect until the intervals stop landing.
+ */
+export function pitchShift(
+  from: Float32Array,
+  sampleRate: number,
+  semitones: number,
+): Float32Array {
+  const to = new Float32Array(from.length);
+  if (semitones === 0 || from.length === 0) {
+    to.set(from);
+    return to;
+  }
+  const ratio = 2 ** (semitones / 12);
+  const longer = stretch(from, sampleRate, ratio);
+
+  for (let n = 0; n < to.length; n += 1) {
+    const where = n * ratio;
+    const left = Math.floor(where);
+    if (left + 1 >= longer.length) {
+      break;
+    }
+    const fraction = where - left;
+    to[n] = (longer[left] as number) * (1 - fraction) + (longer[left + 1] as number) * fraction;
+  }
+
+  /*
+   * Matched back to the level it came in at.
+   *
+   * Hann at a half hop overlaps to one, so this should barely engage — but
+   * "barely" is doing work at the edges, where grains run out of source, and a
+   * run of five notes has to be five of the same loudness or it reads as five
+   * different sounds rather than one coming back higher.
+   */
+  let energy = 0;
+  let was = 0;
+  for (let n = 0; n < to.length; n += 1) {
+    energy += (to[n] as number) ** 2;
+    was += (from[n] as number) ** 2;
+  }
+  if (energy > 0 && was > 0) {
+    // Capped, because a near-silent result would otherwise be multiplied up
+    // into whatever the interpolation left behind.
+    const level = Math.min(2, Math.sqrt(was / energy));
+    for (let n = 0; n < to.length; n += 1) {
+      to[n] = (to[n] as number) * level;
+    }
+  }
+  return to;
+}
+
+function pitchUp(audio: AudioBuffer, semitones: number): AudioBuffer {
+  if (context === null) {
+    return audio;
+  }
+  const out = context.createBuffer(audio.numberOfChannels, audio.length, audio.sampleRate);
+  for (let channel = 0; channel < audio.numberOfChannels; channel += 1) {
+    out
+      .getChannelData(channel)
+      .set(pitchShift(audio.getChannelData(channel), audio.sampleRate, semitones));
+  }
+  return out;
+}
+
+interface SampleOptions {
+  /**
+   * Semitones up. Whole numbers of them: this is used to play intervals, and
+   * an interval only reads as one if it lands where a listener expects it.
+   */
+  semitones?: number;
+  /**
+   * A touch of random pitch so repeats do not machine-gun. Off wherever the
+   * pitch means something, because a wobble on top of an interval is a wrong
+   * note rather than a lively one.
+   */
+  vary?: boolean;
+}
+
 /** Plays a sample with a little pitch variation so repeats stay alive. */
-async function sample(url: string | null, gain: number): Promise<boolean> {
+async function sample(
+  url: string | null,
+  gain: number,
+  options: SampleOptions = {},
+): Promise<boolean> {
   if (!ready || context === null || master === null) {
     return false;
   }
@@ -309,9 +501,25 @@ async function sample(url: string | null, gain: number): Promise<boolean> {
   if (audio === null || context === null || master === null) {
     return false;
   }
+  const { semitones = 0, vary = true } = options;
+
+  let playing = audio;
+  if (semitones !== 0) {
+    const key = `${url}|${semitones}`;
+    const already = shifted.get(key);
+    if (already === undefined) {
+      playing = pitchUp(audio, semitones);
+      shifted.set(key, playing);
+    } else {
+      playing = already;
+    }
+  }
+
   const source = context.createBufferSource();
-  source.buffer = audio;
-  source.playbackRate.value = 0.94 + Math.random() * 0.12;
+  source.buffer = playing;
+  if (vary) {
+    source.playbackRate.value = 0.94 + Math.random() * 0.12;
+  }
   const level = context.createGain();
   level.gain.value = gain;
   source.connect(level).connect(master);
@@ -379,7 +587,17 @@ function noise(duration: number, frequency: number, gain: number, q = 1): void {
   source.start();
 }
 
-export function play(cue: Cue): void {
+export function play(
+  cue: Cue,
+  /**
+   * How far up the run this one is, for the cues that climb.
+   *
+   * Only "bonusAppear" reads it. Passed as a plain count rather than a pitch
+   * so the caller says what happened — "this is the third one" — and the
+   * interval it turns into stays a decision this file makes.
+   */
+  step = 0,
+): void {
   if (context === null || master === null || muted || volume === 0) {
     return;
   }
@@ -491,6 +709,30 @@ export function play(cue: Cue): void {
         }
       });
       break;
+    case "bonusAppear": {
+      /*
+       * A bonus arriving on a reel, and each one after it higher than the
+       * last. Minor thirds, so the run climbs and the fifth one — the rarest
+       * spin this machine has — lands exactly an octave above the first.
+       *
+       * Pitched rather than resampled, and that is the whole point: sped up,
+       * the second bonus is a different, shorter sound. The player is meant to
+       * hear the same sound coming back higher, because what is climbing is
+       * the number of them on the glass.
+       */
+      const semitones = Math.max(0, Math.min(4, Math.round(step))) * 3;
+      void sample(pickNamed("slots", "bonus_appear"), 0.7, { semitones, vary: false }).then(
+        (played) => {
+          if (!played) {
+            // Same interval, synthesised, so the run still climbs without it.
+            const root = 660 * 2 ** (semitones / 12);
+            tone({ frequency: root, duration: 0.22, type: "triangle", gain: 0.16 });
+            tone({ frequency: root * 1.5, duration: 0.16, type: "sine", gain: 0.08, delay: 0.05 });
+          }
+        },
+      );
+      break;
+    }
     case "spinEnd":
       /*
        * The last reel, which is a different event from a reel stopping —
@@ -541,7 +783,7 @@ export function play(cue: Cue): void {
       });
       break;
     case "bonus":
-      void sample(pickNamed("slots", "bonus"), 0.85).then((played) => {
+      void sample(pickNamed("slots", "slots_bonus"), 0.85).then((played) => {
         if (!played) {
           [659, 784, 988, 1318].forEach((frequency, step) => {
             tone({ frequency, duration: 0.4, type: "triangle", gain: 0.14, delay: step * 0.12 });

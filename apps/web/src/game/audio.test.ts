@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { preferring } from "./audio.js";
+import { pitchShift, preferring } from "./audio.js";
 
 /**
  * The sound files themselves, read where they are dropped.
@@ -69,7 +69,8 @@ describe("the words the cues search for still find files", () => {
     ["reelStop", "slots", "spinner_stop"],
     ["spinEnd", "slots", "spin_end"],
     ["spinWin", "slots", "win_sequence"],
-    ["bonus", "slots", "bonus"],
+    ["bonus", "slots", "slots_bonus"],
+    ["bonusAppear", "slots", "bonus_appear"],
     ["coin", "slots", "coin"],
   ];
 
@@ -125,5 +126,139 @@ describe("the slots cues that nearly collide", () => {
     const loop = preferring(files, "spinning_loop");
     expect(loop).not.toEqual(landing);
     expect(loop).not.toEqual(ending);
+  });
+
+  it("keeps the bonus payout and the bonus landing apart", () => {
+    /*
+     * "bonus" on its own matches both slots_bonus and bonus_appear, so the cue
+     * that celebrates winning the free spins would have played the little ping
+     * a reel makes about half the time — and the other half it would have been
+     * right, which is the worst way for this to be wrong.
+     */
+    const files = group("slots");
+    if (files.length === 0) {
+      return;
+    }
+    const payout = preferring(files, "slots_bonus");
+    const landing = preferring(files, "bonus_appear");
+    expect(payout.length).toBeGreaterThan(0);
+    expect(landing.length).toBeGreaterThan(0);
+    for (const file of payout) {
+      expect(landing).not.toContain(file);
+    }
+  });
+});
+
+/**
+ * Raising the pitch without shortening the sound.
+ *
+ * The whole requirement in one sentence, and the one thing `playbackRate`
+ * cannot do: it is the same knob as `detune`, and both resample — so a sound
+ * an octave up is also a sound at half the length. A run of bonuses landing is
+ * meant to be the same sound coming back higher, not a shorter one.
+ */
+describe("pitching a sample up", () => {
+  const RATE = 44_100;
+
+  /** A second of a sine at `hz`, which is a signal with an obvious answer. */
+  function sine(hz: number, seconds = 0.5): Float32Array {
+    const samples = new Float32Array(Math.round(RATE * seconds));
+    for (let n = 0; n < samples.length; n += 1) {
+      samples[n] = Math.sin((2 * Math.PI * hz * n) / RATE);
+    }
+    return samples;
+  }
+
+  /**
+   * The strength of `hz` in a signal, by the Goertzel algorithm.
+   *
+   * A whole FFT to answer one question about one frequency would be a lot of
+   * code to review; this is six lines and says the same thing.
+   */
+  function strengthAt(samples: Float32Array, hz: number): number {
+    const k = (2 * Math.PI * hz) / RATE;
+    const coefficient = 2 * Math.cos(k);
+    let previous = 0;
+    let older = 0;
+    for (const value of samples) {
+      const current = value + coefficient * previous - older;
+      older = previous;
+      previous = current;
+    }
+    return Math.sqrt(previous * previous + older * older - coefficient * previous * older);
+  }
+
+  it("leaves the sound exactly as long as it was", () => {
+    const from = sine(440);
+    for (const semitones of [3, 6, 9, 12]) {
+      expect(pitchShift(from, RATE, semitones).length).toBe(from.length);
+    }
+  });
+
+  it("puts an octave up an octave up", () => {
+    const from = sine(440);
+    const up = pitchShift(from, RATE, 12);
+    // Louder at 880 than at 440: the note moved rather than gaining a harmonic.
+    expect(strengthAt(up, 880)).toBeGreaterThan(strengthAt(up, 440) * 4);
+    // And it was the other way round before, so the test is measuring the shift.
+    expect(strengthAt(from, 440)).toBeGreaterThan(strengthAt(from, 880) * 4);
+  });
+
+  it("climbs with each step of the run", () => {
+    const from = sine(440);
+    let last = 0;
+    for (const semitones of [0, 3, 6, 9, 12]) {
+      const up = pitchShift(from, RATE, semitones);
+      const expected = 440 * 2 ** (semitones / 12);
+      expect(strengthAt(up, expected)).toBeGreaterThan(strengthAt(up, 440 * 1.02));
+      expect(expected).toBeGreaterThan(last);
+      last = expected;
+    }
+  });
+
+  it("hands back the sound untouched when nothing was asked for", () => {
+    const from = sine(440);
+    expect([...pitchShift(from, RATE, 0)]).toEqual([...from]);
+  });
+
+  it("plays every step of the run at the same loudness", () => {
+    /*
+     * Not a nicety. Overlapping grains at a shifted ratio add out of phase by
+     * an amount that depends on the interval, so a fixed correction leaves
+     * each note a different loudness — a run that climbs in pitch and wanders
+     * in volume, which reads as five different sounds rather than as one
+     * coming back higher.
+     */
+    const from = sine(440);
+    const rms = (samples: Float32Array): number => {
+      let energy = 0;
+      for (const value of samples) {
+        energy += value * value;
+      }
+      return Math.sqrt(energy / samples.length);
+    };
+    const was = rms(from);
+    for (const semitones of [3, 6, 9, 12]) {
+      expect(rms(pitchShift(from, RATE, semitones))).toBeCloseTo(was, 2);
+    }
+  });
+
+  it("does not clip", () => {
+    // The failure that reaches a player as a crackle rather than a wrong note.
+    const from = sine(440);
+    for (const semitones of [3, 12]) {
+      let peak = 0;
+      for (const value of pitchShift(from, RATE, semitones)) {
+        peak = Math.max(peak, Math.abs(value));
+      }
+      expect(peak).toBeLessThanOrEqual(1.1);
+    }
+  });
+
+  it("copes with a sound too short to hold a single grain", () => {
+    // Nothing in the folder is this short, but the guard is one comparison and
+    // the alternative is an exception on a sound effect.
+    expect(() => pitchShift(new Float32Array(16), RATE, 12)).not.toThrow();
+    expect(() => pitchShift(new Float32Array(0), RATE, 12)).not.toThrow();
   });
 });

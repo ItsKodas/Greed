@@ -222,6 +222,13 @@ export default function Slots() {
 
   const [sign, setSign] = useState<MachineSign | null>(null);
   const [grid, setGrid] = useState<Face[][] | undefined>(undefined);
+  /**
+   * Bonuses that have landed so far this spin, which is what pitches the next
+   * one. A ref rather than state: it changes as each reel stops and nothing
+   * renders from it, so putting it in state would be five renders a spin to
+   * redraw nothing.
+   */
+  const scattered = useRef(0);
   const [lines, setLines] = useState<SpinLine[]>([]);
   const [lit, setLit] = useState(false);
 
@@ -476,6 +483,24 @@ export default function Slots() {
     (index: number) => {
       play("reelStop");
 
+      /*
+       * A bonus arriving, and the run of them climbing.
+       *
+       * Counted here as the reels land rather than read off the finished grid,
+       * because that is when it is worth hearing: two of these while a reel is
+       * still turning is the most interesting moment this machine has, and a
+       * player should be able to hear the third one coming.
+       *
+       * By reel rather than by cell. One stop on the strip means a reel cannot
+       * show two today, so the two counts are the same number — but a reel
+       * that somehow showed a stacked pair should sound like one reel
+       * scattering, which is what the paytable would count it as.
+       */
+      if (grid?.[index]?.includes("bonus") === true) {
+        play("bonusAppear", scattered.current);
+        scattered.current += 1;
+      }
+
       // The next reel is being held, which means the answer still rides on it.
       const next = holds[index + 1] ?? 0;
       if (next > 0 && rising.current === null) {
@@ -490,7 +515,7 @@ export default function Slots() {
       play("spinEnd");
       setStopped(true);
     },
-    [holds, hush],
+    [grid, holds, hush],
   );
 
   /*
@@ -648,6 +673,7 @@ export default function Slots() {
     setSaid(null);
     setProblem(null);
     setAwarded(0);
+    scattered.current = 0;
   };
 
   const pull = () => {
