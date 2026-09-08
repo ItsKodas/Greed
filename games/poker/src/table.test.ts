@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TITLES } from "./hand.js";
 import { Table } from "./table.js";
 
 /**
@@ -361,6 +362,50 @@ describe("what a seat is told it may do", () => {
     made.deal();
     const short = made.seats.find((seat) => seat.stack + seat.committed === 30) as { id: string };
     expect(own(made, short.id)?.canRaise).toBe(false);
+  });
+});
+
+describe("reading your own hand", () => {
+  /*
+   * The felt shows you what you are holding, and this is where that comes
+   * from. Read on the table rather than in the browser so the name it gives
+   * you during the hand cannot disagree with the one it announces at the
+   * showdown — and of the two, this is the one that pays out.
+   */
+  it("says nothing before there is a hand to read", () => {
+    const made = table([1_000, 1_000]);
+    made.deal();
+    // Two cards are not a hand. Naming one would be the felt inventing it.
+    expect(made.view(made.toAct).you?.hand).toBeNull();
+  });
+
+  it("names what you hold once the flop is out", () => {
+    const made = table([1_000, 1_000]);
+    made.deal();
+    made.act(made.toAct as string, "call");
+    made.act(made.toAct as string, "check");
+
+    const seatId = made.toAct as string;
+    const mine = made.view(seatId).you?.hand;
+    expect(mine).not.toBeNull();
+    // Whatever it dealt, it is one of the ten and it is spelled out.
+    expect(Object.values(TITLES)).toContain(mine?.title);
+    expect(mine?.said.length).toBeGreaterThan(0);
+  });
+
+  it("tells each seat about its own hand and nobody else's", () => {
+    const made = table([1_000, 1_000]);
+    made.deal();
+    made.act(made.toAct as string, "call");
+    made.act(made.toAct as string, "check");
+
+    const [one, two] = made.seats;
+    const first = made.view((one as { id: string }).id).you?.hand;
+    const second = made.view((two as { id: string }).id).you?.hand;
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    // Somebody watching has no hand to be told about.
+    expect(made.view(null).you).toBeNull();
   });
 });
 

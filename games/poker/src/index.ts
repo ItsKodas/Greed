@@ -8,7 +8,7 @@
 export type { Card, Rank, Suit } from "./cards.js";
 export { Deck, freshDeck, rankValue, RANKS, shuffle, SUITS } from "./cards.js";
 export type { Category, Score } from "./hand.js";
-export { best, CATEGORIES, compare, describe, scoreFive } from "./hand.js";
+export { best, CATEGORIES, compare, describe, scoreFive, title, TITLES } from "./hand.js";
 export type { Contribution, Pot } from "./pot.js";
 export { pots, split } from "./pot.js";
 export type { Move, OwnView, Payout, Seat, SeatView, Street, TableView } from "./table.js";

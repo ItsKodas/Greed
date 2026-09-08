@@ -812,6 +812,246 @@
   color: var(--gr-color-ink-lit);
 }
 
+
+/* ------------------------------------------------- what you are holding */
+
+/*
+ * The hand you have, under the table and above the controls.
+ *
+ * On its own line rather than tucked into your seat: it is the one thing on
+ * this screen a new player needs most, and a seat has room for a name, a stack
+ * and nothing else. Reading five cards is the whole skill this replaces.
+ */
+.pk__reading {
+  /* Hugs its own words and sits in the middle, rather than being a line of
+     text lost across the whole width of the table. */
+  width: fit-content;
+  max-width: 100%;
+  margin: calc(var(--gr-space-3) * -1) auto 0;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--gr-space-2);
+  padding: 7px 20px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
+  background: color-mix(in srgb, var(--gr-color-neon) 16%, rgb(6 10 16 / 0.92));
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.5),
+    0 6px 18px rgb(0 0 0 / 0.55),
+    0 0 22px color-mix(in srgb, var(--gr-color-neon) 26%, transparent);
+  text-align: center;
+}
+
+.pk__reading strong {
+  font-size: var(--gr-text-xl);
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--gr-color-ink-lit);
+}
+
+.pk__reading span {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+/*
+ * It lands when it changes, and only then.
+ *
+ * A card comes out and the hand you are holding becomes a different hand —
+ * which is the one moment on this screen a player must not miss. The element
+ * is keyed on what it says, so React replaces it and this runs again; a hand
+ * that has not changed sits still.
+ */
+@keyframes pk-reading-lands {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.pk__reading {
+  animation: pk-reading-lands 320ms cubic-bezier(0.16, 1.06, 0.28, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__reading {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------ what beats what */
+
+/*
+ * A question mark on the rail.
+ *
+ * Sat on the table itself because what beats what is a fact about this game,
+ * and the room's own bar along the top belongs to the building. Small, because
+ * anybody who needs it will look for it and everybody else should not have to
+ * look at it.
+ */
+.pk__helpbtn {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  background: rgb(0 0 0 / 0.4);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: var(--gr-text-base);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pk__helpbtn:hover {
+  background: rgb(0 0 0 / 0.6);
+  color: var(--gr-color-ink);
+  border-color: rgb(255 255 255 / 0.4);
+}
+
+.pk__help {
+  width: min(720px, calc(100vw - 24px));
+  max-height: min(86vh, 900px);
+  padding: 0;
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-md, 12px);
+  background: var(--gr-color-slate, #171f2a);
+  color: var(--gr-color-ink);
+  overflow: hidden;
+}
+
+/*
+ * The box takes focus when it opens, which paints a ring round the whole
+ * dialog. Dropped here and only here: the ring belongs on the things inside it
+ * that can be pressed, and they keep theirs.
+ */
+.pk__help:focus,
+.pk__help:focus-visible {
+  outline: none;
+}
+
+.pk__help::backdrop {
+  background: rgb(0 0 0 / 0.66);
+}
+
+.pk__help-inner {
+  max-height: inherit;
+  overflow-y: auto;
+  padding: var(--gr-space-4);
+}
+
+.pk__help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gr-space-3);
+  margin-bottom: var(--gr-space-3);
+}
+
+.pk__help-title {
+  margin: 0;
+  font-size: var(--gr-text-lg);
+}
+
+.pk__help-shut {
+  min-height: 40px;
+  padding: 0 var(--gr-space-3);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pk__help-shut:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.pk__ranks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/*
+ * Number, name, cards. The cards are given the room they need and the words
+ * take what is left, because the cards are the part being learned — somebody
+ * reading this is matching a shape on the felt to a shape on this list.
+ */
+.pk__rank {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--gr-space-3);
+  padding: var(--gr-space-2);
+  border-radius: var(--gr-radius-sm);
+}
+
+.pk__rank:nth-child(odd) {
+  background: rgb(255 255 255 / 0.03);
+}
+
+.pk__rank-no {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-faint);
+  text-align: right;
+}
+
+.pk__rank-said {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.pk__rank-said strong {
+  font-size: var(--gr-text-base);
+}
+
+.pk__rank-said span {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+}
+
+.pk__rank-cards {
+  display: flex;
+  gap: 3px;
+}
+
+.pk__rank-cards .bj-card {
+  width: 34px;
+  /* Still, in a list of fifty of them. The deal is an animation about a card
+     arriving, and nothing here is arriving. */
+  animation: none;
+}
+
+.pk__help-note {
+  margin: var(--gr-space-4) 0 0;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
 /*
  * A phone gets the same table, smaller.
  *
@@ -932,5 +1172,21 @@
 
   .pk__prebtn {
     flex: 1 1 45%;
+  }
+}
+
+@media (max-width: 560px) {
+  /*
+   * The chart stacks. Five cards and a sentence do not sit beside each other
+   * at this width, and shrinking the cards to make them would take away the
+   * only part of it anybody is here to look at.
+   */
+  .pk__rank {
+    grid-template-columns: 22px minmax(0, 1fr);
+    row-gap: var(--gr-space-2);
+  }
+
+  .pk__rank-cards {
+    grid-column: 2;
   }
 }

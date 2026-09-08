@@ -15,6 +15,7 @@ import { PublicTables } from "../table/PublicTables.js";
 import { SeatCount } from "../table/SeatCount.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
+import { Rankings } from "./Rankings.js";
 import { useTableSound } from "./useTableSound.js";
 import type { Move } from "./useIntent.js";
 import { useIntent } from "./useIntent.js";
@@ -154,10 +155,24 @@ export function Felt({
     [state.paid],
   );
 
+  const [helping, setHelping] = useState(false);
+
   return (
     <div className="pk">
       <div className="pk__table">
         <div className="pk__felt" />
+
+        {/* Above the felt rather than in the room's own bar: what beats what is
+            a fact about this game, and the bar belongs to the building. */}
+        <button
+          type="button"
+          className="pk__helpbtn"
+          aria-label="What beats what"
+          title="What beats what"
+          onClick={() => setHelping(true)}
+        >
+          ?
+        </button>
 
         <div className="pk__middle">
           <p className="pk__pot">
@@ -221,7 +236,27 @@ export function Felt({
         })}
       </div>
 
+      {/*
+        * What you are holding, said plainly and kept on screen for as long as
+        * you hold it. Reading your own hand off five cards is the one thing
+        * that stands between somebody new and the game, and it is a thing the
+        * table already knows the answer to.
+        */}
+      {state.you?.hand != null && me !== null && !me.folded ? (
+        <p
+          /* Keyed on what it says, so a hand that becomes a different hand is
+             a different element — which is what makes it land rather than
+             quietly changing its own text. */
+          key={state.you.hand.title + state.you.hand.said}
+          className="pk__reading"
+        >
+          <strong>{state.you.hand.title}</strong>
+          <span>{state.you.hand.said}</span>
+        </p>
+      ) : null}
+
       <Actions table={table} state={state} me={me} intent={intent} />
+      <Rankings open={helping} onClose={() => setHelping(false)} />
       {/*
         * Only at a table playing for nothing, and only for whoever opened it.
         * The server refuses it anywhere else whatever the browser shows —

@@ -8,7 +8,7 @@ import type {
 import { Seating, TableError } from "@backroom/core";
 import type { Card } from "./cards.js";
 import { Deck } from "./cards.js";
-import { best, compare, describe } from "./hand.js";
+import { best, compare, describe, title } from "./hand.js";
 import type { Score } from "./hand.js";
 import type { Contribution } from "./pot.js";
 import { pots, split } from "./pot.js";
@@ -117,6 +117,15 @@ export interface OwnView {
   maxRaiseTo: number;
   /** Whether there is any raise to make: false once calling is all they have. */
   canRaise: boolean;
+  /**
+   * What you are holding, once there is enough on the table to hold anything.
+   *
+   * Read here rather than in the browser, though the browser has every card it
+   * would need. One reading of a hand means the felt cannot tell you one thing
+   * during the hand and the table announce another at the showdown — and of
+   * the two, the one that pays out is this one.
+   */
+  hand: { title: string; said: string } | null;
 }
 
 /** The table as one seat sees it. What crosses the wire, and nothing more. */
@@ -501,7 +510,10 @@ export class Table implements PlayTable {
           seat.id === forSeatId || seat.showed !== null
             ? seat.hole
             : seat.hole.map(() => null),
-        showed: seat.showed === null ? null : describe(seat.showed),
+        showed:
+          seat.showed === null
+            ? null
+            : `${title(seat.showed)}, ${describe(seat.showed)}`,
       })),
     };
   }
@@ -681,7 +693,24 @@ export class Table implements PlayTable {
        * button is for. Offering a slider with one stop on it says otherwise.
        */
       canRaise: most > this.highest && seat.stack > this.owed(seat),
+      hand: this.reading(seat),
     };
+  }
+
+  /**
+   * The best five cards this seat can make right now, named.
+   *
+   * Null before the flop, because there is no hand yet — five cards are the
+   * smallest thing that can be read, and calling two cards a hand would be the
+   * felt inventing one.
+   */
+  private reading(seat: Seat): { title: string; said: string } | null {
+    const cards = [...seat.hole, ...this.board];
+    if (seat.hole.length < 2 || cards.length < 5) {
+      return null;
+    }
+    const score = best(cards);
+    return { title: title(score), said: describe(score) };
   }
 
   // ------------------------------------------------------------- the moves

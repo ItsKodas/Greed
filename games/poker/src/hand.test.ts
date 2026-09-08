@@ -1,7 +1,7 @@
 import { describe as group, expect, it } from "vitest";
 import type { Card, Rank, Suit } from "./cards.js";
 import { freshDeck, rankValue } from "./cards.js";
-import { best, compare, describe, scoreFive } from "./hand.js";
+import { best, CATEGORIES, compare, describe, scoreFive, title, TITLES } from "./hand.js";
 
 /**
  * What a hand is worth.
@@ -228,3 +228,41 @@ group("a full ring", () => {
   });
 });
 
+/*
+ * What a hand is called when it is shown to somebody.
+ *
+ * A separate question from what it is worth. The scoring uses the short names
+ * a card room says out loud — trips, quads — and nobody learning the game has
+ * met them; these are the ones written on the wall beside the table.
+ */
+group("naming a hand", () => {
+  const of = (...cards: string[]) =>
+    best(
+      cards.map((text) => {
+        const suits = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" } as const;
+        return {
+          rank: text.slice(0, -1) as Card["rank"],
+          suit: suits[text.slice(-1) as keyof typeof suits],
+        };
+      }),
+    );
+
+  it("spells out the ones the code says in shorthand", () => {
+    expect(title(of("5s", "5h", "5d", "Kc", "9s"))).toBe("Three of a kind");
+    expect(title(of("Qs", "Qh", "Qd", "Qc", "7s"))).toBe("Four of a kind");
+    expect(title(of("Js", "Jh", "4d", "4c", "As"))).toBe("Two pair");
+    expect(title(of("10s", "10h", "Kd", "7c", "2s"))).toBe("One pair");
+  });
+
+  it("gives the top straight flush the name it has of its own", () => {
+    expect(title(of("As", "Ks", "Qs", "Js", "10s"))).toBe("Royal flush");
+    // And every other one is just a straight flush.
+    expect(title(of("9h", "8h", "7h", "6h", "5h"))).toBe("Straight flush");
+  });
+
+  it("has a name for every category, so none can come out undefined", () => {
+    for (const category of CATEGORIES) {
+      expect(TITLES[category], `no name for ${category}`).toBeTruthy();
+    }
+  });
+});
