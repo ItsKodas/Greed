@@ -1,9 +1,10 @@
 import type { SeatView, TableView } from "@backroom/game-poker";
-import { BIG_BLIND, BUY_IN, FUN_STACK, SMALL_BLIND } from "@backroom/game-poker";
+import { blindsFor, BUY_IN, STAKES } from "@backroom/game-poker";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, FaceDown } from "../blackjack/Cards.js";
+import { Avatar } from "../game/Avatar.js";
 import { ChipStack } from "../chips/ChipStack.js";
 import { Chat } from "../game/Chat.js";
 import { compact } from "../game/money.js";
@@ -37,6 +38,27 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 
 /** The five places a board card goes, in the order they are dealt. */
 const SLOTS = ["flop1", "flop2", "flop3", "turn", "river"];
+
+/** Nobody else's hand is pointed at, and one empty set does for all of them. */
+const EMPTY: Set<string> = new Set();
+
+/** How a card is named when asking whether it is one of your five. */
+const nameOf = (card: { rank: string; suit: string }) => `${card.rank}${card.suit}`;
+
+/**
+ * Whether to light this card, dim it, or leave it alone.
+ *
+ * The third case is the one worth naming. With nothing to point at — before
+ * the flop, or once you have folded — every card would take the "not in your
+ * hand" class and the whole table would go grey, which reads as the felt
+ * having gone out rather than as nothing being highlighted.
+ */
+function pointing(using: Set<string>, card: { rank: string; suit: string }): string | undefined {
+  if (using.size === 0) {
+    return undefined;
+  }
+  return using.has(nameOf(card)) ? "pk__using" : "pk__spare";
+}
 
 /**
  * What a poker table counts in.
@@ -150,10 +172,24 @@ export function Felt({
       : [...state.seats.slice(mine), ...state.seats.slice(0, mine)];
   }, [state.seats, seatId]);
 
-  const won = useMemo(
-    () => new Map(state.paid.map((one) => [one.seatId, one])),
-    [state.paid],
-  );
+  const won = useMemo(() => new Map(state.paid.map((one) => [one.seatId, one])), [state.paid]);
+
+  /*
+   * Which cards on the table are in your hand, held by name rather than by
+   * position: a card is a rank and a suit, and the same card is in your hand
+   * whether it came out of the deck third or fifth.
+   */
+  const using = useMemo(() => {
+    /*
+     * Nothing is pointed at once you have folded. The table still knows what
+     * your two cards would have made — it keeps them until the hand is cleared
+     * — but a hand you are no longer in is not a hand, and lighting up the
+     * board for it says you are still playing.
+     */
+    const folded = state.seats.find((seat) => seat.id === seatId)?.folded ?? false;
+    const cards = folded ? [] : (state.you?.hand?.using ?? []);
+    return new Set(cards.map(nameOf));
+  }, [state.you, state.seats, seatId]);
 
   const [helping, setHelping] = useState(false);
 
@@ -186,7 +222,15 @@ export function Felt({
           </p>
           <div className="pk__board">
             {state.board.map((one, at) => (
-              <Card key={`${one.rank}${one.suit}`} card={one} deal={at} />
+              <span
+                key={`${one.rank}${one.suit}`}
+                /* A wrapper that takes no room of its own — the card stays a
+                   flex item of the board, and this is only somewhere to hang
+                   the fact that it is one of your five. */
+                className={pointing(using, one)}
+              >
+                <Card card={one} deal={at} />
+              </span>
             ))}
             {/* The streets still to come, so the board keeps its width and
                 nothing shuffles sideways when a card lands. */}
@@ -215,6 +259,8 @@ export function Felt({
             said={won.get(seat.id)?.said ?? null}
             /* What this player asked for, until the table answers. */
             pending={seat.id === seatId ? intent : null}
+            /* Only your own hand is pointed at: it is the only one you know. */
+            using={seat.id === seatId ? using : EMPTY}
           />
         ))}
 
@@ -222,7 +268,17 @@ export function Felt({
           const chips =
             seat.id === seatId && intent.committed !== null ? intent.committed : seat.committed;
           return chips > 0 ? (
-            <span className="pk__bet" key={`bet-${seat.id}`} style={seatAt(at, seats.length)}>
+            <span
+              /*
+               * Your own is marked, because it is the one that has to dodge
+               * something: your cards are drawn several times the size of
+               * anybody else's, and on a wide felt they grow into the space
+               * this ring passes through.
+               */
+              className={`pk__bet${seat.id === seatId ? " pk__bet--yours" : ""}`}
+              key={`bet-${seat.id}`}
+              style={{ ...seatAt(at, seats.length), ...dodge(at, seats.length) }}
+            >
               {/*
                 * Chips and the figure, not one or the other. The pile is what
                 * is read across a table — two chips against nine says who is
@@ -298,6 +354,21 @@ function seatAt(index: number, of: number): React.CSSProperties {
   } as React.CSSProperties;
 }
 
+/**
+ * How far a seat's chips step aside from the middle column.
+ *
+ * A seat straight above the middle puts its stake in the same column as the
+ * pot, and there is no radius that fixes that — pushed out it lands on the
+ * seat, pulled in it lands on the pot. So it steps sideways instead, which is
+ * where the room actually is. Only the ones near the top: everybody else is
+ * far enough round the ellipse to be clear already.
+ */
+function dodge(index: number, of: number): React.CSSProperties {
+  const angle = Math.PI / 2 + (index / of) * Math.PI * 2;
+  const upright = Math.sin(angle) < -0.6 ? 1 - Math.abs(Math.cos(angle)) / 0.8 : 0;
+  return { "--dodge": `${Math.max(0, upright) * 90}px` } as React.CSSProperties;
+}
+
 function Seat({
   seat,
   at,
@@ -307,6 +378,7 @@ function Seat({
   won,
   said,
   pending,
+  using,
 }: {
   seat: SeatView;
   at: number;
@@ -316,6 +388,8 @@ function Seat({
   won: number | null;
   said: string | null;
   pending: { move: Move | null } | null;
+  /** The cards in your own best hand, so yours can be pointed at. */
+  using: Set<string>;
 }) {
   /*
    * A press shows here before the table has answered it, which is the whole of
@@ -349,16 +423,32 @@ function Seat({
               // biome-ignore lint/suspicious/noArrayIndexKey: a hole has two places, not two cards
               <FaceDown key={index} deal={index} />
             ) : (
-              <Card key={`${one.rank}${one.suit}`} card={one} deal={index} />
+              <span
+                key={`${one.rank}${one.suit}`}
+                className={pointing(using, one)}
+              >
+                <Card card={one} deal={index} />
+              </span>
             ),
           )
         )}
       </div>
       <div className="pk__who">
-        <span className="pk__name">
-          {seat.name}
-          {seat.isBot ? <span className="pk__bot-mark">bot</span> : null}
-        </span>
+        <div className="pk__wholine">
+          {/* Who you are actually playing, which a name alone does not say at a
+              table of ten. Their own colour rings it, the same one it is
+              everywhere else in the building. */}
+          <Avatar
+            name={seat.name}
+            avatar={seat.avatar}
+            accentColor={seat.accentColor}
+            className="pk__face"
+          />
+          <span className="pk__name">
+            {seat.name}
+            {seat.isBot ? <span className="pk__bot-mark">bot</span> : null}
+          </span>
+        </div>
         <span className="pk__stack">
           {/*
             * What they have left, as weight rather than only as a figure. Off
@@ -530,17 +620,45 @@ export function Actions({
             type="button"
             className="pk__act pk__act--raise"
             disabled={table.busy}
-            aria-label={`Sit down with ${compact(state.forFun ? FUN_STACK : BUY_IN)}`}
+            aria-label={`Sit down with ${compact(state.entry)}`}
             onClick={() => table.act({ type: "buyIn" })}
           >
             <span className="pk__act-name">Sit down with</span>
-            <span className="pk__act-figure">{compact(state.forFun ? FUN_STACK : BUY_IN)}</span>
+            <span className="pk__act-figure">{compact(state.entry)}</span>
           </button>
         </div>
         <p className="pk__note">
           {state.forFun
             ? "Play money. It lives at this table and is gone when it closes."
             : "Chips come off your balance and go in front of you. Stand up and whatever is still there comes back."}
+        </p>
+      </div>
+    );
+  }
+
+  /*
+   * A hand nobody could make you turn over.
+   *
+   * Offered before the waiting notes below, because for the few seconds it is
+   * there it is the only thing on this screen worth pressing — and it is the
+   * one decision in the game that is purely yours, with nothing riding on it
+   * either way.
+   */
+  if (state.canShow) {
+    return (
+      <div className="pk__controls">
+        <div className="pk__acts">
+          <button
+            type="button"
+            className="pk__act"
+            disabled={table.busy}
+            onClick={() => table.act({ type: "show" })}
+          >
+            Show cards
+          </button>
+        </div>
+        <p className="pk__note">
+          Nobody can make you. Turn them over if the hand was worth seeing.
         </p>
       </div>
     );
@@ -797,6 +915,8 @@ function Sit({
   const ready = code.length === CODE_LENGTH && !table.busy;
   const guest = account.profile === null;
   const [maxSeats, setMaxSeats] = useState(6);
+  const [entry, setEntry] = useState<number>(BUY_IN);
+  const blinds = blindsFor(entry);
   const [typed, setTyped] = useState("");
   /*
    * Null until the host picks, rather than a boolean seeded from `guest`.
@@ -816,8 +936,8 @@ function Sit({
   return (
     <div className="join">
       <p className="join__pitch">
-        Texas hold'em, {fmt(SMALL_BLIND)} and {fmt(BIG_BLIND)} blinds. Everybody plays each other,
-        so nothing is won here that somebody at the table did not put in.
+        Texas hold'em. Everybody plays each other, so nothing is won here that somebody at the table
+        did not put in.
       </p>
 
       {account.loading || !guest ? null : (
@@ -901,16 +1021,49 @@ function Sit({
           </div>
 
           <SeatCount value={maxSeats} onChange={setMaxSeats} />
+
+          {/*
+            * What it costs to sit down, which is the same act as choosing the
+            * stakes: every level is a hundred big blinds, so one number sets
+            * the price of entry and what the table plays for, and the two
+            * cannot end up disagreeing.
+            */}
+          <div className="stakes" role="radiogroup" aria-label="What it costs to sit down">
+            <span className="stakes__label">Entry</span>
+            <div className="stakes__row">
+              {STAKES.map((level) => {
+                const at = blindsFor(level);
+                return (
+                  <button
+                    key={level}
+                    type="button"
+                    role="radio"
+                    aria-checked={entry === level}
+                    aria-label={`${compact(level)}, blinds ${at.small} and ${at.big}`}
+                    className={`stakes__pick${entry === level ? " stakes__pick--on" : ""}`}
+                    onClick={() => setEntry(level)}
+                  >
+                    <span className="stakes__cost">{compact(level)}</span>
+                    <span className="stakes__blinds">
+                      {at.small}/{at.big}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <p className="panel__note">
-            You get a five-character code to share. Sitting down costs{" "}
-            {forFun ? `${compact(FUN_STACK)} in play money` : compact(BUY_IN)}
-            {forFun ? "." : ", and what is still in front of you comes back when you stand up."}
+            You get a five-character code to share. Sitting down costs {compact(entry)}
+            {forFun ? " in play money, and blinds are " : ", blinds are "}
+            {fmt(blinds.small)} and {fmt(blinds.big)}
+            {forFun ? "." : ". What is still in front of you comes back when you stand up."}
           </p>
           <button
             type="button"
             className="btn btn--wide"
             disabled={table.busy || !named}
-            onClick={() => table.create(name, { game: "poker", forFun, maxSeats })}
+            onClick={() => table.create(name, { game: "poker", forFun, maxSeats, buyIn: entry })}
           >
             Open a table
           </button>

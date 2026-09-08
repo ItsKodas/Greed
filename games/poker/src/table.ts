@@ -8,7 +8,7 @@ import type {
 import { Seating, TableError } from "@backroom/core";
 import type { Card } from "./cards.js";
 import { Deck } from "./cards.js";
-import { best, compare, describe, title } from "./hand.js";
+import { best, compare, describe, meaningful, title } from "./hand.js";
 import type { Score } from "./hand.js";
 import type { Contribution } from "./pot.js";
 import { pots, split } from "./pot.js";
@@ -48,6 +48,14 @@ export interface Seat extends TableSeat {
   waiting: boolean;
   /** What they turned over, once there has been a showdown. */
   showed: Score | null;
+  /**
+   * Whether their cards are face up, which is not the same as having a hand.
+   *
+   * A hand that ends before the flop has two cards and no name — there is
+   * nothing to read from two. Somebody can still turn them over, so what is
+   * face up and what has been read are two facts and this is the first one.
+   */
+  revealed: boolean;
 }
 
 /** What a hand paid, once it is over. */
@@ -65,10 +73,13 @@ export const MIN_SEATS = 2;
 /**
  * What a seat sits down with at a table playing for nothing.
  *
- * Made up on the spot and gone when the table closes. It never came off an
- * account and it never goes back onto one, which is the whole of what makes a
- * for-fun table safe to put bots at: a hand won here moves a number that
- * exists only at this table.
+ * The same as anywhere else — a for-fun table costs what the host said, it is
+ * simply made up on the spot rather than taken from an account, and gone when
+ * the table closes. That is what makes it safe to put bots at: a hand won here
+ * moves a number that exists only at this table.
+ *
+ * Kept as a name because several places ask "what does it cost to sit down",
+ * and at a for-fun table the honest answer is the table's own entry.
  */
 export const FUN_STACK = 2_000;
 
@@ -125,7 +136,18 @@ export interface OwnView {
    * during the hand and the table announce another at the showdown — and of
    * the two, the one that pays out is this one.
    */
-  hand: { title: string; said: string } | null;
+  hand: {
+    title: string;
+    said: string;
+    /**
+     * The cards the hand is actually made of, for the felt to point at.
+     *
+     * Not always five. A pair of nines is two cards and the three beside them
+     * are kickers, which settle ties and are not the pair — pointing at all
+     * five is true and is not what somebody learning the game needs to see.
+     */
+    using: Card[];
+  } | null;
 }
 
 /** The table as one seat sees it. What crosses the wire, and nothing more. */
@@ -134,6 +156,16 @@ export interface TableView {
   you: OwnView | null;
   /** Whether the chips here are real. Bots sit only where they are not. */
   forFun: boolean;
+  /** What it costs to sit down, which the host chose when they opened it. */
+  entry: number;
+  /**
+   * Whether you have a hand you could turn over and have not.
+   *
+   * Answered per seat because it is a question about yours, and answered here
+   * rather than worked out on the felt because "still holding cards nobody
+   * made you show" is a rule about a hand rather than a fact about a picture.
+   */
+  canShow: boolean;
   /** Whose table it is, so the controls that are theirs are offered to them. */
   hostId: string | null;
   code: string;
@@ -251,6 +283,14 @@ export class Table implements PlayTable {
      * ever reaches the economy. Play money lives at the table and dies with it.
      */
     readonly forFun = false,
+    /**
+     * What it costs to sit down here.
+     *
+     * The host's, chosen when the table was opened, and not called `buyIn`
+     * because that is already the name of the thing that puts chips in front
+     * of a seat. This is the price of doing it.
+     */
+    readonly entry = FUN_STACK,
   ) {
     this.seating = new Seating(maxSeats);
   }
@@ -358,8 +398,9 @@ export class Table implements PlayTable {
     }
     const seat = this.seating.addBot(id, name, skill) as Seat;
     this.blank(seat);
-    // Straight to a stack: nobody is going to press sit-down for it.
-    seat.stack = FUN_STACK;
+    // Straight to a stack, and the same one everybody else buys: nobody is
+    // going to press sit-down for it.
+    seat.stack = this.entry;
     this.lastEvent = `${seat.name} sat down`;
     return seat;
   }
@@ -374,6 +415,7 @@ export class Table implements PlayTable {
     seat.allIn = false;
     seat.acted = false;
     seat.showed = null;
+    seat.revealed = false;
   }
 
   /**
@@ -467,12 +509,65 @@ export class Table implements PlayTable {
     }
   }
 
+  /**
+   * Turns a hand face up that nobody could make you turn up.
+   *
+   * A hand that was not called does not have to be shown — that is a rule
+   * about privacy, and the felt keeps it. But a player may want to anyway: to
+   * prove a bluff, or because the hand was worth seeing. It is theirs to
+   * choose, so it is a move rather than something the table decides.
+   *
+   * Only while the hand is being read. Before that it would be showing your
+   * cards to people still deciding what to do about them, which is not a
+   * flourish — it is handing them the hand.
+   */
+  show(seatId: string): void {
+    if (this.street !== "showdown") {
+      throw new TableError("There is nothing to show yet.");
+    }
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined || seat.hole.length < 2) {
+      throw new TableError("You have no cards to show.");
+    }
+    if (seat.revealed || seat.showed !== null) {
+      return;
+    }
+    /*
+     * Face up either way; named only when there is a hand to name. A hand that
+     * ended before the flop is two cards, and two cards do not make one — the
+     * cards are still theirs to turn over, and the felt simply has nothing to
+     * call them.
+     */
+    seat.revealed = true;
+    const cards = [...seat.hole, ...this.board];
+    if (cards.length >= 5) {
+      seat.showed = best(cards);
+      this.lastEvent = `${seat.name} showed ${describe(seat.showed)}`;
+      return;
+    }
+    this.lastEvent = `${seat.name} showed their hand`;
+  }
+
+  /** Whether this seat has a hand it could turn over and has not. */
+  canShow(seatId: string): boolean {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    return (
+      this.street === "showdown" &&
+      seat !== undefined &&
+      seat.hole.length >= 2 &&
+      !seat.revealed &&
+      seat.showed === null
+    );
+  }
+
   /** The table as one seat may see it: everybody else's cards stay face down. */
   view(forSeatId: string | null): TableView {
     const mine = forSeatId === null ? undefined : (this.seating.find(forSeatId) as Seat | undefined);
     return {
       you: mine === undefined ? null : this.ownView(mine),
       forFun: this.forFun,
+      entry: this.entry,
+      canShow: forSeatId !== null && this.canShow(forSeatId),
       hostId: this.hostId,
       code: this.code,
       street: this.street,
@@ -507,7 +602,7 @@ export class Table implements PlayTable {
          * could read out of the network tab.
          */
         hole:
-          seat.id === forSeatId || seat.showed !== null
+          seat.id === forSeatId || seat.showed !== null || seat.revealed
             ? seat.hole
             : seat.hole.map(() => null),
         showed:
@@ -704,13 +799,13 @@ export class Table implements PlayTable {
    * smallest thing that can be read, and calling two cards a hand would be the
    * felt inventing one.
    */
-  private reading(seat: Seat): { title: string; said: string } | null {
+  private reading(seat: Seat): OwnView["hand"] {
     const cards = [...seat.hole, ...this.board];
     if (seat.hole.length < 2 || cards.length < 5) {
       return null;
     }
     const score = best(cards);
-    return { title: title(score), said: describe(score) };
+    return { title: title(score), said: describe(score), using: meaningful(score) };
   }
 
   // ------------------------------------------------------------- the moves
@@ -1004,6 +1099,7 @@ export class Table implements PlayTable {
     for (const seat of this.seats) {
       seat.hole = [];
       seat.showed = null;
+      seat.revealed = false;
       seat.committed = 0;
       seat.paid = 0;
       seat.folded = false;

@@ -127,6 +127,14 @@ export interface ClientToServer {
       maxSeats?: number;
       /** Play money, so anybody may sit down. The game decides what it means. */
       forFun?: boolean;
+      /**
+       * What the host wants it to cost to sit down.
+       *
+       * Snapped to a level the game allows rather than taken at its word: this
+       * decides how much of somebody's balance is at risk at a table they sat
+       * down at, and it is not a number a client gets to invent.
+       */
+      buyIn?: number;
     },
     ack: (result: Ack) => void,
   ) => void;

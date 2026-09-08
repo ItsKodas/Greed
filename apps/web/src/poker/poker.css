@@ -13,193 +13,66 @@
  * rather than a different arrangement that would have to be designed twice.
  */
 
+/*
+ * Poker gets more of the screen than the rest of the building.
+ *
+ * Every other game is a page with a thing on it; this one is a table with ten
+ * people round it, and a felt capped at the building's thousand pixels leaves
+ * a wide monitor two-thirds empty while the cards on it stay too small to
+ * read. So the page widens for this room only, and the things that are still
+ * reading matter — the controls, the chat — keep their own widths below.
+ */
+:root[data-game="poker"] .play {
+  max-width: 1600px;
+}
+
+/*
+ * The felt takes the room; the talking does not. A line of chat drawn across
+ * sixteen hundred pixels is a line nobody can follow back to its own start.
+ */
+:root[data-game="poker"] .chat {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
 .pk {
   container-type: inline-size;
 }
 
 /*
- * The rail: the wood a table is built out of, and what the players sit behind.
+ * A face beside a name.
  *
- * Its own colours rather than the building's, because this is a material the
- * game is played on rather than one it borrows. The room's palette is smoke
- * and neon; a card table is oak, and a green cloth sitting straight on a dark
- * page reads as a shape rather than as furniture.
+ * Ringed in their own colour, which is the same ring they wear everywhere else
+ * in the building — at a table of ten, a name in small type is not enough to
+ * find somebody by, and a colour is read before a word is.
  */
-.pk__table {
-  /*
-   * How far the ring of seats reaches.
-   *
-   * Well inside the rail, because a seat is a column with its cards at the top
-   * and its name below, and the whole column is centred on this ring — so the
-   * cards of any seat above the middle stick out past it by half the column.
-   * At 41% that put four hands on the timber. Every card corner is checked
-   * against the cloth, not judged by eye.
-   */
-  --across: 36%;
-  --down: 32%;
-  /*
-   * The ring the chips sit on: just inside the seats, well outside the board.
-   *
-   * Close to the seats on purpose, and no closer than that.
-   *
-   * At a table your chips sit in front of you, and that is the whole of how
-   * anybody knows whose they are — there is no label on them. Pushed too far
-   * in they became a ring of unattached numbers floating on the cloth, and the
-   * first person to see them asked what they were for, which is the only test
-   * that matters. Brought right up to the seats they landed on the cards.
-   *
-   * So: near enough that the closest seat to a pile is always the seat that
-   * bet it, far enough that it clears that seat's cards. Both are measured.
-   */
-  --bet-across: 25%;
-  --bet-down: 18.5%;
-  position: relative;
-  aspect-ratio: 16 / 10;
-  border-radius: 46% / 48%;
-  background:
-    radial-gradient(120% 90% at 50% -10%, rgb(255 214 160 / 0.22) 0%, transparent 55%),
-    linear-gradient(168deg, #6b452a 0%, #4a2e1b 42%, #2b1a0f 100%);
-  box-shadow:
-    inset 0 2px 0 rgb(255 224 180 / 0.18),
-    inset 0 -3px 8px rgb(0 0 0 / 0.6),
-    0 22px 48px rgb(0 0 0 / 0.5);
-}
-
-/*
- * The cloth, inset inside the wood.
- *
- * A hair off centre downwards, so the rail reads as thicker at the bottom,
- * which is what a table looks like from a chair rather than from above.
- */
-.pk__felt {
-  position: absolute;
-  /*
-   * How much timber shows, and it is the only thing setting that. Thinner than
-   * it was: the rail is the edge of the table rather than a feature of it, and
-   * every percent of it taken back is a percent of cloth — which is where the
-   * cards, the chips and the seats all have to fit.
-   */
-  inset: 3.4% 2.6% 4%;
-  border-radius: 46% / 48%;
-  background: radial-gradient(70% 70% at 50% 38%, #21523c 0%, #17392c 58%, #0d2119 100%);
-  box-shadow:
-    inset 0 0 70px rgb(0 0 0 / 0.5),
-    inset 0 3px 10px rgb(0 0 0 / 0.55),
-    0 0 0 1px rgb(0 0 0 / 0.45);
-}
-
-/* The pot and the board, in the middle where everybody can read them. */
-.pk__middle {
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  transform: translate(-50%, -50%);
+.pk__wholine {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--gr-space-2);
-  /*
-   * As wide as the board and no wider. It was a fixed share of the table,
-   * which made an invisible box most of the way across the felt — nothing to
-   * look at, but something for everything else to collide with.
-   */
-  width: max-content;
-  max-width: 78%;
-}
-
-.pk__pot {
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--gr-space-2);
-  font-size: var(--gr-text-lg);
-  font-variant-numeric: tabular-nums;
-  color: var(--gr-color-chip);
-  text-shadow: 0 2px 6px rgb(0 0 0 / 0.7);
-}
-
-.pk__pot-label,
-.pk__side {
-  font-size: var(--gr-text-xs);
-  color: var(--gr-color-ink-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-}
-
-.pk__board {
-  display: flex;
-  gap: 5px;
   justify-content: center;
+  gap: 5px;
+  min-width: 0;
 }
 
-/*
- * A card that has not come yet. It holds the space so the board keeps its
- * width all the way from the flop to the river: without it every street shunts
- * the cards sideways, and a card that moves when a different card arrives
- * reads as the wrong card moving.
- */
-.pk__gap {
-  width: 58px;
-  aspect-ratio: 5 / 7;
-  border-radius: 5px;
-  border: 1px dashed rgb(255 255 255 / 0.1);
+.pk__face {
+  overflow: hidden;
+  width: clamp(18px, 2.4cqw, 40px);
+  height: clamp(18px, 2.4cqw, 40px);
+  flex: none;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--gr-color-smoke);
+  border: 1.5px solid var(--gr-color-neon-dim);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
 }
 
-.pk__board .bj-card {
-  width: 58px;
-  height: auto;
-}
-
-/* ------------------------------------------------------------ the seats */
-
-/*
- * A seat is cards on the cloth and a name under them. No box.
- *
- * A bordered panel per player turned the felt into a grid of cards about
- * players rather than a table with people at it: ten little windows, each with
- * its own edge, none of them looking like they were sitting anywhere. What is
- * left is the things themselves, and a shadow under the text so they still
- * read against the cloth.
- */
-.pk__seat {
-  position: absolute;
-  left: calc(50% + var(--cos) * var(--across));
-  top: calc(50% + var(--sin) * var(--down));
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  width: 108px;
-  text-align: center;
-}
-
-.pk__cards {
-  display: flex;
-  gap: 3px;
-  filter: drop-shadow(0 3px 6px rgb(0 0 0 / 0.55));
-}
-
-.pk__cards .bj-card {
-  width: 38px;
-  height: auto;
-}
-
-/*
- * Your own seat, drawn larger than the rest.
- *
- * Every other hand is two cards you cannot see and do not need to read; yours
- * is the one you are making decisions with, and at the size the others are
- * drawn a suit is a guess. It is also the seat you look at most, so it is the
- * one worth the room.
- */
-.pk__seat--you .pk__cards .bj-card {
-  width: 62px;
-}
-
-.pk__seat--you .pk__name,
-.pk__seat--you .pk__stack {
-  font-size: var(--gr-text-md);
+.pk__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .pk__who {
@@ -291,11 +164,20 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Beside the figure and centred against it, rather than sitting on its
-   baseline — a pile has no baseline to sit on. */
+/*
+ * The pot's chips hang beside the figure without being part of the row.
+ *
+ * In the flow they set the row's height, and the row's height is what holds
+ * the board down — so the middle of the table lifted and dropped as the pot
+ * grew and was swept. Out of the flow the figure keeps one place all hand,
+ * which is what anybody glancing at the pot is looking for, and the board
+ * never moves under the cards.
+ */
 .pk__pot-chips {
+  position: absolute;
+  left: calc(100% + 8px);
+  bottom: -0.25em;
   display: block;
-  align-self: center;
 }
 
 /*
@@ -308,6 +190,26 @@
   align-items: flex-end;
   margin-right: 4px;
   vertical-align: -2px;
+}
+
+/*
+ * The chips scale with the felt too, for the same reason the cards do — and
+ * because React sized them for the smallest table they appear on. Only the
+ * width is given; the drawing's own viewBox takes care of the rest.
+ */
+.pk__pile .stack {
+  width: clamp(11px, 1.9cqw, 32px);
+  height: auto;
+}
+
+.pk__bet .stack {
+  width: clamp(16px, 2.6cqw, 44px);
+  height: auto;
+}
+
+.pk__pot-chips .stack {
+  width: clamp(19px, 3.2cqw, 54px);
+  height: auto;
 }
 
 .pk__stack {
@@ -328,7 +230,9 @@
   position: absolute;
   left: calc(50% + var(--cos) * var(--bet-across));
   top: calc(50% + var(--sin) * var(--bet-down));
-  transform: translate(-50%, -50%);
+  /* `--dodge` steps a seat above the middle out of the pot's column; it is
+     zero for every seat that is already clear of it. */
+  transform: translate(calc(-50% + var(--dodge, 0px)), -50%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -340,6 +244,19 @@
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.95);
   white-space: nowrap;
 }
+
+/*
+ * Your own stake sits nearer the middle than everybody else's.
+ *
+ * One ring, one exception, and the exception is not arbitrary: your hand is
+ * drawn twice the size of anybody else's, so the radius that clears their
+ * cards runs straight through yours. Pulled in towards the pot, because the
+ * space between you and the board is the empty half of the felt.
+ */
+.pk__bet--yours {
+  top: calc(50% + var(--sin) * 15%);
+}
+
 
 .pk__says {
   font-size: 11px;
@@ -1052,6 +969,275 @@
   color: var(--gr-color-ink-dim);
 }
 
+/* ------------------------------------------------------- choosing stakes */
+
+.stakes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stakes__label {
+  font-size: var(--gr-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+}
+
+.stakes__row {
+  display: flex;
+  gap: 6px;
+}
+
+/*
+ * The price and what it plays for, on the same key. They are one decision —
+ * a hundred big blinds to the buy-in — and showing only the price would make
+ * a host pick the stakes without being told what they are.
+ */
+.stakes__pick {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 46px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 4px;
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.stakes__pick:hover {
+  background: rgb(255 255 255 / 0.09);
+  color: var(--gr-color-ink);
+}
+
+.stakes__pick--on {
+  border-color: var(--gr-color-neon);
+  background: color-mix(in srgb, var(--gr-color-neon) 16%, transparent);
+  color: var(--gr-color-ink-lit);
+}
+
+.stakes__cost {
+  font-size: var(--gr-text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.stakes__blinds {
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-ink-faint);
+}
+
+
+/*
+ * The rail: the wood a table is built out of, and what the players sit behind.
+ *
+ * Its own colours rather than the building's, because this is a material the
+ * game is played on rather than one it borrows. The room's palette is smoke
+ * and neon; a card table is oak, and a green cloth sitting straight on a dark
+ * page reads as a shape rather than as furniture.
+ */
+.pk__table {
+  /*
+   * How far the ring of seats reaches.
+   *
+   * Well inside the rail, because a seat is a column with its cards at the top
+   * and its name below, and the whole column is centred on this ring — so the
+   * cards of any seat above the middle stick out past it by half the column.
+   * At 41% that put four hands on the timber. Every card corner is checked
+   * against the cloth, not judged by eye.
+   */
+  --across: 36%;
+  --down: 32%;
+  /*
+   * The ring the chips sit on: just inside the seats, well outside the board.
+   *
+   * Close to the seats on purpose, and no closer than that.
+   *
+   * At a table your chips sit in front of you, and that is the whole of how
+   * anybody knows whose they are — there is no label on them. Pushed too far
+   * in they became a ring of unattached numbers floating on the cloth, and the
+   * first person to see them asked what they were for, which is the only test
+   * that matters. Brought right up to the seats they landed on the cards.
+   *
+   * So: near enough that the closest seat to a pile is always the seat that
+   * bet it, far enough that it clears that seat's cards. Both are measured.
+   */
+  --bet-across: 25%;
+  --bet-down: 18.5%;
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 46% / 48%;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgb(255 214 160 / 0.22) 0%, transparent 55%),
+    linear-gradient(168deg, #6b452a 0%, #4a2e1b 42%, #2b1a0f 100%);
+  box-shadow:
+    inset 0 2px 0 rgb(255 224 180 / 0.18),
+    inset 0 -3px 8px rgb(0 0 0 / 0.6),
+    0 22px 48px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * The cloth, inset inside the wood.
+ *
+ * A hair off centre downwards, so the rail reads as thicker at the bottom,
+ * which is what a table looks like from a chair rather than from above.
+ */
+.pk__felt {
+  position: absolute;
+  /*
+   * How much timber shows, and it is the only thing setting that. Thinner than
+   * it was: the rail is the edge of the table rather than a feature of it, and
+   * every percent of it taken back is a percent of cloth — which is where the
+   * cards, the chips and the seats all have to fit.
+   */
+  inset: 3.4% 2.6% 4%;
+  border-radius: 46% / 48%;
+  background: radial-gradient(70% 70% at 50% 38%, #21523c 0%, #17392c 58%, #0d2119 100%);
+  box-shadow:
+    inset 0 0 70px rgb(0 0 0 / 0.5),
+    inset 0 3px 10px rgb(0 0 0 / 0.55),
+    0 0 0 1px rgb(0 0 0 / 0.45);
+}
+
+/* The pot and the board, in the middle where everybody can read them. */
+.pk__middle {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-2);
+  /*
+   * As wide as the board and no wider. It was a fixed share of the table,
+   * which made an invisible box most of the way across the felt — nothing to
+   * look at, but something for everything else to collide with.
+   */
+  width: max-content;
+  max-width: 78%;
+}
+
+.pk__pot {
+  margin: 0;
+  /* The chips are positioned against this, and its height must not depend on
+     them: a fixed line for the figure is the whole point. */
+  position: relative;
+  min-height: 1.5em;
+  display: flex;
+  align-items: baseline;
+  gap: var(--gr-space-2);
+  font-size: var(--gr-text-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+  text-shadow: 0 2px 6px rgb(0 0 0 / 0.7);
+}
+
+.pk__pot-label,
+.pk__side {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.pk__board {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+/*
+ * A card that has not come yet. It holds the space so the board keeps its
+ * width all the way from the flop to the river: without it every street shunts
+ * the cards sideways, and a card that moves when a different card arrives
+ * reads as the wrong card moving.
+ */
+/*
+ * Everything on this felt is measured in `cqw` — hundredths of the table's own
+ * width — rather than in pixels.
+ *
+ * The seats and the chips sit on rings given as percentages of the table, so a
+ * card measured in pixels changes size relative to those rings at every screen
+ * width, and the two walk into each other: a name landing on its own stake at
+ * one size, a stake landing on the board at another. Tuning that per breakpoint
+ * is chasing it. In the same units as the rings it simply cannot happen — the
+ * whole felt is one drawing that gets bigger.
+ *
+ * Clamped at both ends. Below the floor a card stops being readable, and above
+ * the ceiling a very wide monitor would deal playing cards the size of books.
+ */
+.pk__gap {
+  width: clamp(44px, 6.2cqw, 104px);
+  aspect-ratio: 5 / 7;
+  border-radius: 5px;
+  border: 1px dashed rgb(255 255 255 / 0.1);
+}
+
+.pk__board .bj-card {
+  width: clamp(44px, 6.2cqw, 104px);
+  height: auto;
+}
+
+/* ------------------------------------------------------------ the seats */
+
+/*
+ * A seat is cards on the cloth and a name under them. No box.
+ *
+ * A bordered panel per player turned the felt into a grid of cards about
+ * players rather than a table with people at it: ten little windows, each with
+ * its own edge, none of them looking like they were sitting anywhere. What is
+ * left is the things themselves, and a shadow under the text so they still
+ * read against the cloth.
+ */
+.pk__seat {
+  position: absolute;
+  left: calc(50% + var(--cos) * var(--across));
+  top: calc(50% + var(--sin) * var(--down));
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 108px;
+  text-align: center;
+}
+
+.pk__cards {
+  display: flex;
+  gap: 3px;
+  filter: drop-shadow(0 3px 6px rgb(0 0 0 / 0.55));
+}
+
+.pk__cards .bj-card {
+  width: clamp(30px, 4.2cqw, 70px);
+  height: auto;
+}
+
+/*
+ * Your own seat, drawn larger than the rest.
+ *
+ * Every other hand is two cards you cannot see and do not need to read; yours
+ * is the one you are making decisions with, and at the size the others are
+ * drawn a suit is a guess. It is also the seat you look at most, so it is the
+ * one worth the room.
+ */
+.pk__seat--you .pk__cards .bj-card {
+  width: clamp(44px, 7cqw, 118px);
+}
+
+.pk__seat--you .pk__name,
+.pk__seat--you .pk__stack {
+  font-size: var(--gr-text-md);
+}
+
 /*
  * A phone gets the same table, smaller.
  *
@@ -1161,6 +1347,12 @@
     display: none;
   }
 
+  /* A 64px seat has room for a name and a number. The face is the first thing
+     to go, because the name is the part that identifies somebody. */
+  .pk__seat:not(.pk__seat--you) .pk__face {
+    display: none;
+  }
+
   /*
    * The pot-slice buttons wrap onto their own line rather than squeezing to
    * nothing. Five of them across 375px is about sixty pixels each, which is
@@ -1188,5 +1380,54 @@
 
   .pk__rank-cards {
     grid-column: 2;
+  }
+}
+
+/* --------------------------------------------- the five that make it */
+
+/*
+ * Which cards your hand is actually made of.
+ *
+ * The slowest thing for a new player to see: a flush among seven cards is only
+ * obvious once you know which five it is. The evaluator had to work that out
+ * to score the hand at all, so it says so and the felt points at them.
+ *
+ * The wrapper takes no room of its own — the card stays a flex item of the row
+ * it is in, and this is somewhere to hang the fact rather than a box around it.
+ */
+.pk__using,
+.pk__spare {
+  display: contents;
+}
+
+.pk__using .bj-card {
+  /* Lifted and lit. Both, because a lift alone is lost among cards that
+     overlap and a glow alone is lost against a lit felt. */
+  transform: translateY(-6px);
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--gr-color-chip) 75%, transparent))
+    drop-shadow(0 6px 8px rgb(0 0 0 / 0.5));
+  transition:
+    transform 220ms cubic-bezier(0.16, 1.06, 0.28, 1),
+    filter 220ms ease;
+}
+
+/*
+ * And the ones that are not in it step back. Dimming the rest is what makes
+ * the five read as a hand rather than as five cards that happen to be brighter
+ * — it is the difference between pointing and shouting.
+ */
+.pk__spare .bj-card {
+  opacity: 0.62;
+  transition: opacity 220ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__using .bj-card,
+  .pk__spare .bj-card {
+    transition: none;
+  }
+
+  .pk__using .bj-card {
+    transform: none;
   }
 }

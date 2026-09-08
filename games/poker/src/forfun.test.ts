@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Card } from "./cards.js";
 import { pokerAdapter } from "./adapter.js";
+import { blindsFor, stakeFor, STAKES } from "./listing.js";
 import { decide, strength } from "./bot.js";
 import type { Seat } from "./table.js";
 import { FUN_STACK, Table } from "./table.js";
@@ -244,5 +245,174 @@ describe("a whole hand against bots", () => {
     // Every play chip still at the table: nothing was minted and nothing lost.
     const total = table.seats.reduce((sum, seat) => sum + seat.stack, 0) + table.pot;
     expect(total).toBe(FUN_STACK * 3);
+  });
+});
+
+/*
+ * What a table costs to sit down at.
+ *
+ * The host's decision, and the one number in the create payload that says how
+ * much of somebody else's balance is at risk — so it is the one the game has
+ * to take back off the client rather than take at its word.
+ */
+describe("what it costs to sit down", () => {
+  it("snaps whatever was asked for to a level the house actually deals", () => {
+    expect(stakeFor(2_000)).toBe(2_000);
+    expect(stakeFor(1_900)).toBe(2_000);
+    expect(stakeFor(7_000)).toBe(5_000);
+    expect(STAKES).toContain(stakeFor(123_456));
+  });
+
+  it("takes nothing on trust: junk becomes the ordinary level", () => {
+    for (const junk of [undefined, null, "10000", Number.NaN, Number.POSITIVE_INFINITY, -5]) {
+      expect(STAKES).toContain(stakeFor(junk));
+    }
+  });
+
+  it("gives every level whole-chip blinds, a hundred of the big one to the buy-in", () => {
+    for (const level of STAKES) {
+      const { small, big } = blindsFor(level);
+      expect(Number.isInteger(small)).toBe(true);
+      expect(Number.isInteger(big)).toBe(true);
+      expect(big * 100).toBe(level);
+      expect(small * 2).toBe(big);
+    }
+  });
+
+  it("charges what the host chose rather than the default", async () => {
+    const adapter = pokerAdapter();
+    const table = adapter.create("STK01", { buyIn: 5_000 }) as Table;
+    table.join("a", "Ada", identity("u1"));
+
+    const taken: number[] = [];
+    await adapter.act(
+      table,
+      "a",
+      { type: "buyIn" },
+      {
+        take: async (_who, amount) => {
+          taken.push(amount);
+          return true;
+        },
+        give: async () => undefined,
+        record: async () => undefined,
+        finished: async () => undefined,
+      },
+    );
+
+    expect(taken).toEqual([5_000]);
+    expect(table.seats[0]?.stack).toBe(5_000);
+    // And the stakes came with it, rather than staying at the default.
+    expect(table.bigBlind).toBe(50);
+    expect(table.smallBlind).toBe(25);
+  });
+
+  it("sits a bot down with the same stack everybody else buys", () => {
+    const table = new Table("FUN02", Math.random, 25, 50, 6, 30_000, true, 5_000);
+    expect(table.addBot("bot:1", "Pockets", "normal").stack).toBe(5_000);
+  });
+});
+
+/*
+ * Turning over a hand nobody could make you turn over.
+ *
+ * A hand that was not called does not have to be shown, and the felt keeps
+ * that. This is the player choosing to anyway.
+ */
+describe("showing a hand", () => {
+  function heldUp(): Table {
+    let at = 7;
+    const random = () => {
+      at = (at * 1103515245 + 12345) % 2147483648;
+      return at / 2147483648;
+    };
+    const table = new Table("SHW01", random, 50, 100, 6, 30_000, true, 2_000);
+    table.join("a", "Ada", identity("u1"));
+    table.addBot("bot:1", "Pockets", "normal");
+    table.buyIn("a", 2_000);
+    table.deal();
+    return table;
+  }
+
+  it("refuses while there is still a hand being played", () => {
+    /*
+     * Showing your cards to people still deciding what to do about them is not
+     * a flourish, it is handing them the hand.
+     */
+    const table = heldUp();
+    expect(table.street).toBe("preflop");
+    expect(() => table.show("a")).toThrow(/nothing to show/i);
+    expect(table.canShow("a")).toBe(false);
+  });
+
+  it("turns them face up for everybody, not only for their owner", () => {
+    const table = heldUp();
+    // Everybody but one folds, so the hand ends without a showdown between them.
+    while (table.street !== "showdown" && table.toAct !== null) {
+      table.act(table.toAct, "fold");
+    }
+    expect(table.street).toBe("showdown");
+
+    const stillHolding = table.seats.find((seat) => table.canShow(seat.id));
+    expect(stillHolding).toBeDefined();
+
+    const who = (stillHolding as { id: string }).id;
+    table.show(who);
+
+    const seen = table.view("somebody else").seats.find((seat) => seat.id === who);
+    expect(seen?.hole.filter((card) => card !== null)).toHaveLength(2);
+    expect(table.lastEvent).toMatch(/showed/i);
+  });
+
+  it("shows two cards without pretending they are a hand", () => {
+    /*
+     * A hand that ended before the flop is two cards, and two cards cannot be
+     * read as anything — the first version of this threw trying. They are
+     * still theirs to turn over; the felt simply has nothing to call them.
+     */
+    const table = heldUp();
+    while (table.street !== "showdown" && table.toAct !== null) {
+      table.act(table.toAct, "fold");
+    }
+    expect(table.board).toHaveLength(0);
+
+    const who = (table.seats.find((seat) => table.canShow(seat.id)) as { id: string }).id;
+    expect(() => table.show(who)).not.toThrow();
+
+    const seen = table.view(null).seats.find((seat) => seat.id === who);
+    expect(seen?.hole.filter((card) => card !== null)).toHaveLength(2);
+    expect(seen?.showed).toBeNull();
+    expect(table.lastEvent).toMatch(/showed their hand/i);
+  });
+
+  it("names the hand when there are five cards to name it from", () => {
+    const table = heldUp();
+    // Played to the river, so there is a hand rather than two cards.
+    while (table.street !== "showdown" && table.toAct !== null) {
+      const seat = table.seats.find((one) => one.id === table.toAct);
+      table.act(table.toAct, table.owed(seat as never) > 0 ? "call" : "check");
+    }
+    expect(table.board.length).toBeGreaterThanOrEqual(3);
+
+    const holder = table.seats.find((seat) => table.canShow(seat.id));
+    if (holder === undefined) {
+      // Everybody turned over at the showdown already, which is the other
+      // correct outcome and leaves nothing for this test to do.
+      return;
+    }
+    table.show(holder.id);
+    expect(holder.showed).not.toBeNull();
+  });
+
+  it("says so once and then has nothing left to say", () => {
+    const table = heldUp();
+    while (table.street !== "showdown" && table.toAct !== null) {
+      table.act(table.toAct, "fold");
+    }
+    const who = (table.seats.find((seat) => table.canShow(seat.id)) as { id: string }).id;
+    table.show(who);
+    expect(table.canShow(who)).toBe(false);
+    // And asking again is not an error, it is simply already done.
+    expect(() => table.show(who)).not.toThrow();
   });
 });

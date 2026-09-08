@@ -1,9 +1,9 @@
 import type { GameAdapter } from "@backroom/core";
 import { seatLimit, TableError } from "@backroom/core";
-import { BIG_BLIND, BUY_IN, POKER, SMALL_BLIND } from "./listing.js";
+import { blindsFor, POKER, stakeFor } from "./listing.js";
 import { decide, thinkingTime } from "./bot.js";
 import type { Move } from "./table.js";
-import { FUN_STACK, Table } from "./table.js";
+import { Table } from "./table.js";
 
 /**
  * What the room does with a poker table.
@@ -41,14 +41,23 @@ export function pokerAdapter(
     listing: POKER,
 
     create(code, made) {
+      /*
+       * One number decides all three. The host picks what it costs to sit
+       * down; the blinds follow from it at a hundred big blinds to the buy-in,
+       * which is the shape of a small game everywhere — and means the stakes
+       * cannot end up disagreeing with the price of entry.
+       */
+      const entry = stakeFor(made?.["buyIn"]);
+      const blinds = blindsFor(entry);
       return new Table(
         code,
         random,
-        SMALL_BLIND,
-        BIG_BLIND,
+        blinds.small,
+        blinds.big,
         seatLimit(made?.["maxSeats"], POKER.maxSeats),
         turnMs,
         made?.["forFun"] === true,
+        entry,
       );
     },
 
@@ -77,18 +86,21 @@ export function pokerAdapter(
            * no account to take it from and none to give it back to.
            */
           if (table.forFun) {
-            table.buyIn(seatId, FUN_STACK);
+            table.buyIn(seatId, table.entry);
             return;
           }
           if (seat.userId === null) {
             throw new TableError("Sign in to play for chips.");
           }
-          if (!(await deps.take(seat.userId, BUY_IN))) {
+          if (!(await deps.take(seat.userId, table.entry))) {
             throw new TableError("Not enough chips to sit down.");
           }
-          table.buyIn(seatId, BUY_IN);
+          table.buyIn(seatId, table.entry);
           return;
         }
+        case "show":
+          table.show(seatId);
+          return;
         case "fold":
         case "check":
         case "call":
