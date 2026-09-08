@@ -109,3 +109,50 @@ describe("evaluating a spin", () => {
     }
   });
 });
+
+describe("buying fewer lines", () => {
+  it("only pays on the lines that were bought", () => {
+    /*
+     * The whole meaning of choosing fewer. Chips across the top three reels
+     * light every one of the nine; on a single line only the middle one pays.
+     */
+    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    expect(evaluate(g, 900, 9).lines).toHaveLength(9);
+    expect(evaluate(g, 900, 1).lines).toHaveLength(1);
+    expect(evaluate(g, 900, 1).lines[0]?.line).toBe(0);
+  });
+
+  it("splits the stake across the lines bought, not across all nine", () => {
+    // 900 on one line is 900 a line, so chip three-of-a-kind at 4x pays 3600 —
+    // the same spin on nine lines pays 400 on each of them.
+    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    expect(evaluate(g, 900, 1).fixed).toBe(3600);
+    expect(evaluate(g, 900, 9).fixed).toBe(3600);
+  });
+
+  it("costs the same however the stake is spread, when everything lands", () => {
+    // Not a coincidence and worth pinning: the line bet rises exactly as fast
+    // as the line count falls, which is why the bank's cap does not care how
+    // many lines were bought.
+    const g = grid([c, c, c], [c, c, c], [c, c, c], [c, c, c], [c, c, c]);
+    for (const lines of [1, 3, 5, 9]) {
+      expect(evaluate(g, 900, lines).fixed).toBe(evaluate(g, 900, 9).fixed);
+    }
+  });
+
+  it("misses a win that lands on a line nobody bought", () => {
+    // Sevens along the bottom, which is line three. One line buys the middle.
+    const g = grid([d, d, s], [d, d, s], [d, d, s], [d, d, s], [d, d, s]);
+    expect(evaluate(g, 900, 9).jackpot).toBe(true);
+    expect(evaluate(g, 900, 1).jackpot).toBe(false);
+  });
+
+  it("refuses to read a line count that is not on the machine", () => {
+    const g = grid([c, c, c], [c, c, c], [c, c, c], [d, d, d], [d, d, d]);
+    // Clamped rather than trusted: this arrives over a wire.
+    expect(evaluate(g, 900, 0).lines.length).toBeGreaterThan(0);
+    expect(evaluate(g, 900, 99).lines).toHaveLength(9);
+    expect(evaluate(g, 900, -4).lines).toHaveLength(1);
+  });
+});
+

@@ -154,48 +154,658 @@
   }
 }
 
-/* ------------------------------------------------------------- the sign */
+/* ---------------------------------------------------------- the cabinet */
 
-.slots__bank {
+/*
+ * The machine as one object.
+ *
+ * A body with the handle bolted to its right side, so the two are a thing you
+ * stand in front of rather than a stack of panels down a page. The lever
+ * column is `auto` and the body takes the rest: the reels are what has to fit,
+ * and the handle gives up its width first.
+ */
+.cab {
+  display: block;
+}
+
+.cab__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid rgb(0 0 0 / 0.65);
+  border-radius: 18px 18px 10px 10px;
+  /* Lit from above, like a cabinet standing under a ceiling light. */
+  background:
+    linear-gradient(180deg, var(--gr-color-smoke-lit) 0%, var(--gr-color-smoke) 22%, var(--gr-color-shadow) 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.09),
+    0 18px 40px rgb(0 0 0 / 0.45);
+  overflow: hidden;
+}
+
+/* The lit board across the top, where the number people came for lives. */
+.cab__marquee {
+  position: relative;
+  padding: var(--gr-space-3) var(--gr-space-3) var(--gr-space-2);
+  border-bottom: 1px solid rgb(0 0 0 / 0.5);
+  background:
+    radial-gradient(70% 160% at 50% -30%, color-mix(in srgb, var(--gr-color-neon) 22%, transparent) 0%, transparent 70%),
+    rgb(0 0 0 / 0.25);
+}
+
+/* The glass, recessed into the body rather than sitting on it. */
+.cab__glass {
+  position: relative;
+  padding: var(--gr-space-3);
+  background: rgb(0 0 0 / 0.28);
+  box-shadow:
+    inset 0 6px 12px rgb(0 0 0 / 0.5),
+    inset 0 -6px 12px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * The show, over the reels.
+ *
+ * Takes no pointer events and no space in the layout: it is drawn on top of
+ * the glass and can be turned off without a pixel moving. Clipped to the
+ * window so sparks do not rain down the page.
+ */
+.fireworks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.fireworks canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cab__belly {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-3);
+  padding: var(--gr-space-3);
+}
+
+/*
+ * The coin tray. Empty on purpose: it is the bottom edge of a machine, and a
+ * machine that stops in a straight line reads as a panel.
+ */
+.cab__tray {
+  height: 26px;
+  margin: 0 var(--gr-space-4) var(--gr-space-3);
+  border-radius: 0 0 14px 14px;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.62), rgb(0 0 0 / 0.28));
+  box-shadow: inset 0 5px 9px rgb(0 0 0 / 0.6);
+}
+
+/* -------------------------------------------------------- the spin button */
+
+/* The handle and the thing that pulls it for you, side by side. */
+.slots__go {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: var(--gr-space-2);
+}
+
+/*
+ * Auto. Deliberately quieter than the button it repeats — it arms the same
+ * press rather than being a second way to play, and a machine with two loud
+ * buttons has no obvious one.
+ */
+.auto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 62px;
+  padding: 0 var(--gr-space-2);
+  border: var(--gr-edge-soft);
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.32);
+  color: var(--gr-color-ink-dim);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.auto:hover {
+  color: var(--gr-color-ink);
+  border-color: color-mix(in srgb, var(--gr-color-neon) 40%, transparent);
+}
+
+.auto:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 3px;
+}
+
+.auto__icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.auto__word {
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Armed: lit, and the arrows going round to say it is doing something. */
+.auto--on {
+  border-color: var(--gr-color-neon);
+  background: color-mix(in srgb, var(--gr-color-neon) 18%, transparent);
+  color: var(--gr-color-neon-hi);
+}
+
+.auto--on .auto__icon {
+  animation: auto-round 2.4s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes auto-round {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+
+/*
+ * A lit screen under a piece of glass.
+ *
+ * Three layers, and they have to stay in that order: the well the whole thing
+ * sits in, the screen glowing inside it, and the glass over the top catching
+ * the light. Painting it as one gradient gets you a coloured rectangle — it is
+ * the highlight sitting *above* a light source that makes it read as a cover
+ * you could tap a fingernail on.
+ *
+ * Down is instant and up springs well past itself. A press that eases down
+ * feels like treacle and a release that stops dead feels like nothing
+ * happened; the asymmetry is the whole of it.
+ */
+.spin {
+  --lift: 11px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: 60px;
+  border: 0;
+  border-radius: 16px;
+  /* The well. Everything lit sits inside this. */
+  background: #22071a;
+  /*
+   * A machine label, not a headline. The display face is a heavy slab serif
+   * cut for the sign over the door, and at button size on a lit panel it read
+   * as a word stamped into plastic. Monospace, spaced out and lit from behind
+   * reads as something the machine printed on its own screen.
+   */
+  color: #fff4fb;
+  font-family: var(--gr-font-data);
+  font-weight: 600;
+  font-size: var(--gr-text-base);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  text-indent: 0.34em; /* letter-spacing pads the right; this re-centres it */
+  cursor: pointer;
+  box-shadow:
+    0 var(--lift) 0 var(--gr-color-neon-deep),
+    0 calc(var(--lift) + 6px) 18px rgb(0 0 0 / 0.55),
+    /* The bezel: a hairline of light round the rim of the glass. */
+    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+  transform: translateY(0);
+  transition:
+    transform 460ms cubic-bezier(0.16, 2.2, 0.4, 1),
+    box-shadow 460ms cubic-bezier(0.16, 2.2, 0.4, 1),
+    filter 160ms ease;
+}
+
+/* The screen. Lit from below and never quite still. */
+.spin::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background:
+    radial-gradient(70% 130% at 28% 118%, color-mix(in srgb, var(--gr-color-neon) 92%, #fff) 0%, transparent 60%),
+    radial-gradient(60% 120% at 80% -18%, color-mix(in srgb, var(--gr-color-neon-hi) 55%, transparent) 0%, transparent 62%),
+    linear-gradient(180deg, var(--gr-color-neon-dim) 0%, #4a0f38 100%);
+  background-size: 190% 190%;
+  background-position: 50% 50%;
+  animation: spin-alive 5.2s ease-in-out infinite;
+}
+
+/* Light moving behind the glass, slowly. Alive rather than blinking. */
+@keyframes spin-alive {
+  0%,
+  100% {
+    background-position: 22% 60%;
+  }
+  50% {
+    background-position: 78% 40%;
+  }
+}
+
+/*
+ * The glass. A hard highlight across the top third and a soft one at the rim,
+ * with nothing at all across the bottom — which is what stops it reading as a
+ * gradient and starts it reading as a curved surface.
+ */
+.spin::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(255 255 255 / 0.5) 0%,
+      rgb(255 255 255 / 0.16) 34%,
+      rgb(255 255 255 / 0.02) 48%,
+      transparent 60%
+    ),
+    radial-gradient(90% 60% at 50% 108%, rgb(255 255 255 / 0.16), transparent 70%);
+}
+
+.spin__face {
+  position: relative;
+  z-index: 2;
+  /* Lit off the screen rather than printed on it. */
+  text-shadow:
+    0 0 10px rgb(255 255 255 / 0.55),
+    0 0 26px var(--gr-color-neon-hi),
+    0 1px 0 rgb(0 0 0 / 0.35);
+}
+
+.spin:hover:not(:disabled) {
+  filter: brightness(1.08) saturate(1.06);
+}
+
+/*
+ * Down, and immediately: the slab is what stops it.
+ *
+ * A plain ease on the way down, not the spring. The spring overshoots at both
+ * ends — on the press that meant the face dipping through the slab it is
+ * supposed to be landing on. Springing is what a release does; a press just
+ * stops.
+ */
+.spin:active:not(:disabled) {
+  transform: translateY(var(--lift));
+  box-shadow:
+    0 0 0 var(--gr-color-neon-deep),
+    0 2px 6px rgb(0 0 0 / 0.45),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+  transition-timing-function: cubic-bezier(0.3, 0.7, 0.4, 1);
+  transition-duration: 55ms, 55ms, 160ms;
+}
+
+.spin:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 4px;
+}
+
+/*
+ * Nothing to press: the screen goes out.
+ *
+ * This is the *unable* state — no stake on, or not enough to cover it — and it
+ * is a different thing from being busy, which is why they look different.
+ */
+.spin:disabled {
+  cursor: default;
+  color: var(--gr-color-ink-faint);
+  box-shadow: none;
+  transform: translateY(var(--lift));
+}
+
+.spin:disabled::before {
+  background: var(--gr-color-smoke);
+  animation: none;
+}
+
+.spin:disabled::after {
+  opacity: 0.25;
+}
+
+/*
+ * Turning: held down, and still lit.
+ *
+ * Greying it out would say the machine has nothing to offer, when what is
+ * happening is that it is busy with the press it already has. So the screen
+ * stays on, the button stays where the press left it, and it pops back up when
+ * the spin is done — which is the machine handing the button back.
+ *
+ * Three classes deep so it beats :disabled on weight rather than on which rule
+ * happens to come last. Ties resolved by source order are how a theme in this
+ * repo once shipped the wrong colour.
+ */
+.spin.spin--going:disabled {
+  color: #fff4fb;
+  transform: translateY(var(--lift));
+  box-shadow:
+    0 0 0 var(--gr-color-neon-deep),
+    0 2px 6px rgb(0 0 0 / 0.45),
+    inset 0 0 0 1px rgb(255 255 255 / 0.22);
+}
+
+.spin.spin--going:disabled::before {
+  background:
+    radial-gradient(70% 130% at 28% 118%, color-mix(in srgb, var(--gr-color-neon) 92%, #fff) 0%, transparent 60%),
+    radial-gradient(60% 120% at 80% -18%, color-mix(in srgb, var(--gr-color-neon-hi) 55%, transparent) 0%, transparent 62%),
+    linear-gradient(180deg, var(--gr-color-neon-dim) 0%, #4a0f38 100%);
+  background-size: 190% 190%;
+  /* Faster while it works, because the machine is doing something. */
+  animation: spin-alive 1.6s ease-in-out infinite;
+}
+
+.spin.spin--going:disabled::after {
+  opacity: 1;
+}
+
+/* -------------------------------------------------------- lines and wins */
+
+.picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gr-space-2);
+}
+
+/* Nothing chosen yet, so the machine asks rather than assuming. */
+.picker__cost--asking {
+  color: var(--gr-color-neon-hi);
+}
+
+.picker__label {
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gr-color-ink-faint);
+}
+
+.picker__row {
+  display: flex;
+  gap: 4px;
+}
+
+/*
+ * The line plates.
+ *
+ * Little lamps set into the belly rather than buttons drawn on it: a dark well
+ * with the number sunk into it, and the whole thing lighting up when it is the
+ * one in play. It is the same idea as the screen above — light coming out —
+ * scaled down to something you press.
+ */
+.picker__pick {
+  position: relative;
+  min-width: 40px;
+  min-height: 38px;
+  padding: 0 var(--gr-space-2);
+  border: 1px solid rgb(0 0 0 / 0.6);
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.32));
+  color: var(--gr-color-ink-faint);
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 0.55),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.picker__pick:hover:not(:disabled):not(.picker__pick--on) {
+  color: var(--gr-color-ink-dim);
+  border-color: color-mix(in srgb, var(--gr-color-neon) 40%, transparent);
+}
+
+/* Lit. The lamp is on, so it glows out of the well rather than into it. */
+.picker__pick--on {
+  border-color: var(--gr-color-neon);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gr-color-neon) 34%, transparent),
+    color-mix(in srgb, var(--gr-color-neon) 16%, transparent)
+  );
+  color: #fff2fb;
+  text-shadow: 0 0 8px var(--gr-color-neon-hi);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 0 12px color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+}
+
+.picker__pick:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+/* The arithmetic done for them: two numbers multiplied is exactly the sort of
+   sum a machine should not make anybody do in their head. */
+.picker__cost {
+  margin-left: auto;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+/*
+ * What paid, and for what.
+ *
+ * A figure on its own tells a player they won without telling them why, and a
+ * machine that cannot be read is one nobody trusts.
+ */
+.won {
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.won__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: var(--gr-space-2);
+  padding: 1px var(--gr-space-2);
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+  animation: won-in 260ms cubic-bezier(0.16, 1.06, 0.28, 1) both;
+}
+
+/* How many lines it landed on, which the glass is already showing. */
+.won__lines {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
+}
+
+@keyframes won-in {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+}
+
+.won__row--jackpot {
+  color: var(--gr-color-neon-hi);
+}
+
+.won__what {
+  color: var(--gr-color-ink-dim);
+  text-transform: capitalize;
+}
+
+.won__pay {
+  margin-left: auto;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+}
+
+/* ------------------------------------------------------------ the screen */
+
+/*
+ * The machine's status display: a bright panel behind glass.
+ *
+ * Dark ground with the type glowing off it, because that is what a lit screen
+ * looks like — light coming *out* rather than a light-coloured surface. The
+ * scan lines are what stop it reading as a text box: very faint, and the only
+ * reason the panel has any texture at all.
+ */
+.screen {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
+  min-height: 118px;
+  justify-content: center;
   padding: var(--gr-space-3);
-  border: var(--gr-edge-soft);
-  border-radius: var(--gr-radius-md);
+  border-radius: var(--gr-radius-sm);
+  border: 1px solid rgb(0 0 0 / 0.7);
   background:
-    radial-gradient(70% 140% at 50% -20%, var(--gr-color-smoke-lit) 0%, transparent 70%),
-    var(--gr-color-shadow);
+    repeating-linear-gradient(180deg, rgb(255 255 255 / 0.035) 0 1px, transparent 1px 3px),
+    radial-gradient(90% 130% at 50% 120%, color-mix(in srgb, var(--gr-color-neon) 26%, transparent) 0%, transparent 70%),
+    #0d0611;
+  box-shadow:
+    inset 0 2px 10px rgb(0 0 0 / 0.8),
+    inset 0 0 0 1px rgb(255 255 255 / 0.05);
   text-align: center;
 }
 
-.slots__bank-label {
+.screen__label {
   font-size: var(--gr-text-xs);
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--gr-color-ink-faint);
 }
 
 /*
- * The one genuinely loud thing on the page, because it is the reason anybody
- * is here. Tabular figures so the number does not jitter as it climbs.
+ * The number people came for. Tabular so it does not jitter as it climbs, and
+ * lit rather than coloured — the glow is the difference between a figure on a
+ * screen and a figure on a page.
  */
-.slots__bank-figure {
+.screen__figure {
   font-family: var(--gr-font-data);
-  font-size: clamp(1.9rem, 9vw, 3rem);
-  line-height: 1;
+  font-size: clamp(1.8rem, 8vw, 2.9rem);
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  color: var(--gr-color-neon-hi);
+  letter-spacing: 0.02em;
+  color: var(--gr-color-neon-core, #ffe8f7);
   text-shadow:
-    0 0 10px var(--gr-color-neon),
-    0 0 26px var(--gr-color-neon-deep);
+    0 0 8px var(--gr-color-neon-hi),
+    0 0 24px var(--gr-color-neon);
 }
 
-.slots__bank-note {
+/*
+ * A figure that rolls.
+ *
+ * Each place is a window one line tall onto a strip of ten digits, and the
+ * strip is moved rather than the text replaced. Only the places that actually
+ * changed turn, which is why it reads as a counter on a machine.
+ *
+ * The line height has to be exact, not inherited from something that rounds:
+ * every digit on the strip is one window tall, so a hundredth of a pixel out
+ * multiplies by nine and the nines sit half a line high.
+ */
+.roll {
+  display: inline-flex;
+  line-height: 1;
+}
+
+/*
+ * The figure as text, for a screen reader. Off the page rather than
+ * display:none, which would take it out of the accessibility tree along with
+ * everything else.
+ */
+.roll__said {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.roll__place {
+  display: inline-block;
+  overflow: hidden;
+  height: 1em;
+  /* A digit's own width, so the figure does not shuffle as the values change. */
+  width: 0.62em;
+  text-align: center;
+}
+
+.roll__gap {
+  display: inline-block;
+  height: 1em;
+}
+
+.roll__strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 620ms cubic-bezier(0.22, 1.2, 0.28, 1);
+}
+
+.roll__digit {
+  display: block;
+  height: 1em;
+  line-height: 1;
+}
+
+.screen__note {
+  margin: 0;
+  max-width: 36ch;
   font-size: var(--gr-text-xs);
   color: var(--gr-color-ink-faint);
-  max-width: 34ch;
+}
+
+/* Something refused, which is a different kind of thing to say. */
+.screen__note--said {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+/* Play money is still a screen, just not a jackpot worth glowing about. */
+.screen--fun .screen__figure {
+  color: var(--gr-color-ink-lit);
+  text-shadow: 0 0 10px rgb(255 255 255 / 0.25);
+}
+
+/* The one time the machine is allowed to shout. */
+.screen--jackpot {
+  border-color: var(--gr-color-neon);
+  animation: screen-hit 900ms ease-out 2;
+}
+
+@keyframes screen-hit {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 2px 10px rgb(0 0 0 / 0.8),
+      inset 0 0 0 1px rgb(255 255 255 / 0.05);
+  }
+  50% {
+    box-shadow:
+      inset 0 2px 10px rgb(0 0 0 / 0.8),
+      inset 0 0 40px color-mix(in srgb, var(--gr-color-neon) 55%, transparent),
+      0 0 30px color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+  }
 }
 
 /* ------------------------------------------------------------ the glass */
@@ -232,22 +842,24 @@
 }
 
 /*
- * A blur while the reel is out.
+ * The strip going past.
  *
- * Bands rather than faces: showing real ones here would be guessing at the
- * answer, and showing the last spin's would read as a reel that never moved.
+ * Moved by the Web Animations API rather than from here, because where it has
+ * to stop is not known until the server answers — a keyframe would have to be
+ * written per landing. What is left here is only that it must not be caught by
+ * anything else that transitions.
  */
-.reel--spinning .reel__blur {
-  animation: reel-roll 220ms linear infinite;
+.reel__strip {
+  will-change: transform;
 }
 
-@keyframes reel-roll {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(45px);
-  }
+/*
+ * With motion off there is no strip at all, only these bands. Faces standing
+ * still under the payline would read as a result, and the reel has not got one
+ * yet — so the reduced-motion reel says "turning" without turning.
+ */
+.reel--spinning .reel__blur {
+  opacity: 0.5;
 }
 
 /*
@@ -359,12 +971,6 @@
   cursor: default;
 }
 
-/* Play money says so on the sign rather than only in a caption. */
-.slots__bank--fun .slots__bank-figure {
-  color: var(--gr-color-ink-lit);
-  text-shadow: none;
-}
-
 .slots__controls {
   display: flex;
   flex-direction: column;
@@ -444,121 +1050,61 @@
   font-size: var(--gr-text-sm);
 }
 
-/* Pushed to the far end, so it is never next to the thumb that is stacking. */
-.slots__take {
-  margin-left: auto;
-  border: 0;
-  background: none;
-  padding: var(--gr-space-2);
-  color: var(--gr-color-ink-dim);
-  font: inherit;
-  font-size: var(--gr-text-sm);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.slots__take:hover {
-  color: var(--gr-color-ink);
-}
-
-/* ---- the lever */
-
 /*
- * The one control used during a spin, so it is the biggest thing on the page
- * and within a thumb's reach at the bottom.
+ * Taking it back off the felt.
  *
- * Three states worth telling apart at a glance: nothing on it and nothing to
- * do; a stake on and waiting for you, which breathes; and turning, which
- * sweeps. Each is one motion, and none of them runs at the same time.
+ * Built like the auto button rather than like a link — a well with something
+ * in it — because it lives in a row of chips and figures, and the only thing
+ * on this machine that should look like text is text.
+ *
+ * Pushed to the far end, so it is never next to the thumb that is stacking.
  */
-.slots__lever {
-  position: relative;
-  overflow: hidden;
-  min-height: 60px;
-  border: 1px solid color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
-  border-radius: var(--gr-radius-md);
-  background: linear-gradient(180deg, var(--gr-color-neon-dim), var(--gr-color-neon-deep));
-  color: var(--gr-color-ink-lit);
-  font-family: var(--gr-font-display);
-  font-size: var(--gr-text-lg);
-  letter-spacing: 0.08em;
+.take {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  height: 44px;
+  padding: 0 var(--gr-space-3);
+  flex: none;
+  border: 1px solid rgb(0 0 0 / 0.6);
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.32));
+  color: var(--gr-color-ink-faint);
   cursor: pointer;
+  box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.5);
   transition:
-    transform 120ms cubic-bezier(0.16, 1.06, 0.28, 1),
-    box-shadow 200ms ease,
-    filter 160ms ease;
-  animation: lever-ready 2.4s ease-in-out infinite;
+    color 160ms ease,
+    border-color 160ms ease;
 }
 
-.slots__lever-face {
-  position: relative;
-  z-index: 1;
+.take:hover:not(:disabled) {
+  color: var(--gr-color-ink);
+  border-color: color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
 }
 
-/* Waiting on you, which is the only reason anything in this building glows. */
-@keyframes lever-ready {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgb(201 67 158 / 0);
-  }
-  50% {
-    box-shadow: 0 0 22px 2px rgb(201 67 158 / 0.4);
-  }
+.take:disabled {
+  cursor: default;
+  opacity: 0.4;
 }
 
-.slots__lever:hover:not(:disabled) {
-  filter: brightness(1.12);
-}
-
-/* It gives, like a lever. */
-.slots__lever:active:not(:disabled) {
-  transform: translateY(2px) scale(0.995);
-  filter: brightness(0.95);
-}
-
-.slots__lever:focus-visible {
-  outline: 2px solid var(--gr-color-neon-hi);
+.take:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
   outline-offset: 3px;
 }
 
-/* Nothing on it and nothing to do: flat, and it stops asking. */
-.slots__lever:disabled {
-  animation: none;
-  box-shadow: none;
-  border-color: var(--gr-color-smoke);
-  background: var(--gr-color-smoke);
-  color: var(--gr-color-ink-faint);
-  cursor: default;
+.take__icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  flex: none;
 }
 
-/*
- * Turning. A band of light crossing the face, which is the same thing the
- * reels are doing and reads as the machine working rather than as a spinner
- * bolted onto a button.
- */
-.slots__lever--going {
-  animation: none;
+.take__word {
+  font-size: var(--gr-text-sm);
+  white-space: nowrap;
 }
 
-.slots__lever--going::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    rgb(255 255 255 / 0.22) 50%,
-    transparent 80%
-  );
-  transform: translateX(-100%);
-  animation: lever-sweep 900ms linear infinite;
-}
-
-@keyframes lever-sweep {
-  to {
-    transform: translateX(100%);
-  }
 }
 
 .slots__shut {
@@ -589,20 +1135,29 @@
 /* ------------------------------------------------------------------ off */
 
 @media (prefers-reduced-motion: reduce) {
-  .reel--spinning .reel__blur,
   .payline,
   .slots__said--big,
-  .slots__lever,
-  .slots__lever--going::after {
+  .slots__chip,
+
+  .feed__row,
+  .won__row {
     animation: none;
   }
 
-  .slots__chip,
-  .slots__lever {
+  .picker__pick,
+  .spin,
+  .auto,
+  .take,
+  .roll__strip {
     transition: none;
   }
 
-  .feed__row {
+  .auto--on .auto__icon {
+    animation: none;
+  }
+
+  .spin::before,
+  .spin.spin--going:disabled::before {
     animation: none;
   }
 

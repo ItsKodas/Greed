@@ -645,3 +645,55 @@ describe("the wall at the machine", () => {
   });
 });
 
+function spinLines(client: Client, stake: number, lines: number): Promise<SpinResult> {
+  return new Promise((resolve) => client.emit("slots:spin", { stake, lines }, resolve));
+}
+
+describe("buying fewer lines", () => {
+  it("takes the stake and says how it was spread", async () => {
+    const { client } = await openMachine({ bank: 5_000_000, chips: 1_000_000 });
+    const result = await spinLines(client, 300, 3);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.stake).toBe(300);
+      expect(result.linesPlayed).toBe(3);
+      // Nothing can pay on a line nobody bought.
+      for (const line of result.lines) {
+        expect(line.line).toBeLessThan(3);
+      }
+    }
+  });
+
+  it("mints nothing however the stake is spread", async () => {
+    /*
+     * The invariant again, because line betting is exactly the sort of change
+     * that could quietly break it: a stake split one way and paid out another
+     * is chips appearing from the gap.
+     */
+    const { client, store, userId } = await openMachine({ bank: 5_000_000, chips: 1_000_000 });
+    for (const lines of [1, 2, 3, 5, 9]) {
+      for (let n = 0; n < 20; n += 1) {
+        const chipsBefore = (await store.get(userId))?.chips ?? 0;
+        const bankBefore = await store.bank();
+        await spinLines(client, 90 * lines, lines);
+        const chipsAfter = (await store.get(userId))?.chips ?? 0;
+        expect(chipsAfter - chipsBefore + ((await store.bank()) - bankBefore)).toBe(0);
+      }
+    }
+  });
+
+  it("refuses a line count the machine does not have", async () => {
+    const { client } = await openMachine({ bank: 5_000_000, chips: 1_000_000 });
+    for (const lines of [0, -1, 10, 2.5]) {
+      expect((await spinLines(client, 900, lines)).ok, `${lines} was allowed`).toBe(false);
+    }
+  });
+
+  it("plays all nine when a client says nothing about lines", async () => {
+    // An older client, and the machine as it was before anybody could choose.
+    const { client } = await openMachine({ bank: 5_000_000, chips: 1_000_000 });
+    const result = await spin(client, 900);
+    expect(result.ok && result.linesPlayed).toBe(9);
+  });
+});
+

@@ -1,27 +1,48 @@
 import type { Face } from "@backroom/game-slots";
+import { STRIP } from "@backroom/game-slots";
 import { useEffect, useRef, useState } from "react";
 import { FACE_SIZE, ReelFace } from "./Symbols.js";
 
 /**
  * One column, and how it stops.
  *
- * A spinning reel is a face-down card: the motion is honest, the face is the
- * fact. So the reel starts turning on the press — nothing waits for the server
- * to acknowledge a pull — and it only ever shows faces the server has actually
- * sent. There is one arrival, not two: the reel that started turning is the
- * reel that stops on the answer.
+ * A reel is a loop of faces that turns and then slows onto one of them, and
+ * that is what this draws. The strip runs past too fast to read; when the
+ * answer is in, the machine is handed a landing — a run-up ending in the three
+ * faces the server actually sent — and slows across whatever time is left so
+ * the last of them arrives under the payline exactly when the reel was always
+ * going to stop.
  *
- * Two floors keep that true. A reel spins for at least SPIN_UP_MS however fast
- * the reply, because a reel that stops before it has visibly started reads as
- * a machine that had decided before you pulled. And each reel waits a further
+ * None of that invents a result. What goes past mid-spin is the same strip
+ * painted on the reel, so the machine is not showing one reel while it turns
+ * and a different one when it stops. The only faces presented as an answer are
+ * the server's, and they carry `data-final` so a test can hold that line.
+ *
+ * Two floors keep the timing honest. A reel spins for at least SPIN_UP_MS
+ * however fast the reply, because one that stops before it has visibly started
+ * reads as a machine that had the answer ready. And each waits a further
  * REEL_STAGGER_MS per place to its right, so the row settles left to right and
  * the last reel is the one worth holding your breath for.
  */
 
-/** The shortest a reel may spin, however quickly the answer lands. */
-export const SPIN_UP_MS = 300;
-/** How much longer each reel spins than the one to its left. */
-export const REEL_STAGGER_MS = 120;
+/**
+ * The shortest a reel may spin, however quickly the answer lands.
+ *
+ * Just under a second. It was three hundred milliseconds, which is long enough
+ * to see and far too short to feel: the row had settled before the player's
+ * hand was off the lever, and a machine that answers that fast reads as one
+ * that had the answer ready — which it did, but it should not look like it.
+ */
+export const SPIN_UP_MS = 950;
+
+/**
+ * How much longer each reel spins than the one to its left.
+ *
+ * Wide enough that the reels land as five separate events rather than one
+ * ripple. Five at this spacing put the last a shade over two seconds after the
+ * lever, which is about where a real cabinet sits.
+ */
+export const REEL_STAGGER_MS = 280;
 
 /**
  * The window the cabinet shows, named rather than counted.
@@ -31,6 +52,38 @@ export const REEL_STAGGER_MS = 120;
  * which an array index only looks like.
  */
 const ROWS = ["top", "middle", "bottom"] as const;
+
+/**
+ * How many faces of run-up a free-running reel shows before it wraps.
+ *
+ * Only for the loop; a landing works out its own length from the time it has,
+ * which is the whole trick to making one look like a reel slowing down.
+ */
+const LOOP_FACES = 9;
+
+/** How long the deceleration takes, at most, and how much of the time it may eat. */
+const BRAKE_MS = 620;
+const BRAKE_SHARE = 0.5;
+
+/** How long one face takes to pass while the reel is at speed. */
+const FACE_MS = 42;
+
+/** How far past the mark a reel swings before it settles back. */
+const OVERSHOOT = 9;
+
+/** The shortest landing worth animating; below this the reel simply arrives. */
+const LANDING_FLOOR_MS = 60;
+
+/**
+ * A stretch of the reel, starting anywhere along it.
+ *
+ * The real strip rather than a handful of faces picked out: what goes past
+ * mid-spin should be what is painted on the reel, or the machine is showing a
+ * different reel while it turns than the one it stops on.
+ */
+function stretch(from: number, count: number): Face[] {
+  return Array.from({ length: count }, (_, step) => STRIP[(from + step) % STRIP.length] as Face);
+}
 
 export function Reel({
   column,
@@ -66,16 +119,28 @@ export function Reel({
   onStop?: () => void;
 }) {
   /*
-   * What is on the glass, which is not the same as what the server has said.
-   * A reel showing nothing is a reel spinning, so this is the whole of the
-   * component's state: no separate "am I spinning" flag to fall out of step
-   * with it.
+   * What is on the glass at rest. A reel with nothing here is a reel turning,
+   * so this is the whole of the component's state: no separate "am I spinning"
+   * flag to fall out of step with it.
    */
   const [shown, setShown] = useState<Face[] | undefined>(column);
+  /**
+   * The answer, once it is in, worked out as a landing.
+   *
+   * The run-up is measured rather than fixed. A reel that has to cross nine
+   * faces in whatever time is left crosses them in the first third of it and
+   * then crawls — which reads as stopping the instant the server answered,
+   * because that is very nearly what it did. Sizing the run-up to the time
+   * available lets it hold speed and brake at the end, like a reel.
+   */
+  const [landing, setLanding] = useState<{ faces: Face[]; runUp: number; ms: number } | null>(
+    null,
+  );
   const startedAt = useRef(Date.now());
   const wasSpinning = useRef(spinning);
   /** Whether this reel has ever been asked to turn, which ends the rest state. */
   const everSpun = useRef(false);
+  const strip = useRef<SVGGElement | null>(null);
   /*
    * Held in a ref so a caller that rebuilds the callback each render does not
    * restart the timer underneath a spin that is already in the air.
@@ -83,12 +148,26 @@ export function Reel({
   const stopped = useRef(onStop);
   stopped.current = onStop;
 
+  /*
+   * Read once. Asking the media query every render would be one more thing
+   * changing mid-spin, and this cannot change in any way worth reacting to
+   * while five reels are in the air.
+   */
+  const [still] = useState(() => {
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch {
+      return false;
+    }
+  });
+
   useEffect(() => {
     if (spinning && !wasSpinning.current) {
       // A new pull. Clear the glass and start the clock.
       everSpun.current = true;
       startedAt.current = Date.now();
       setShown(undefined);
+      setLanding(null);
     }
     wasSpinning.current = spinning;
   }, [spinning]);
@@ -99,11 +178,25 @@ export function Reel({
     }
     /*
      * However long is left of this reel's spin, and no less than nothing: an
-     * answer that took longer than the floor stops the reel at once rather
+     * answer that took longer than the floor lands the reel at once rather
      * than adding a wait nobody asked for.
      */
     const floor = SPIN_UP_MS + index * REEL_STAGGER_MS + holdMs;
     const left = Math.max(0, floor - (Date.now() - startedAt.current));
+    /*
+     * Far enough to hold speed for as long as there is, then brake. Distance
+     * is the cruise at full tilt plus the braking distance, which for a even
+     * slowdown is half of what the same time at speed would cover.
+     */
+    const speed = FACE_SIZE / FACE_MS;
+    const brake = Math.min(left * BRAKE_SHARE, BRAKE_MS);
+    const cruise = Math.max(0, left - brake);
+    const reach = speed * cruise + speed * brake * 0.5;
+    setLanding({
+      faces: column,
+      runUp: Math.max(ROWS.length, Math.round(reach / FACE_SIZE)),
+      ms: left,
+    });
     const timer = window.setTimeout(() => {
       setShown(column);
       stopped.current?.();
@@ -113,28 +206,93 @@ export function Reel({
 
   /*
    * At rest only before the first pull. After that an empty reel means one
-   * that is still out, and showing anything but a blur there would be
-   * guessing at the answer.
+   * still out, and showing anything but the strip turning would be guessing at
+   * the answer.
    */
-  const resting_ = shown === undefined && !spinning && !everSpun.current ? resting : undefined;
-  const turning = shown === undefined && resting_ === undefined;
-  const faces = shown ?? resting_;
+  const atRest = shown === undefined && !spinning && !everSpun.current ? resting : undefined;
+  const turning = shown === undefined && atRest === undefined;
+  const settled = shown ?? atRest;
+
+  /*
+   * Started at a different place per reel, or all five turn in lockstep and
+   * the row reads as one object rather than as five.
+   */
+  const from = index * 7;
+  const runUp =
+    turning && landing !== null ? [...stretch(from, landing.runUp), ...landing.faces] : null;
+  /* Twice over while free-running, so the loop wraps without a seam. */
+  const passing =
+    runUp ?? (turning ? [...stretch(from, LOOP_FACES), ...stretch(from, LOOP_FACES)] : null);
+
+  const isLanding = runUp !== null;
+  const runUpCount = landing?.runUp ?? 0;
+  const landingMs = landing?.ms ?? 0;
+  useEffect(() => {
+    const element = strip.current;
+    /*
+     * `animate` is missing in jsdom, where these components are tested. The
+     * reel is still correct without it — the strip is drawn, the timer still
+     * lands it — so this is a guard rather than a bail-out.
+     */
+    if (element === null || still || typeof element.animate !== "function") {
+      return;
+    }
+
+    if (!isLanding) {
+      const animation = element.animate(
+        [{ transform: "translateY(0)" }, { transform: `translateY(${-LOOP_FACES * FACE_SIZE}px)` }],
+        { duration: LOOP_FACES * FACE_MS, iterations: Number.POSITIVE_INFINITY, easing: "linear" },
+      );
+      return () => animation.cancel();
+    }
+
+    if (landingMs < LANDING_FLOOR_MS) {
+      return; // No room to land in; it simply arrives.
+    }
+    // Far enough to bring the run-up through and leave the last three in the
+    // window, which is exactly the length of the run-up.
+    const target = -runUpCount * FACE_SIZE;
+    const brake = Math.min(landingMs * BRAKE_SHARE, BRAKE_MS);
+    const cruise = Math.max(0, landingMs - brake);
+    const held = cruise / landingMs;
+    const speed = FACE_SIZE / FACE_MS;
+    const animation = element.animate(
+      [
+        // Still at full tilt: the reel has not been told to stop yet, and this
+        // is the stretch that makes it read as one still turning.
+        { transform: "translateY(0)", offset: 0, easing: "linear" },
+        { transform: `translateY(${-speed * cruise}px)`, offset: held, easing: "ease-out" },
+        // Past the mark and back, because a reel on a spring does not stop
+        // dead on the number it was heading for.
+        { transform: `translateY(${target - OVERSHOOT}px)`, offset: 0.94 },
+        { transform: `translateY(${target}px)`, offset: 1 },
+      ],
+      { duration: landingMs, fill: "forwards" },
+    );
+    return () => animation.cancel();
+  }, [isLanding, runUpCount, landingMs, still]);
 
   return (
     <div
-      className={`reel${turning ? " reel--spinning" : ""}${resting_ === undefined ? "" : " reel--resting"}`}
+      className={`reel${turning ? " reel--spinning" : ""}${atRest === undefined ? "" : " reel--resting"}`}
     >
       <svg
         className="reel__glass"
         viewBox={`0 0 ${FACE_SIZE} ${FACE_SIZE * ROWS.length}`}
         role="img"
-        aria-label={turning ? "Spinning" : (faces ?? []).join(", ")}
+        aria-label={turning ? "Spinning" : (settled ?? []).join(", ")}
       >
-        {turning ? (
+        {settled !== undefined ? (
+          settled.map((face, row) => (
+            <g key={ROWS[row] ?? row} transform={`translate(0 ${row * FACE_SIZE})`} data-final="">
+              <ReelFace face={face} />
+            </g>
+          ))
+        ) : still ? (
           /*
-           * A blur rather than invented faces. Showing real ones here would be
-           * guessing at the answer, and showing the previous spin's would read
-           * as a reel that never moved.
+           * Motion turned off. The strip is not drawn at all rather than drawn
+           * standing still: three faces sitting there unmoving read as a
+           * result, and this reel does not have one yet.
            */
           <g className="reel__blur">
             {[0, 1, 2, 3].map((band) => (
@@ -151,11 +309,27 @@ export function Reel({
             ))}
           </g>
         ) : (
-          (faces ?? []).map((face, row) => (
-            <g key={ROWS[row] ?? row} transform={`translate(0 ${row * FACE_SIZE})`}>
-              <ReelFace face={face} />
-            </g>
-          ))
+          <g className="reel__strip" ref={strip}>
+            {(passing ?? []).map((face, step) => (
+              <g
+                // Position on the strip is the identity here: it is a fixed
+                // run of cells that never reorder, and the same face turns up
+                // several times over in it — keying by face would collide.
+                // biome-ignore lint/suspicious/noArrayIndexKey: the strip is positional
+                key={`${step}-${face}`}
+                transform={`translate(0 ${step * FACE_SIZE})`}
+                /*
+                 * Not data-final. These are the server's faces, but they are
+                 * moving into place rather than presented as the answer —
+                 * `final` means resting under the payline, and a test holds
+                 * that line.
+                 */
+                {...(runUp !== null && step >= runUpCount ? { "data-landing": "" } : {})}
+              >
+                <ReelFace face={face} />
+              </g>
+            ))}
+          </g>
         )}
       </svg>
     </div>

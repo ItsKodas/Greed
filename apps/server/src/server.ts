@@ -16,6 +16,7 @@ import {
   FUN_BANK,
   FUN_PURSE,
   jackpotPay,
+  LINE_COUNT,
   maxStake,
   MIN_STAKE,
   SLOTS,
@@ -1286,6 +1287,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   function spinForFun(
     socketId: string,
     stake: number,
+    lines: number,
     ack: (result: SpinResult) => void,
   ): void {
     const machine = funMachines.get(socketId) ?? { purse: FUN_PURSE, bank: FUN_BANK };
@@ -1305,7 +1307,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     machine.bank += stake;
 
     const grid = drawGrid(spinRandom);
-    const { lines, fixed, jackpot } = evaluate(grid, stake);
+    const { lines: paid, fixed, jackpot } = evaluate(grid, stake, lines);
     const won = fixed + (jackpot ? jackpotPay(machine.bank) : 0);
     machine.bank -= won;
     machine.purse += won;
@@ -1319,8 +1321,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     ack({
       ok: true,
       grid,
-      lines,
+      lines: paid,
       won,
+      stake,
+      linesPlayed: lines,
       jackpot,
       bank: machine.bank,
       balance: machine.purse,
@@ -1625,6 +1629,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           return;
         }
         const stake = parsed.data.stake;
+        const lines = parsed.data.lines ?? LINE_COUNT;
 
         /*
          * Before the sign-in check, not after: nobody signs in to play for
@@ -1632,7 +1637,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
          * asking for a name to write on a receipt that is never issued.
          */
         if (parsed.data.forFun === true) {
-          spinForFun(socket.id, stake, ack);
+          spinForFun(socket.id, stake, lines, ack);
           return;
         }
 
@@ -1661,7 +1666,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         await store.bankAdd(stake);
 
         const grid = drawGrid(spinRandom);
-        const { lines, fixed, jackpot } = evaluate(grid, stake);
+        const { lines: paid, fixed, jackpot } = evaluate(grid, stake, lines);
         const won = fixed + (jackpot ? jackpotPay(await store.bank()) : 0);
 
         /*
@@ -1709,8 +1714,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         ack({
           ok: true,
           grid,
-          lines,
+          lines: paid,
           won,
+          stake,
+          linesPlayed: lines,
           jackpot,
           bank: await store.bank(),
           balance: (await store.get(userId))?.chips ?? 0,
