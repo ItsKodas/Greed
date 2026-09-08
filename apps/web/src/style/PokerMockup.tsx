@@ -173,7 +173,12 @@ function Table({
           */}
         {seats.map((seat, at) =>
           seat.bet > 0 ? (
-            <span className="pk__bet" key={`bet-${seat.name}`} style={seatAt(at, seats.length)}>
+            <span
+              className="pk__bet"
+              key={`bet-${seat.name}`}
+              data-owner={seat.name}
+              style={seatAt(at, seats.length)}
+            >
               {seat.bet.toLocaleString("en-US")}
             </span>
           ) : null,

@@ -523,14 +523,21 @@
   --across: 36%;
   --down: 32%;
   /*
-   * The ring the chips sit on: inside the seats, outside the board.
+   * The ring the chips sit on: just inside the seats, well outside the board.
    *
-   * It came in when the seats did. At 26% it was running through the seat ring
-   * rather than between it and the board, which put a pile of chips on top of
-   * your own hand.
+   * Close to the seats on purpose, and no closer than that.
+   *
+   * At a table your chips sit in front of you, and that is the whole of how
+   * anybody knows whose they are — there is no label on them. Pushed too far
+   * in they became a ring of unattached numbers floating on the cloth, and the
+   * first person to see them asked what they were for, which is the only test
+   * that matters. Brought right up to the seats they landed on the cards.
+   *
+   * So: near enough that the closest seat to a pile is always the seat that
+   * bet it, far enough that it clears that seat's cards. Both are measured.
    */
-  --bet-across: 19%;
-  --bet-down: 17%;
+  --bet-across: 25%;
+  --bet-down: 18.5%;
   position: relative;
   aspect-ratio: 16 / 10;
   border-radius: 46% / 48%;
