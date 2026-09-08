@@ -512,16 +512,25 @@
  */
 .pk__table {
   /*
-   * How far the ring of seats reaches. Inside the rail rather than on it: the
-   * player sits behind the wood, but their cards are dealt onto the cloth, and
-   * a hand drawn half on the timber looks like it has been put down on the
-   * furniture.
+   * How far the ring of seats reaches.
+   *
+   * Well inside the rail, because a seat is a column with its cards at the top
+   * and its name below, and the whole column is centred on this ring — so the
+   * cards of any seat above the middle stick out past it by half the column.
+   * At 41% that put four hands on the timber. Every card corner is checked
+   * against the cloth, not judged by eye.
    */
-  --across: 41%;
-  --down: 39%;
-  /* The ring the chips sit on, inside the seats and outside the board. */
-  --bet-across: 26%;
-  --bet-down: 24%;
+  --across: 36%;
+  --down: 32%;
+  /*
+   * The ring the chips sit on: inside the seats, outside the board.
+   *
+   * It came in when the seats did. At 26% it was running through the seat ring
+   * rather than between it and the board, which put a pile of chips on top of
+   * your own hand.
+   */
+  --bet-across: 19%;
+  --bet-down: 17%;
   position: relative;
   aspect-ratio: 16 / 10;
   border-radius: 46% / 48%;
@@ -561,7 +570,13 @@
   flex-direction: column;
   align-items: center;
   gap: var(--gr-space-2);
-  width: 78%;
+  /*
+   * As wide as the board and no wider. It was a fixed share of the table,
+   * which made an invisible box most of the way across the felt — nothing to
+   * look at, but something for everything else to collide with.
+   */
+  width: max-content;
+  max-width: 78%;
 }
 
 .pk__pot {
@@ -640,6 +655,23 @@
 .pk__cards .bj-card {
   width: 38px;
   height: auto;
+}
+
+/*
+ * Your own seat, drawn larger than the rest.
+ *
+ * Every other hand is two cards you cannot see and do not need to read; yours
+ * is the one you are making decisions with, and at the size the others are
+ * drawn a suit is a guess. It is also the seat you look at most, so it is the
+ * one worth the room.
+ */
+.pk__seat--you .pk__cards .bj-card {
+  width: 62px;
+}
+
+.pk__seat--you .pk__name,
+.pk__seat--you .pk__stack {
+  font-size: var(--gr-text-md);
 }
 
 .pk__who {
@@ -858,8 +890,8 @@
    */
   .pk__table {
     aspect-ratio: 1 / 1;
-    --across: 36%;
-    --down: 38%;
+    --across: 34%;
+    --down: 33%;
     --bet-across: 23%;
     --bet-down: 24%;
   }
@@ -888,6 +920,17 @@
 
   .pk__cards .bj-card {
     width: 30px;
+  }
+
+  /* Still the biggest thing on the table, because it is still the only hand
+     anybody has to read. */
+  .pk__seat--you .pk__cards .bj-card {
+    width: 44px;
+  }
+
+  .pk__seat--you .pk__name,
+  .pk__seat--you .pk__stack {
+    font-size: var(--gr-text-sm);
   }
 
   .pk__board .bj-card,

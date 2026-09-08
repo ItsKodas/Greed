@@ -49,6 +49,8 @@ interface MockSeat {
   mark?: "D" | "SB" | "BB";
   /** Shown face up only at a showdown, or when it is your own seat. */
   hole?: [CardData, CardData];
+  /** The seat the player is sitting in, which is drawn larger than the rest. */
+  you?: boolean;
   says?: string;
 }
 
@@ -123,7 +125,7 @@ function Table({
 
         {seats.map((seat, at) => (
           <div
-            className={`pk__seat pk__seat--${seat.state}`}
+            className={`pk__seat pk__seat--${seat.state}${seat.you === true ? " pk__seat--you" : ""}`}
             key={seat.name}
             style={seatAt(at, seats.length)}
           >
@@ -214,7 +216,7 @@ const YOU: [CardData, CardData] = [card("As"), card("Kd")];
 
 /** Ten seats, mid-hand, with somebody to act. */
 const FULL: MockSeat[] = [
-  { name: "You", stack: 4_250, bet: 100, state: "acting", hole: YOU },
+  { name: "You", stack: 4_250, bet: 100, state: "acting", hole: YOU, you: true },
   { name: "Bo", stack: 8_100, bet: 100, state: "waiting", mark: "D" },
   { name: "Cass", stack: 0, bet: 2_400, state: "allIn", says: "all in" },
   { name: "Dev", stack: 3_300, bet: 0, state: "folded", mark: "SB" },
@@ -229,7 +231,7 @@ const FULL: MockSeat[] = [
 const SIX: MockSeat[] = FULL.slice(0, 6);
 
 const HEADS_UP: MockSeat[] = [
-  { name: "You", stack: 6_000, bet: 400, state: "won", hole: YOU, says: "two pair" },
+  { name: "You", stack: 6_000, bet: 400, state: "won", hole: YOU, says: "two pair", you: true },
   { name: "Bo", stack: 3_600, bet: 400, state: "waiting", hole: [card("Qh"), card("Qc")], mark: "D" },
 ];
 
