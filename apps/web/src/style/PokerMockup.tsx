@@ -7,6 +7,7 @@ import { useState } from "react";
  */
 import type { Card as CardData } from "@backroom/game-blackjack";
 import { Card, FaceDown } from "../blackjack/Cards.js";
+import { ChipStack } from "../chips/ChipStack.js";
 // The felt's own stylesheet, which the real table shares: see poker.css.
 import "../poker/poker.css";
 
@@ -109,6 +110,9 @@ function Table({
           <p className="pk__pot">
             <span className="pk__pot-label">Pot</span>
             <strong>{pot.toLocaleString("en-US")}</strong>
+            <span className="pk__pot-chips">
+              <ChipStack amount={pot} width={19} ladder={TABLE_CHIPS} most={15} tallest={5} />
+            </span>
             {side === undefined ? null : (
               <span className="pk__side">side {side.toLocaleString("en-US")}</span>
             )}
@@ -151,7 +155,14 @@ function Table({
             </div>
             <div className="pk__who">
               <span className="pk__name">{seat.name}</span>
-              <span className="pk__stack">{seat.stack.toLocaleString("en-US")}</span>
+              <span className="pk__stack">
+                {seat.stack > 0 ? (
+                  <span className="pk__pile">
+                    <ChipStack amount={seat.stack} width={11} ladder={TABLE_CHIPS} most={9} tallest={3} />
+                  </span>
+                ) : null}
+                {seat.stack.toLocaleString("en-US")}
+              </span>
               {/*
                 * The same number as the chips on the ring, and only one of the
                 * two is ever shown. On a wide table the chips sit out on the
@@ -187,7 +198,8 @@ function Table({
               data-owner={seat.name}
               style={seatAt(at, seats.length)}
             >
-              {seat.bet.toLocaleString("en-US")}
+              <ChipStack amount={seat.bet} width={16} ladder={TABLE_CHIPS} most={12} tallest={4} />
+              <span className="pk__bet-figure">{seat.bet.toLocaleString("en-US")}</span>
             </span>
           ) : null,
         )}
@@ -196,31 +208,110 @@ function Table({
   );
 }
 
-/** What the player can do, and the one control that is not a button. */
-function Actions() {
+/**
+ * The controls, in both of the states they have.
+ *
+ * On your turn there is an amount to choose and three things to do with it;
+ * while somebody else is deciding there are the moves you can leave ready. Both
+ * are here because the second is easy to forget about and is on screen for most
+ * of a hand — at a full table you are waiting nine times as often as acting.
+ */
+function Actions({ turn }: { turn: boolean }) {
   const [raise, setRaise] = useState(300);
+  const [armed, setArmed] = useState<string | null>(null);
+  const span = 2400 - 200;
+
+  if (!turn) {
+    return (
+      <div className="pk__controls">
+        <div className="pk__pre" role="group" aria-label="Decide in advance">
+          {["Fold", "Check / Fold", "Check", "Call any", "Bet pot"].map((label) => (
+            <button
+              key={label}
+              type="button"
+              className={`pk__prebtn${armed === label ? " pk__prebtn--on" : ""}`}
+              aria-pressed={armed === label}
+              onClick={() => setArmed(armed === label ? null : label)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="pk__note">
+          {armed === null
+            ? "Waiting for the others — or decide now, and it plays itself."
+            : "Armed. It goes the moment the turn reaches you, and lapses at the next card."}
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="pk__actions">
-      <button type="button" className="pk__act pk__act--fold">
-        Fold
-      </button>
-      <button type="button" className="pk__act">
-        Call 100
-      </button>
-      <button type="button" className="pk__act pk__act--raise">
-        Raise to {raise.toLocaleString("en-US")}
-      </button>
-      <label className="pk__slider">
-        <span className="pk__slider-label">How much</span>
+    <div className="pk__controls">
+      <div className="pk__amount">
+        <div className="pk__dial">
+          <button
+            type="button"
+            className="pk__step"
+            aria-label="Less"
+            onClick={() => setRaise(Math.max(200, raise - 50))}
+          >
+            −
+          </button>
+          <span className="pk__figure">
+            <span className="pk__figure-label">Raise to</span>
+            <strong>{raise.toLocaleString("en-US")}</strong>
+          </span>
+          <button
+            type="button"
+            className="pk__step"
+            aria-label="More"
+            onClick={() => setRaise(Math.min(2400, raise + 50))}
+          >
+            +
+          </button>
+        </div>
         <input
           type="range"
+          className="pk__range"
+          aria-label="How much to raise to"
           min={200}
           max={2400}
           step={50}
           value={raise}
+          style={{ "--at": `${((raise - 200) / span) * 100}%` } as React.CSSProperties}
           onChange={(event) => setRaise(Number(event.target.value))}
         />
-      </label>
+        <div className="pk__slices">
+          {(
+            [
+              ["Min", 200],
+              ["½ pot", 750],
+              ["¾ pot", 1100],
+              ["Pot", 1450],
+              ["All in", 2400],
+            ] as Array<[string, number]>
+          ).map(([name, amount]) => (
+            <button key={name} type="button" className="pk__slice" onClick={() => setRaise(amount)}>
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="pk__acts">
+        <button type="button" className="pk__act pk__act--fold">
+          Fold
+        </button>
+        <button type="button" className="pk__act">
+          <span className="pk__act-name">Call</span>
+          <span className="pk__act-figure">100</span>
+        </button>
+        <button type="button" className="pk__act pk__act--raise">
+          <span className="pk__act-name">Raise to</span>
+          <span className="pk__act-figure">{raise.toLocaleString("en-US")}</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -252,6 +343,9 @@ const BOARD = [card("Ah"), card("Kc"), card("7d"), card("2s"), card("9h")];
 
 /** The five places a board card goes, in the order they are dealt. */
 const SLOTS = ["flop1", "flop2", "flop3", "turn", "river"];
+
+/** What a poker table counts in, down to the small blind. */
+const TABLE_CHIPS = [1000, 500, 250, 100, 50, 20, 10];
 
 export function PokerMockup() {
   const [seats, setSeats] = useState(10);
@@ -313,7 +407,11 @@ export function PokerMockup() {
       </div>
 
       <Table seats={at} board={board} pot={2_900} {...(seats === 10 ? { side: 1_200 } : {})} />
-      <Actions />
+      <Actions turn />
+      <p className="gallery__note">
+        And what is on screen for most of a hand, which is somebody else's turn.
+      </p>
+      <Actions turn={false} />
 
       <p className="gallery__note">
         Your seat is pinned to the bottom, because every other seat is somebody you are looking at

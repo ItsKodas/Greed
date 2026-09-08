@@ -1,7 +1,7 @@
 import type { SeatView, TableView } from "@backroom/game-poker";
 import { BIG_BLIND, BUY_IN, FUN_STACK, SMALL_BLIND } from "@backroom/game-poker";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, FaceDown } from "../blackjack/Cards.js";
 import { ChipStack } from "../chips/ChipStack.js";
@@ -362,6 +362,28 @@ function Clock({ endsAt }: { endsAt: number | null }) {
 
 /* ----------------------------------------------------------- the controls */
 
+/**
+ * What a pre-selected move means when the turn actually arrives.
+ *
+ * Armed while somebody else is deciding and spent the moment it is your go.
+ * Every one of them can be made impossible by what happens in between — you
+ * arm a check and somebody bets — and where that is so the arming is dropped
+ * and the decision handed back, rather than turned into the nearest thing that
+ * is still legal. Guessing at a move somebody did not make is how a player
+ * loses a stack to a button they pressed a minute ago.
+ */
+export type Pre = "fold" | "checkFold" | "check" | "callAny" | "betPot";
+
+const PRE_CHOICES: Array<{ pre: Pre; label: string; hint: string }> = [
+  { pre: "fold", label: "Fold", hint: "Fold as soon as it is your turn" },
+  { pre: "checkFold", label: "Check / Fold", hint: "Check if it is free, fold if it is not" },
+  { pre: "check", label: "Check", hint: "Check — dropped if somebody bets" },
+  { pre: "callAny", label: "Call any", hint: "Call whatever it has come to" },
+  { pre: "betPot", label: "Bet pot", hint: "Bet or raise the size of the pot" },
+];
+
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+
 export function Actions({
   table,
   state,
@@ -376,10 +398,86 @@ export function Actions({
   const you = state.you;
   const mine = me !== null && state.toAct === me.id;
 
+  /*
+   * What has been armed, and which betting round it was armed in.
+   *
+   * The round is carried along with it rather than cleared by an effect
+   * watching the street. A pre-selection is about the decision in front of you,
+   * and once the next card is out that is a different decision — so it lapses
+   * by simply no longer matching, which needs nothing to remember to clear it.
+   */
+  const [armed, setArmed] = useState<{ pre: Pre; street: string } | null>(null);
+  const live = armed !== null && armed.street === state.street ? armed.pre : null;
+
   const send = (kind: Move, to: number, action: Record<string, unknown>) => {
     intent.send(kind, to);
     table.act(action);
   };
+
+  /*
+   * Held in a ref because the effect below has to fire on the turn arriving and
+   * on nothing else. Everything this reads changes on every broadcast, and an
+   * effect that listed all of it would run constantly.
+   */
+  const spend = useRef<() => void>(() => undefined);
+  spend.current = () => {
+    if (me === null || you === null || live === null) {
+      return;
+    }
+    const callAll = you.toCall >= me.stack;
+    const potTo = clamp(
+      me.committed + you.toCall + (state.pot + you.toCall),
+      you.minRaiseTo,
+      you.maxRaiseTo,
+    );
+    if (live === "fold") {
+      send("fold", 0, { type: "fold" });
+      return;
+    }
+    if (live === "checkFold") {
+      if (you.toCall === 0) {
+        send("check", me.committed, { type: "check" });
+      } else {
+        send("fold", 0, { type: "fold" });
+      }
+      return;
+    }
+    if (live === "check") {
+      /*
+       * Somebody bet after this was armed, so checking is not a move any more.
+       * Handed back rather than turned into a call: a call is a different
+       * decision and nobody made it.
+       */
+      if (you.toCall === 0) {
+        send("check", me.committed, { type: "check" });
+      }
+      return;
+    }
+    if (live === "callAny") {
+      if (you.toCall === 0) {
+        send("check", me.committed, { type: "check" });
+      } else {
+        send("call", me.committed + you.toCall, { type: callAll ? "allIn" : "call" });
+      }
+      return;
+    }
+    if (you.canRaise) {
+      send(
+        potTo >= you.maxRaiseTo ? "allIn" : "raise",
+        potTo,
+        potTo >= you.maxRaiseTo ? { type: "allIn" } : { type: "raise", amount: potTo },
+      );
+    }
+  };
+
+  /* The turn arriving is the whole trigger, so it is the whole dependency. */
+  const ready = mine && live !== null && you !== null;
+  useEffect(() => {
+    if (ready) {
+      setArmed(null);
+      spend.current();
+    }
+  }, [ready]);
 
   if (me === null) {
     return <p className="pk__note">You are watching this table.</p>;
@@ -391,15 +489,19 @@ export function Actions({
    */
   if (me.stack === 0 && me.committed === 0 && !me.folded) {
     return (
-      <div className="pk__actions">
-        <button
-          type="button"
-          className="pk__act pk__act--raise"
-          disabled={table.busy}
-          onClick={() => table.act({ type: "buyIn" })}
-        >
-          Sit down with {compact(state.forFun ? FUN_STACK : BUY_IN)}
-        </button>
+      <div className="pk__controls">
+        <div className="pk__acts">
+          <button
+            type="button"
+            className="pk__act pk__act--raise"
+            disabled={table.busy}
+            aria-label={`Sit down with ${compact(state.forFun ? FUN_STACK : BUY_IN)}`}
+            onClick={() => table.act({ type: "buyIn" })}
+          >
+            <span className="pk__act-name">Sit down with</span>
+            <span className="pk__act-figure">{compact(state.forFun ? FUN_STACK : BUY_IN)}</span>
+          </button>
+        </div>
         <p className="pk__note">
           {state.forFun
             ? "Play money. It lives at this table and is gone when it closes."
@@ -410,128 +512,238 @@ export function Actions({
   }
 
   if (!mine || you === null) {
+    /*
+     * Somebody else is deciding. A hand you are still in gets the choices you
+     * could make in advance; one you are out of gets a line of text, because
+     * arming a move for a hand you have folded is arming nothing.
+     */
+    const inHand = state.street !== "waiting" && !me.folded && me.hole.length > 0;
+    if (!inHand) {
+      return (
+        <p className="pk__note">
+          {state.street === "waiting" ? "Waiting for the next hand." : "Waiting for the others."}
+        </p>
+      );
+    }
     return (
-      <p className="pk__note">
-        {state.street === "waiting"
-          ? "Waiting for the next hand."
-          : intent.move !== null
-            ? "Sent."
-            : "Waiting for the others."}
-      </p>
+      <div className="pk__controls">
+        <div className="pk__pre" role="group" aria-label="Decide in advance">
+          {PRE_CHOICES.map(({ pre, label, hint }) => (
+            <button
+              key={pre}
+              type="button"
+              className={`pk__prebtn${live === pre ? " pk__prebtn--on" : ""}`}
+              aria-pressed={live === pre}
+              title={hint}
+              onClick={() => setArmed(live === pre ? null : { pre, street: state.street })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="pk__note">
+          {live === null
+            ? "Waiting for the others — or decide now, and it plays itself."
+            : "Armed. It goes the moment the turn reaches you, and lapses at the next card."}
+        </p>
+      </div>
     );
   }
 
-  const callAll = you.toCall >= me.stack;
-
   return (
-    <div className="pk__actions">
-      <button
-        type="button"
-        className="pk__act pk__act--fold"
-        disabled={table.busy}
-        onClick={() => send("fold", 0, { type: "fold" })}
-      >
-        Fold
-      </button>
-
-      {you.toCall === 0 ? (
-        <button
-          type="button"
-          className="pk__act"
-          disabled={table.busy}
-          onClick={() => send("check", me.committed, { type: "check" })}
-        >
-          Check
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="pk__act"
-          disabled={table.busy}
-          onClick={() =>
-            send("call", me.committed + you.toCall, { type: callAll ? "allIn" : "call" })
-          }
-        >
-          {callAll ? `All in ${fmt(me.stack)}` : `Call ${fmt(you.toCall)}`}
-        </button>
-      )}
-
-      {you.canRaise ? (
-        /*
-         * Keyed on whose turn it is, so a new decision gets a new slider
-         * sitting at the new smallest raise. A `key` rather than an effect
-         * that resets it: React already has one way to say "this is a
-         * different one of these", and reaching for a second means two things
-         * deciding when the number goes back.
-         */
-        <Raise
-          key={state.toAct ?? "none"}
-          you={you}
-          step={state.bigBlind}
-          stack={me.stack}
-          busy={table.busy}
-          onRaise={(to) =>
-            send(
-              to >= you.maxRaiseTo ? "allIn" : "raise",
-              to,
-              to >= you.maxRaiseTo ? { type: "allIn" } : { type: "raise", amount: to },
-            )
-          }
-        />
-      ) : null}
-    </div>
+    <OnTurn
+      /*
+       * Keyed on the decision, so a new one arrives with the amount sitting at
+       * the smallest legal raise. A `key` rather than an effect that resets it:
+       * React already has one way to say "this is a different one of these",
+       * and reaching for a second means two things deciding when it goes back.
+       */
+      key={`${state.street}:${state.toAct ?? "none"}`}
+      you={you}
+      me={me}
+      pot={state.pot}
+      blind={state.bigBlind}
+      busy={table.busy}
+      onAct={send}
+    />
   );
 }
 
-/** How much to raise, and the press that sends it. */
-function Raise({
+/**
+ * The controls for a decision that is actually in front of you.
+ *
+ * Three buttons and, when there is a raise to make, a way to say how much. The
+ * amount sits above the buttons rather than beside them: it is what the raise
+ * button is going to do, and a figure placed after the control that spends it
+ * reads as a footnote to a decision already taken.
+ */
+function OnTurn({
   you,
-  step,
-  stack,
+  me,
+  pot,
+  blind,
   busy,
-  onRaise,
+  onAct,
 }: {
   you: NonNullable<TableView["you"]>;
-  step: number;
-  stack: number;
+  me: SeatView;
+  pot: number;
+  blind: number;
   busy: boolean;
-  onRaise: (to: number) => void;
+  onAct: (kind: Move, to: number, action: Record<string, unknown>) => void;
 }) {
-  /*
-   * Kept as a raise-to total because that is what a raise is sent as. Anything
-   * else would be converting between two units in the one place where getting
-   * it wrong costs somebody the wrong number of chips.
-   */
   const [to, setTo] = useState(you.minRaiseTo);
-  const all = to >= you.maxRaiseTo;
+  const at = clamp(to, you.minRaiseTo, you.maxRaiseTo);
+  const all = at >= you.maxRaiseTo;
+  const callAll = you.toCall >= me.stack;
+  /* Opening the betting is a bet; putting it up over somebody else is a raise. */
+  const opening = you.toCall === 0;
+
+  /*
+   * A slice of the pot, as a total to raise *to*.
+   *
+   * The pot a raise is measured against is the one that would exist after the
+   * call — what is already in, plus what it costs you to stay. Measuring
+   * against the pot as it stands is the usual way to get this wrong, and it
+   * comes out short by exactly the call every time.
+   */
+  const sliceTo = (part: number) =>
+    clamp(
+      me.committed + you.toCall + Math.round(((pot + you.toCall) * part) / blind) * blind,
+      you.minRaiseTo,
+      you.maxRaiseTo,
+    );
+
+  const span = Math.max(1, you.maxRaiseTo - you.minRaiseTo);
 
   return (
-    <>
-      <button
-        type="button"
-        className="pk__act pk__act--raise"
-        disabled={busy}
-        onClick={() => onRaise(to)}
-      >
-        {all ? `All in ${fmt(stack)}` : `Raise to ${fmt(to)}`}
-      </button>
-      <label className="pk__slider">
-        <span className="pk__slider-label">How much</span>
-        <input
-          type="range"
-          min={you.minRaiseTo}
-          max={you.maxRaiseTo}
-          /*
-           * A blind at a time. Chips are counted in blinds at a poker table,
-           * and a slider stepping in ones is one nobody can land on a round
-           * number with.
-           */
-          step={step}
-          value={to}
-          onChange={(event) => setTo(Number(event.target.value))}
-        />
-      </label>
-    </>
+    <div className="pk__controls">
+      {you.canRaise ? (
+        <div className="pk__amount">
+          <div className="pk__dial">
+            <button
+              type="button"
+              className="pk__step"
+              aria-label="Less"
+              disabled={at <= you.minRaiseTo}
+              onClick={() => setTo(clamp(at - blind, you.minRaiseTo, you.maxRaiseTo))}
+            >
+              −
+            </button>
+            <span className="pk__figure">
+              <span className="pk__figure-label">{opening ? "Bet" : "Raise to"}</span>
+              <strong>{fmt(at)}</strong>
+            </span>
+            <button
+              type="button"
+              className="pk__step"
+              aria-label="More"
+              disabled={all}
+              onClick={() => setTo(clamp(at + blind, you.minRaiseTo, you.maxRaiseTo))}
+            >
+              +
+            </button>
+          </div>
+
+          <input
+            type="range"
+            className="pk__range"
+            aria-label={opening ? "How much to bet" : "How much to raise to"}
+            min={you.minRaiseTo}
+            max={you.maxRaiseTo}
+            step={blind}
+            value={at}
+            /* How far along the track is filled, which CSS cannot work out for
+               itself — a range input has no selector for its own value. */
+            style={{ "--at": `${((at - you.minRaiseTo) / span) * 100}%` } as React.CSSProperties}
+            onChange={(event) => setTo(Number(event.target.value))}
+          />
+
+          <div className="pk__slices">
+            <button type="button" className="pk__slice" onClick={() => setTo(you.minRaiseTo)}>
+              Min
+            </button>
+            {(
+              [
+                [0.5, "½ pot"],
+                [0.75, "¾ pot"],
+                [1, "Pot"],
+              ] as Array<[number, string]>
+            ).map(([part, name]) => (
+              <button
+                key={name}
+                type="button"
+                className="pk__slice"
+                onClick={() => setTo(sliceTo(part))}
+              >
+                {name}
+              </button>
+            ))}
+            <button type="button" className="pk__slice" onClick={() => setTo(you.maxRaiseTo)}>
+              All in
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="pk__acts">
+        <button
+          type="button"
+          className="pk__act pk__act--fold"
+          disabled={busy}
+          onClick={() => onAct("fold", 0, { type: "fold" })}
+        >
+          Fold
+        </button>
+
+        {opening ? (
+          <button
+            type="button"
+            className="pk__act"
+            disabled={busy}
+            onClick={() => onAct("check", me.committed, { type: "check" })}
+          >
+            Check
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="pk__act"
+            disabled={busy}
+            aria-label={
+              callAll ? `All in ${fmt(me.stack)}` : `Call ${fmt(you.toCall)}`
+            }
+            onClick={() =>
+              onAct("call", me.committed + you.toCall, { type: callAll ? "allIn" : "call" })
+            }
+          >
+            <span className="pk__act-name">{callAll ? "All in" : "Call"}</span>
+            <span className="pk__act-figure">{fmt(callAll ? me.stack : you.toCall)}</span>
+          </button>
+        )}
+
+        {you.canRaise ? (
+          <button
+            type="button"
+            className="pk__act pk__act--raise"
+            disabled={busy}
+            aria-label={`${all ? "All in" : opening ? "Bet" : "Raise to"} ${fmt(
+              all ? me.committed + me.stack : at,
+            )}`}
+            onClick={() =>
+              onAct(
+                all ? "allIn" : "raise",
+                at,
+                all ? { type: "allIn" } : { type: "raise", amount: at },
+              )
+            }
+          >
+            <span className="pk__act-name">{all ? "All in" : opening ? "Bet" : "Raise to"}</span>
+            <span className="pk__act-figure">{fmt(all ? me.committed + me.stack : at)}</span>
+          </button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

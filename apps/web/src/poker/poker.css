@@ -506,27 +506,245 @@
 
 /* ---------------------------------------------------------- what you do */
 
-.pk__actions {
+/*
+ * The controls, under the table.
+ *
+ * One column: how much, then what to do with it. That order is deliberate —
+ * the amount is what the raise button is about to spend, and a figure sitting
+ * after the control that spends it reads as a footnote to a decision already
+ * taken.
+ */
+.pk__controls {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: center;
-  /* Centred, which only shows when there is no slider to fill the row: the
-     buy-in is a single button, and one button hard against the left edge of a
-     table reads as something that has come loose. */
-  justify-content: center;
-  gap: var(--gr-space-2);
-  margin-top: var(--gr-space-3);
+  gap: var(--gr-space-3);
+  margin: var(--gr-space-4) auto 0;
+  width: min(520px, 100%);
 }
 
-.pk__act {
+/* ------------------------------------------------------------ how much */
+
+.pk__amount {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  width: 100%;
+}
+
+/*
+ * The figure, with a step either side of it.
+ *
+ * A slider alone cannot land on a number you have in mind — it lands near it,
+ * and near it is a different bet. The steps move exactly one big blind, which
+ * is the unit the whole table is counted in.
+ */
+.pk__dial {
+  display: flex;
+  align-items: stretch;
+  gap: var(--gr-space-2);
+}
+
+.pk__step {
+  flex: 0 0 auto;
+  width: 44px;
   min-height: 44px;
-  padding: 0 var(--gr-space-4);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink);
+  font-size: var(--gr-text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pk__step:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.pk__step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.pk__figure {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 4px var(--gr-space-2);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(0 0 0 / 0.25);
+}
+
+.pk__figure-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gr-color-ink-faint);
+}
+
+.pk__figure strong {
+  font-size: var(--gr-text-xl);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+  line-height: 1.1;
+}
+
+/*
+ * The slider itself.
+ *
+ * Drawn rather than left to the browser, which gives every platform a
+ * different bar and none of them the colour of this room. The filled part is a
+ * hard-stopped gradient at `--at`, because a range input has no selector for
+ * how far along it is and React is the only thing here that knows.
+ */
+.pk__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  /* Its own height rather than the thumb's, so the whole bar is a thumb-sized
+     target rather than a hairline you have to hit exactly. */
+  height: 34px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.pk__range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--gr-color-neon) 0 var(--at, 0%),
+    rgb(255 255 255 / 0.12) var(--at, 0%) 100%
+  );
+}
+
+.pk__range::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--gr-color-neon) 0 var(--at, 0%),
+    rgb(255 255 255 / 0.12) var(--at, 0%) 100%
+  );
+}
+
+.pk__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  /* Half the thumb above the track's half-height, so it rides centred. */
+  margin-top: -7px;
+  border-radius: 50%;
+  border: 2px solid var(--gr-color-night, #10151c);
+  background: var(--gr-color-chip);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.pk__range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--gr-color-night, #10151c);
+  background: var(--gr-color-chip);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+}
+
+.pk__range:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+
+/*
+ * The sizes anybody actually bets.
+ *
+ * A pot-sized raise is the one every player already has a name for, and
+ * reaching it by dragging is a worse way to say a thing you could have named.
+ */
+.pk__slices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pk__slice {
+  flex: 1 1 auto;
+  min-height: 34px;
+  padding: 0 var(--gr-space-2);
+  border-radius: 999px;
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: var(--gr-text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pk__slice:hover {
+  background: rgb(255 255 255 / 0.1);
+  color: var(--gr-color-ink);
+}
+
+/* -------------------------------------------------------- what to do */
+
+.pk__acts {
+  display: flex;
+  gap: var(--gr-space-2);
+  width: 100%;
+}
+
+/*
+ * Equal thirds, so the button under your thumb is the one you meant. Poker is
+ * played fast and these three are pressed thousands of times; a fold that is
+ * narrow because its word is short is a fold somebody hits by accident.
+ */
+.pk__act {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 var(--gr-space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   border-radius: var(--gr-radius-sm);
   border: var(--gr-edge-soft);
   background: rgb(255 255 255 / 0.05);
   color: var(--gr-color-ink);
   font-size: var(--gr-text-sm);
   cursor: pointer;
+}
+
+.pk__act:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.pk__act:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pk__act-name {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--gr-color-ink-faint);
+}
+
+.pk__act-figure {
+  font-size: var(--gr-text-base);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
 }
 
 .pk__act--fold {
@@ -536,25 +754,56 @@
 .pk__act--raise {
   border-color: var(--gr-color-neon);
   color: var(--gr-color-ink-lit);
+  /* Mixed from the token rather than written out, so it follows the room's
+     light instead of being a second opinion about what colour this is. */
+  background: color-mix(in srgb, var(--gr-color-neon) 14%, transparent);
 }
 
-.pk__slider {
+.pk__act--raise .pk__act-name {
+  color: var(--gr-color-ink-dim);
+}
+
+/* ------------------------------------------------ deciding in advance */
+
+/*
+ * The moves you can choose while somebody else is still thinking.
+ *
+ * Deliberately quieter than the row above: these are not a decision being
+ * taken, they are one being left ready. The armed one lights up, because the
+ * one thing that must never be in doubt is whether something is about to
+ * happen on your behalf.
+ */
+.pk__pre {
   display: flex;
-  align-items: center;
-  gap: var(--gr-space-2);
-  flex: 1 1 220px;
-  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
 }
 
-.pk__slider input {
-  flex: 1;
-  min-width: 0;
-}
-
-.pk__slider-label {
+.pk__prebtn {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 0 var(--gr-space-3);
+  border-radius: var(--gr-radius-sm);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(255 255 255 / 0.03);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
   font-size: var(--gr-text-xs);
-  color: var(--gr-color-ink-faint);
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.pk__prebtn:hover {
+  background: rgb(255 255 255 / 0.08);
+  color: var(--gr-color-ink);
+}
+
+.pk__prebtn--on {
+  border-color: var(--gr-color-neon);
+  background: color-mix(in srgb, var(--gr-color-neon) 20%, transparent);
+  color: var(--gr-color-ink-lit);
 }
 
 /*
@@ -664,5 +913,18 @@
   .pk__pile,
   .pk__pot-chips {
     display: none;
+  }
+
+  /*
+   * The pot-slice buttons wrap onto their own line rather than squeezing to
+   * nothing. Five of them across 375px is about sixty pixels each, which is
+   * under a thumb and over a word.
+   */
+  .pk__slice {
+    flex: 1 1 30%;
+  }
+
+  .pk__prebtn {
+    flex: 1 1 45%;
   }
 }
