@@ -187,4 +187,86 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     expect(await store.bank("slots")).toBe(0);
   });
 
+  /**
+   * An emote's files, all the way out and back.
+   *
+   * The other promise MemoryStore cannot keep on Mongo's behalf, and the gap
+   * that let an emote be served as an empty file in production: every test of
+   * the upload path ran against the memory store, where the bytes never leave
+   * the process. Only a real database exercises the encode-and-read that was
+   * actually broken.
+   */
+  describe("an emote's files", () => {
+    /** Not a real JPEG beyond its opening bytes, which is all that is sniffed. */
+    const picture = Uint8Array.from([
+      0xff,
+      0xd8,
+      0xff,
+      0xe0,
+      ...Array.from({ length: 2000 }, (_, index) => index % 256),
+    ]);
+    const noise = Uint8Array.from([
+      0x49,
+      0x44,
+      0x33,
+      ...Array.from({ length: 900 }, (_, index) => (index * 7) % 256),
+    ]);
+
+    it("hands back exactly the bytes that went in", async () => {
+      store ??= await MongoStore.connect(url as string);
+      const made = await store.addEmote({
+        name: "Smug",
+        cost: 250,
+        image: picture,
+        sound: noise,
+        createdBy: "admin",
+      });
+
+      const image = await store.emoteAsset(made.id, "image");
+      const sound = await store.emoteAsset(made.id, "sound");
+
+      /*
+       * Length first and separately. The failure this covers was an empty
+       * file, and "0 bytes" is a far clearer thing to read at the top of a
+       * failure than a diff of two thousand numbers.
+       */
+      expect(image?.bytes.length).toBe(picture.length);
+      expect(sound?.bytes.length).toBe(noise.length);
+      expect(image?.bytes).toEqual(picture);
+      expect(sound?.bytes).toEqual(noise);
+      expect(image?.mime).toBe("image/jpeg");
+      expect(sound?.mime).toBe("audio/mpeg");
+    });
+
+    it("says an emote with no sound has none", async () => {
+      store ??= await MongoStore.connect(url as string);
+      const made = await store.addEmote({
+        name: "Quiet",
+        cost: 10,
+        image: picture,
+        sound: null,
+        createdBy: "admin",
+      });
+
+      expect(await store.emoteAsset(made.id, "sound")).toBeNull();
+      expect((await store.emoteAsset(made.id, "image"))?.bytes.length).toBe(picture.length);
+    });
+
+    it("keeps serving a retired emote's picture, for the replays still owed", async () => {
+      store ??= await MongoStore.connect(url as string);
+      const made = await store.addEmote({
+        name: "Gone",
+        cost: 10,
+        image: picture,
+        sound: null,
+        createdBy: "admin",
+      });
+
+      expect(await store.retireEmote(made.id)).toBe(true);
+
+      expect((await store.emoteAsset(made.id, "image"))?.bytes).toEqual(picture);
+      expect((await store.listEmotes(false)).some((one) => one.id === made.id)).toBe(false);
+      expect((await store.listEmotes(true)).some((one) => one.id === made.id)).toBe(true);
+    });
+  });
 });
