@@ -16,18 +16,32 @@ import { REEL_STAGGER_MS, Reel, SPIN_UP_MS } from "./Reel.js";
 const column: Face[] = ["chip", "dice", "seven"];
 const other: Face[] = ["bell", "bell", "spade"];
 
-function faces(container: HTMLElement): number {
-  return container.querySelectorAll("[data-face]").length;
+/**
+ * Faces at rest under the payline — the answer, as opposed to the strip.
+ *
+ * The reel draws the real strip going past while it turns, so counting every
+ * face on screen no longer says anything. What matters is what has *landed*,
+ * and only a settled reel marks its faces final.
+ */
+function landed(container: HTMLElement): number {
+  return container.querySelectorAll("[data-final]").length;
+}
+
+/** Faces the reel is bringing into place but has not stopped on yet. */
+function arriving(container: HTMLElement): number {
+  return container.querySelectorAll("[data-landing]").length;
 }
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
 describe("a reel", () => {
-  it("spins with no faces showing while it waits", () => {
+  it("turns without having landed on anything", () => {
     const { container } = render(<Reel column={undefined} spinning index={0} />);
     expect(container.querySelector(".reel--spinning")).not.toBeNull();
-    expect(faces(container)).toBe(0);
+    expect(landed(container)).toBe(0);
+    // The strip is on screen and moving, which is what a reel looks like.
+    expect(container.querySelector(".reel__strip")).not.toBeNull();
   });
 
   it("shows what the server sent once it has stopped", () => {
@@ -36,7 +50,7 @@ describe("a reel", () => {
 
     act(() => vi.advanceTimersByTime(SPIN_UP_MS + 500));
 
-    expect(faces(container)).toBe(3);
+    expect(landed(container)).toBe(3);
     expect(container.querySelector(".reel--spinning")).toBeNull();
   });
 
@@ -52,7 +66,9 @@ describe("a reel", () => {
     act(() => vi.advanceTimersByTime(50));
 
     expect(container.querySelector(".reel--spinning")).not.toBeNull();
-    expect(faces(container)).toBe(0);
+    // The answer is on the strip, coming into place — but nothing has landed.
+    expect(landed(container)).toBe(0);
+    expect(arriving(container)).toBe(3);
   });
 
   it("stops later the further right it sits", () => {
@@ -64,26 +80,26 @@ describe("a reel", () => {
 
     act(() => vi.advanceTimersByTime(SPIN_UP_MS + REEL_STAGGER_MS));
 
-    expect(faces(first.container)).toBe(3);
-    expect(faces(last.container)).toBe(0);
+    expect(landed(first.container)).toBe(3);
+    expect(landed(last.container)).toBe(0);
 
     act(() => vi.advanceTimersByTime(REEL_STAGGER_MS * 4));
-    expect(faces(last.container)).toBe(3);
+    expect(landed(last.container)).toBe(3);
   });
 
   it("goes back to the faces it was showing when a spin is refused", () => {
     // The stake comes back, so the glass has to come back with it rather than
     // sitting on a spin that never happened.
     const { container, rerender } = render(<Reel column={column} spinning={false} index={0} />);
-    expect(faces(container)).toBe(3);
+    expect(landed(container)).toBe(3);
 
     rerender(<Reel column={column} spinning index={0} />);
-    expect(faces(container)).toBe(0);
+    expect(landed(container)).toBe(0);
 
     rerender(<Reel column={column} spinning={false} index={0} />);
     act(() => vi.advanceTimersByTime(SPIN_UP_MS + 500));
 
-    expect(faces(container)).toBe(3);
+    expect(landed(container)).toBe(3);
   });
 
   it("replaces the old faces rather than keeping both", () => {
@@ -93,8 +109,8 @@ describe("a reel", () => {
 
     act(() => vi.advanceTimersByTime(SPIN_UP_MS + 500));
 
-    expect(faces(container)).toBe(3);
-    expect(container.querySelectorAll('[data-face="bell"]')).toHaveLength(2);
+    expect(landed(container)).toBe(3);
+    expect(container.querySelectorAll('[data-final] [data-face="bell"]')).toHaveLength(2);
   });
 
   it("does not leave a timer running when it is taken off the page", () => {
@@ -117,7 +133,7 @@ describe("a reel", () => {
     );
     expect(container.querySelector(".reel--resting")).not.toBeNull();
     expect(container.querySelector(".reel--spinning")).toBeNull();
-    expect(faces(container)).toBe(3);
+    expect(landed(container)).toBe(3);
   });
 
   it("never goes back to resting once a pull has been made", () => {
@@ -136,6 +152,6 @@ describe("a reel", () => {
   it("still blurs from the very first pull when it has nothing to rest on", () => {
     const { container } = render(<Reel column={undefined} spinning index={0} resting={column} />);
     expect(container.querySelector(".reel--spinning")).not.toBeNull();
-    expect(faces(container)).toBe(0);
+    expect(landed(container)).toBe(0);
   });
 });

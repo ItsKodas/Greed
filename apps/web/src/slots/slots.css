@@ -232,22 +232,24 @@
 }
 
 /*
- * A blur while the reel is out.
+ * The strip going past.
  *
- * Bands rather than faces: showing real ones here would be guessing at the
- * answer, and showing the last spin's would read as a reel that never moved.
+ * Moved by the Web Animations API rather than from here, because where it has
+ * to stop is not known until the server answers — a keyframe would have to be
+ * written per landing. What is left here is only that it must not be caught by
+ * anything else that transitions.
  */
-.reel--spinning .reel__blur {
-  animation: reel-roll 220ms linear infinite;
+.reel__strip {
+  will-change: transform;
 }
 
-@keyframes reel-roll {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(45px);
-  }
+/*
+ * With motion off there is no strip at all, only these bands. Faces standing
+ * still under the payline would read as a result, and the reel has not got one
+ * yet — so the reduced-motion reel says "turning" without turning.
+ */
+.reel--spinning .reel__blur {
+  opacity: 0.5;
 }
 
 /*
@@ -589,7 +591,6 @@
 /* ------------------------------------------------------------------ off */
 
 @media (prefers-reduced-motion: reduce) {
-  .reel--spinning .reel__blur,
   .payline,
   .slots__said--big,
   .slots__lever,
