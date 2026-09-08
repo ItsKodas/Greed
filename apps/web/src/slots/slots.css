@@ -222,6 +222,80 @@
 
 /* -------------------------------------------------------- the spin button */
 
+/* The handle and the thing that pulls it for you, side by side. */
+.slots__go {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: var(--gr-space-2);
+}
+
+/*
+ * Auto. Deliberately quieter than the button it repeats — it arms the same
+ * press rather than being a second way to play, and a machine with two loud
+ * buttons has no obvious one.
+ */
+.auto {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 62px;
+  padding: 0 var(--gr-space-2);
+  border: var(--gr-edge-soft);
+  border-radius: 14px;
+  background: rgb(0 0 0 / 0.32);
+  color: var(--gr-color-ink-dim);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.auto:hover {
+  color: var(--gr-color-ink);
+  border-color: color-mix(in srgb, var(--gr-color-neon) 40%, transparent);
+}
+
+.auto:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 3px;
+}
+
+.auto__icon {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.auto__word {
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Armed: lit, and the arrows going round to say it is doing something. */
+.auto--on {
+  border-color: var(--gr-color-neon);
+  background: color-mix(in srgb, var(--gr-color-neon) 18%, transparent);
+  color: var(--gr-color-neon-hi);
+}
+
+.auto--on .auto__icon {
+  animation: auto-round 2.4s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes auto-round {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
+
 /*
  * A lit screen under a piece of glass.
  *
@@ -334,13 +408,21 @@
   filter: brightness(1.08) saturate(1.06);
 }
 
-/* Down, and immediately: the slab is what stops it. */
+/*
+ * Down, and immediately: the slab is what stops it.
+ *
+ * A plain ease on the way down, not the spring. The spring overshoots at both
+ * ends — on the press that meant the face dipping through the slab it is
+ * supposed to be landing on. Springing is what a release does; a press just
+ * stops.
+ */
 .spin:active:not(:disabled) {
   transform: translateY(var(--lift));
   box-shadow:
     0 0 0 var(--gr-color-neon-deep),
     0 2px 6px rgb(0 0 0 / 0.45),
     inset 0 0 0 1px rgb(255 255 255 / 0.22);
+  transition-timing-function: cubic-bezier(0.3, 0.7, 0.4, 1);
   transition-duration: 55ms, 55ms, 160ms;
 }
 
@@ -415,6 +497,11 @@
   gap: var(--gr-space-2);
 }
 
+/* Nothing chosen yet, so the machine asks rather than assuming. */
+.picker__cost--asking {
+  color: var(--gr-color-neon-hi);
+}
+
 .picker__label {
   font-size: var(--gr-text-xs);
   letter-spacing: 0.16em;
@@ -427,28 +514,56 @@
   gap: 4px;
 }
 
+/*
+ * The line plates.
+ *
+ * Little lamps set into the belly rather than buttons drawn on it: a dark well
+ * with the number sunk into it, and the whole thing lighting up when it is the
+ * one in play. It is the same idea as the screen above — light coming out —
+ * scaled down to something you press.
+ */
 .picker__pick {
-  min-width: 34px;
-  min-height: 34px;
+  position: relative;
+  min-width: 40px;
+  min-height: 38px;
   padding: 0 var(--gr-space-2);
-  border: var(--gr-edge-soft);
-  border-radius: var(--gr-radius-sm);
-  background: rgb(0 0 0 / 0.3);
-  color: var(--gr-color-ink-dim);
+  border: 1px solid rgb(0 0 0 / 0.6);
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(0 0 0 / 0.32));
+  color: var(--gr-color-ink-faint);
   font-family: var(--gr-font-data);
   font-variant-numeric: tabular-nums;
   font-size: var(--gr-text-sm);
+  font-weight: 600;
   cursor: pointer;
+  box-shadow:
+    inset 0 2px 4px rgb(0 0 0 / 0.55),
+    inset 0 0 0 1px rgb(255 255 255 / 0.04);
   transition:
-    background-color 140ms ease,
-    color 140ms ease,
-    border-color 140ms ease;
+    color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
 }
 
+.picker__pick:hover:not(:disabled):not(.picker__pick--on) {
+  color: var(--gr-color-ink-dim);
+  border-color: color-mix(in srgb, var(--gr-color-neon) 40%, transparent);
+}
+
+/* Lit. The lamp is on, so it glows out of the well rather than into it. */
 .picker__pick--on {
   border-color: var(--gr-color-neon);
-  background: color-mix(in srgb, var(--gr-color-neon) 20%, transparent);
-  color: var(--gr-color-ink-lit);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--gr-color-neon) 34%, transparent),
+    color-mix(in srgb, var(--gr-color-neon) 16%, transparent)
+  );
+  color: #fff2fb;
+  text-shadow: 0 0 8px var(--gr-color-neon-hi);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 0 12px color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
 }
 
 .picker__pick:disabled {
@@ -972,8 +1087,13 @@
 
   .picker__pick,
   .spin,
+  .auto,
   .roll__strip {
     transition: none;
+  }
+
+  .auto--on .auto__icon {
+    animation: none;
   }
 
   .spin::before,

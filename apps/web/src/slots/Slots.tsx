@@ -5,7 +5,6 @@ import {
   FUN_PURSE,
   jackpotPay,
   maxStake,
-  LINE_COUNT,
   MIN_STAKE,
   PAYLINES,
   runOn,
@@ -190,6 +189,22 @@ export default function Slots() {
   /** How long each reel is being held, which is only ever a reveal. */
   const [holds, setHolds] = useState<number[]>([0, 0, 0, 0, 0]);
   /**
+   * Whether the machine is pulling its own handle.
+   *
+   * Turns itself off the moment something pays, which is the whole point of
+   * it: a machine left running through a win is one nobody watched win.
+   */
+  const [auto, setAuto] = useState(false);
+  /**
+   * Whether the row has settled.
+   *
+   * Kept apart from `settling` below, and that separation is the point: this
+   * is the reels finishing, that is the whole pull finishing. Sharing one flag
+   * is what made the winning lines wait for the payout they were supposed to
+   * open.
+   */
+  const [stopped, setStopped] = useState(false);
+  /**
    * Whether a pull is still playing out.
    *
    * Not the same as waiting on the server, and that difference is the whole
@@ -208,7 +223,12 @@ export default function Slots() {
    * leaves the account. A line nobody bought does not pay however it lands,
    * which is the whole meaning of choosing fewer.
    */
-  const [lineCount, setLineCount] = useState(LINE_COUNT);
+  /*
+   * Nothing chosen to start with. A machine that arrives with nine lines
+   * already bought has made a decision about somebody's money before they
+   * touched it — and nine is not a small one.
+   */
+  const [lineCount, setLineCount] = useState(0);
   /** Whether the spin on the glass was the jackpot, for what the belly says. */
   const [wasJackpot, setWasJackpot] = useState(false);
   /** Gives up on an answer that never comes, so the machine cannot lock. */
@@ -293,17 +313,20 @@ export default function Slots() {
   const canPull =
     connected &&
     !settling &&
+    lineCount >= 1 &&
     stake >= MIN_STAKE &&
     total <= cap &&
     balance !== null &&
     total <= balance;
 
   /** Whether one more of this chip could go on: the bank's ceiling and yours. */
+  /*
+   * Costed against one line until lines are chosen, so the tray is usable
+   * before the picker has been touched rather than either dead or lying.
+   */
+  const perSpin = (amount: number) => (stake + amount) * Math.max(1, lineCount);
   const canAdd = (amount: number) =>
-    !settling &&
-    (stake + amount) * lineCount <= cap &&
-    balance !== null &&
-    (stake + amount) * lineCount <= balance;
+    !settling && perSpin(amount) <= cap && balance !== null && perSpin(amount) <= balance;
 
   /**
    * Everything the machine is making a noise about, stopped.
@@ -340,6 +363,13 @@ export default function Slots() {
   }, []);
 
   /** One reel has settled. */
+  /**
+   * One reel has settled.
+   *
+   * The last one hands over to the celebration rather than running it here:
+   * the lines, the sound and the lever coming back are one sequence, and
+   * scattering them across two places is how they drifted apart.
+   */
   const reelStopped = useCallback(
     (index: number) => {
       play("reelStop");
@@ -353,32 +383,58 @@ export default function Slots() {
       if (index < 4) {
         return;
       }
-      // The last one. Everything that was running stops, and the machine says
-      // what it did.
+      // The last one. Everything that was running stops.
       hush();
-      const result = landed.current;
-      landed.current = null;
-      if (result === null || result.won <= 0) {
-        // Nothing to watch, so the lever comes straight back.
-        setSettling(false);
-        return;
-      }
+      setStopped(true);
+    },
+    [holds, hush],
+  );
 
-      /*
-       * Held down while the win plays out. The lines light, the coins run, and
-       * only then is the machine ready for another stake — taking one over the
-       * top of a payout hurries the player past the part they are here for.
-       */
-      window.setTimeout(
-        () => setSettling(false),
-        celebrationMs(result.won, result.jackpot, result.lit),
-      );
+  /*
+   * What happens once the row has settled.
+   *
+   * Keyed on the reels stopping, and nothing else. It used to wait on
+   * `settling`, which by then also covered the celebration — so the lines
+   * waited for the whole payout to finish before they started, and lit a
+   * second and a half after the sound that was supposed to accompany them.
+   *
+   * The beat before they light is deliberate: a row of reels that have only
+   * just stopped needs a moment to be read before something is drawn over it.
+   * The sound goes with the lines rather than ahead of them, because they are
+   * the same event.
+   */
+  useEffect(() => {
+    if (!stopped) {
+      return;
+    }
+    /*
+     * Read, not taken. An earlier version cleared this here, which made the
+     * effect destroy its own input: React runs effects twice in development,
+     * so the second pass found nothing, read the win as a loss and cancelled
+     * the celebration. Every win was swallowed and the machine just carried on.
+     *
+     * `pull` clears it at the start of the next spin, which is the only place
+     * that should.
+     */
+    const result = landed.current;
+    if (result === null || result.won <= 0) {
+      // Nothing to watch, so the lever comes straight back.
+      setSettling(false);
+      return;
+    }
+
+    // Something paid, so the machine stops pulling its own handle: a win the
+    // player did not see happen is a win that did not happen to them.
+    setAuto(false);
+
+    const show = window.setTimeout(() => {
+      setLit(true);
 
       /*
        * How the money arrives, sized to how much of it there is. A handful of
-       * coins for an ordinary line, a run of them for something worth
-       * looking up at — the same sound at the same length for both would make
-       * every win feel identical, which is the one thing a payout must not do.
+       * coins for an ordinary line, a run of them for something worth looking
+       * up at — the same sound at the same length for both would make every
+       * win feel identical, which is the one thing a payout must not do.
        */
       if (result.jackpot) {
         play("jackpot");
@@ -397,9 +453,46 @@ export default function Slots() {
       for (let coin = 0; coin < 3; coin += 1) {
         window.setTimeout(() => play("coin"), coin * 130 + Math.random() * 60);
       }
-    },
-    [holds, hush, payingOut],
-  );
+    }, LINE_LIGHT_MS);
+
+    /*
+     * Held down while the win plays out. Taking a stake over the top of a
+     * payout hurries the player past the part they are here for.
+     */
+    const done = window.setTimeout(
+      () => setSettling(false),
+      LINE_LIGHT_MS + celebrationMs(result.won, result.jackpot, result.lit),
+    );
+    return () => {
+      window.clearTimeout(show);
+      window.clearTimeout(done);
+    };
+  }, [stopped, payingOut]);
+
+  /*
+   * Held in a ref so the loop below does not restart on every render. `pull`
+   * closes over the stake and the mode and is rebuilt constantly; watching it
+   * would make the effect fire on its own.
+   */
+  const pullRef = useRef<() => void>(() => {});
+
+  /*
+   * The machine pulling its own handle.
+   *
+   * A beat between spins rather than straight into the next one — back to
+   * back, the reels never visibly stop and it stops being a game being played
+   * and becomes a screen doing something.
+   *
+   * It arms nothing on its own: any of the conditions that stop a person
+   * spinning stop this too, because it goes through exactly the same canPull.
+   */
+  useEffect(() => {
+    if (!auto || settling || !canPull) {
+      return;
+    }
+    const next = window.setTimeout(() => pullRef.current(), 500);
+    return () => window.clearTimeout(next);
+  }, [auto, settling, canPull]);
 
   const changeMachine = (next: boolean) => {
     if (next === forFun || spinning) {
@@ -412,6 +505,7 @@ export default function Slots() {
      */
     hush();
     setSettling(false);
+    setAuto(false);
     setForFun(next);
     setStake(0);
     setGrid(undefined);
@@ -440,6 +534,7 @@ export default function Slots() {
     setPending(total);
     setHolds([0, 0, 0, 0, 0]);
     setSettling(true);
+    setStopped(false);
     landed.current = null;
 
     play("lever");
@@ -539,13 +634,7 @@ export default function Slots() {
    * with sevens up, the lines were lighting while the last reel was still
    * turning — giving away the answer the hold exists to withhold.
    */
-  useEffect(() => {
-    if (settling || lines.length === 0) {
-      return;
-    }
-    const timer = window.setTimeout(() => setLit(true), LINE_LIGHT_MS);
-    return () => window.clearTimeout(timer);
-  }, [settling, lines]);
+  pullRef.current = pull;
 
   const columns: (Face[] | undefined)[] = [0, 1, 2, 3, 4].map((reel) => grid?.[reel]);
   // Signed in, or playing for nothing — either way there is a machine to play.
@@ -629,6 +718,8 @@ export default function Slots() {
                     total={total}
                     onPull={pull}
                     canPull={canPull}
+                    auto={auto}
+                    onAuto={() => setAuto((on) => !on)}
                   />
                 ) : (
                   <SignInToPlay available={account.available} />
@@ -757,6 +848,31 @@ function WinBreakdown({ lines, jackpot }: { lines: SpinLine[]; jackpot: boolean 
   );
 }
 
+/** Two arrows chasing each other: the machine going round again. */
+function RepeatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" className="auto__icon">
+      <title>Repeat</title>
+      <path
+        d="M4 9a6 6 0 0 1 6-6h7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <path d="M14 0.5 18.5 3 14 5.5Z" fill="currentColor" transform="translate(0 0)" />
+      <path
+        d="M20 15a6 6 0 0 1-6 6H7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+      />
+      <path d="M10 18.5 5.5 21 10 23.5Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 /** How many of the nine lines to buy. */
 function LinePicker({
   lines,
@@ -789,8 +905,10 @@ function LinePicker({
       </div>
       {/* What it actually costs, because two numbers multiplied is exactly the
           sort of arithmetic a machine should not make anybody do. */}
-      <span className="picker__cost">
-        {exact(perLine)} a line — {exact(perLine * lines)} a spin
+      <span className={`picker__cost${lines === 0 ? " picker__cost--asking" : ""}`}>
+        {lines === 0
+          ? "Pick your lines"
+          : `${exact(perLine)} a line — ${exact(perLine * lines)} a spin`}
       </span>
     </div>
   );
@@ -982,6 +1100,8 @@ function Controls({
   total,
   onPull,
   canPull,
+  auto,
+  onAuto,
 }: {
   stake: number;
   onAdd: (amount: number) => void;
@@ -996,7 +1116,12 @@ function Controls({
   total: number;
   onPull: () => void;
   canPull: boolean;
+  auto: boolean;
+  onAuto: () => void;
 }) {
+  /* What one more of a chip would make the whole spin cost. */
+  const perSpin = (amount: number) => (stake + amount) * Math.max(1, lineCount);
+
   if (cap < MIN_STAKE) {
     return (
       <p className="slots__shut">
@@ -1018,8 +1143,8 @@ function Controls({
             className="slots__chip"
             disabled={!canAdd(amount)}
             title={
-              (stake + amount) * lineCount > cap
-                ? `The bank cannot cover ${exact((stake + amount) * lineCount)} yet`
+              perSpin(amount) > cap
+                ? `The bank cannot cover ${exact(perSpin(amount))} yet`
                 : `Add ${exact(amount)} a line`
             }
             onClick={() => onAdd(amount)}
@@ -1032,7 +1157,7 @@ function Controls({
       {/* The pile you have built, beside the figure. The number is the exact
           answer; the stack is the one you can read without counting. */}
       <div className={`slots__bet${stake > 0 ? " slots__bet--on" : ""}`}>
-        {stake > 0 ? (
+        {stake > 0 && lineCount > 0 ? (
           <>
             <ChipStack amount={total} width={64} />
             <span className="slots__bet-total">{exact(total)}</span>
@@ -1042,7 +1167,9 @@ function Controls({
           </>
         ) : (
           <span className="slots__bet-empty">
-            nothing on yet — {exact(MIN_STAKE)} a line minimum
+            {stake > 0 && lineCount === 0
+              ? `${exact(stake)} a line — choose how many`
+              : `nothing on yet — ${exact(MIN_STAKE)} a line minimum`}
           </span>
         )}
       </div>
@@ -1055,14 +1182,28 @@ function Controls({
         * whole trick — a flat rectangle that changes colour is a link, and
         * this is the thing you hit to make the machine go.
         */}
-      <button
-        type="button"
-        className={`spin${busy ? " spin--going" : ""}`}
-        onClick={onPull}
-        disabled={!canPull}
-      >
-        <span className="spin__face">{busy ? "Spinning" : "Spin"}</span>
-      </button>
+      <div className="slots__go">
+        <button
+          type="button"
+          className={`spin${busy ? " spin--going" : ""}`}
+          onClick={onPull}
+          disabled={!canPull}
+        >
+          <span className="spin__face">{busy ? "Spinning" : "Spin"}</span>
+        </button>
+
+        {/* Beside the handle, not instead of it: this arms the same press. */}
+        <button
+          type="button"
+          className={`auto${auto ? " auto--on" : ""}`}
+          aria-pressed={auto}
+          title={auto ? "Stop spinning on its own" : "Keep spinning until something pays"}
+          onClick={onAuto}
+        >
+          <RepeatIcon />
+          <span className="auto__word">Auto</span>
+        </button>
+      </div>
 
       <p className="slots__purse">
         <span>
