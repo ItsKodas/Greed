@@ -1,4 +1,5 @@
 import type { Face } from "@backroom/game-slots";
+import { ChipFace } from "../chips/Chip.js";
 import { FaceDefs, ReelFace } from "../slots/Symbols.js";
 
 /**
@@ -122,16 +123,37 @@ export function CardsArt() {
 }
 
 /** A game with nothing of its own yet still gets a corner: a stack of chips. */
+/**
+ * Three chips, face on, in three of the house's colours.
+ *
+ * The building's own chip drawing rather than one of its own: a chip here is
+ * the same object as a chip on the felt and a chip in the cage, so it is the
+ * same drawing, taken at a different size. The stack of ellipses this replaced
+ * was a chip seen edge on, which at this size is a coloured lozenge — three of
+ * them overlapping read as one blob rather than as money.
+ *
+ * Face on also gives the hover somewhere to go. A lozenge that rotates looks
+ * like a lozenge; a chip that rotates turns its rim spots with it, so the
+ * three coming apart look like chips being spread across a table rather than
+ * a picture sliding about.
+ *
+ * Different denominations rather than one repeated, because the colours are
+ * the point — a pile of one colour is a pile, and three colours is a game.
+ */
+const TILE_CHIPS = [
+  { amount: 5000, cx: 72, cy: 74 },
+  { amount: 500, cx: 126, cy: 58 },
+  { amount: 25000, cx: 100, cy: 108 },
+];
+
 export function ChipsArt() {
   return (
     <svg viewBox="0 0 200 160" role="img" aria-hidden="true" focusable="false">
-      {[0, 1, 2].map((index) => (
-        <Piece key={index} n={index + 1}>
-          <g transform={`translate(${104 + index * 6} ${118 - index * 20})`}>
-            <ellipse cx="0" cy="0" rx="34" ry="12" fill="#171b22" />
-            <ellipse cx="0" cy="-3" rx="34" ry="12" fill="#e0b048" />
-            <ellipse cx="0" cy="-3" rx="16" ry="5.5" fill="#171b22" opacity="0.55" />
-          </g>
+      {TILE_CHIPS.map((chip, index) => (
+        <Piece key={chip.amount} n={index + 1}>
+          {/* Close enough to overlap at rest, so coming apart is a thing that
+              happens rather than three chips that were always separate. */}
+          <ChipFace cx={chip.cx} cy={chip.cy} r={28} amount={chip.amount} />
         </Piece>
       ))}
     </svg>

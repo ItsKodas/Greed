@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { TITLES } from "./hand.js";
 import { Table } from "./table.js";
 
 /**
@@ -27,7 +28,12 @@ function table(stacks: number[], seed = 1): Table {
   };
   const made = new Table("TEST", random, 50, 100, 10);
   stacks.forEach((stack, index) => {
-    made.join(`s${index}`, `P${index}`, `u${index}`, stack);
+    made.join(`s${index}`, `P${index}`, {
+      userId: `u${index}`,
+      avatar: null,
+      accentColor: null,
+    });
+    made.buyIn(`s${index}`, stack);
   });
   return made;
 }
@@ -80,7 +86,8 @@ describe("dealing a hand", () => {
   it("does not deal in somebody who sat down mid-hand", () => {
     const made = table([1_000, 1_000]);
     made.deal();
-    made.join("late", "Late", "ulate", 1_000);
+    made.join("late", "Late", { userId: "ulate", avatar: null, accentColor: null });
+    made.buyIn("late", 1_000);
     expect(made.seats.find((s) => s.id === "late")?.hole).toHaveLength(0);
     expect(made.seats.find((s) => s.id === "late")?.waiting).toBe(true);
   });
@@ -296,6 +303,124 @@ describe("how a hand ends", () => {
   });
 });
 
+describe("what a seat is told it may do", () => {
+  /*
+   * The felt draws its buttons from this, so what is wrong here is a control
+   * offered for a move the table then refuses — or worse, not offered for one
+   * it would have taken.
+   */
+  const own = (made: Table, seatId: string) => {
+    const view = made.view(seatId);
+    return view.you;
+  };
+
+  it("says nothing to somebody who is not at the table", () => {
+    const made = table([1_000, 1_000]);
+    expect(made.view(null).you).toBeNull();
+    expect(made.view("nobody").you).toBeNull();
+  });
+
+  it("asks the big blind for nothing and the small blind for the difference", () => {
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const big = made.seats.find((seat) => seat.id === made.bigBlindId) as { id: string };
+    const small = made.seats.find((seat) => seat.id === made.smallBlindId) as { id: string };
+
+    expect(own(made, big.id)?.toCall).toBe(0);
+    // 100 in, 50 already up: the other 50.
+    expect(own(made, small.id)?.toCall).toBe(50);
+  });
+
+  it("gives the smallest raise as a total, not as a difference", () => {
+    /*
+     * A raise is sent as the figure to raise *to*, so this has to be that
+     * figure. The table's own `minRaise` is a delta, and handing the browser
+     * the delta is how a slider ends up a blind out at every stop.
+     */
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const seatId = made.toAct as string;
+    // Preflop the highest is the big blind, and the smallest raise is one more
+    // of it on top: to 200, whatever this seat has already put in.
+    expect(own(made, seatId)?.minRaiseTo).toBe(200);
+  });
+
+  it("caps the largest raise at what the seat actually has", () => {
+    const made = table([1_000, 1_000, 240]);
+    made.deal();
+    const short = made.seats.find((seat) => seat.stack + seat.committed === 240) as { id: string };
+    const mine = own(made, short.id);
+    expect(mine?.maxRaiseTo).toBe(240);
+    // And the smallest never asks for more than the largest allows.
+    expect(mine?.minRaiseTo).toBeLessThanOrEqual(240);
+  });
+
+  it("offers no raise to somebody who cannot cover a call", () => {
+    // 30 chips against a 100 blind: calling is all in, and there is no raise
+    // to make. A slider here would have one stop on it.
+    const made = table([1_000, 1_000, 30]);
+    made.deal();
+    const short = made.seats.find((seat) => seat.stack + seat.committed === 30) as { id: string };
+    expect(own(made, short.id)?.canRaise).toBe(false);
+  });
+});
+
+describe("reading your own hand", () => {
+  /*
+   * The felt shows you what you are holding, and this is where that comes
+   * from. Read on the table rather than in the browser so the name it gives
+   * you during the hand cannot disagree with the one it announces at the
+   * showdown — and of the two, this is the one that pays out.
+   */
+  it("says nothing before there is a hand to read", () => {
+    const made = table([1_000, 1_000]);
+    made.deal();
+    // Two cards are not a hand. Naming one would be the felt inventing it.
+    expect(made.view(made.toAct).you?.hand).toBeNull();
+  });
+
+  it("names what you hold once the flop is out", () => {
+    const made = table([1_000, 1_000]);
+    made.deal();
+    made.act(made.toAct as string, "call");
+    made.act(made.toAct as string, "check");
+
+    const seatId = made.toAct as string;
+    const mine = made.view(seatId).you?.hand;
+    expect(mine).not.toBeNull();
+    // Whatever it dealt, it is one of the ten and it is spelled out.
+    expect(Object.values(TITLES)).toContain(mine?.title);
+    expect(mine?.said.length).toBeGreaterThan(0);
+  });
+
+  it("tells each seat about its own hand and nobody else's", () => {
+    const made = table([1_000, 1_000]);
+    made.deal();
+    made.act(made.toAct as string, "call");
+    made.act(made.toAct as string, "check");
+
+    const [one, two] = made.seats;
+    const first = made.view((one as { id: string }).id).you?.hand;
+    const second = made.view((two as { id: string }).id).you?.hand;
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+    // Somebody watching has no hand to be told about.
+    expect(made.view(null).you).toBeNull();
+  });
+});
+
+describe("the clock", () => {
+  it("is null while nobody is being waited on, and a deadline once somebody is", () => {
+    const made = table([1_000, 1_000]);
+    expect(made.turnEndsAt).toBeNull();
+    made.deal();
+    expect(made.turnEndsAt).toBeGreaterThan(Date.now());
+    // The same answer the view gives, because a felt counting down to a
+    // different moment from the table is a felt that folds hands early.
+    expect(made.view(made.toAct).turnEndsAt).toBe(made.turnEndsAt);
+  });
+});
+
 describe("leaving", () => {
   it("folds somebody who walks out mid-hand and keeps their chips in", () => {
     /*
@@ -308,6 +433,56 @@ describe("leaving", () => {
     made.leave(made.toAct as string);
     expect(made.pot).toBeGreaterThanOrEqual(potWas);
     expect(made.seats).toHaveLength(2);
+  });
+
+  it("leaves the money a departing seat had already bet in the pot", () => {
+    /*
+     * The seat goes; what it bet does not. Rebuilding the pot from the seats
+     * still at the table loses it — and the existing test above misses that,
+     * because the seat it walks out is the one to act, who preflop has put in
+     * nothing. This one walks out a blind.
+     */
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const potWas = made.pot;
+    const blind = made.seats.find((seat) => seat.paid > 0 && seat.id !== made.toAct);
+    made.leave((blind as { id: string }).id);
+
+    expect(made.pot).toBe(potWas);
+    expect(made.street).toBe("preflop");
+  });
+
+  it("neither mints nor loses a chip when somebody walks out mid-hand", () => {
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const before = chips(made);
+    const blind = made.seats.find((seat) => seat.paid > 0 && seat.id !== made.toAct);
+    made.leave((blind as { id: string }).id);
+
+    // What they took off the table, plus what is left on it, is what there was.
+    const took = made.owedOut.reduce((total, one) => total + one.chips, 0);
+    expect(chips(made) + took).toBe(before);
+  });
+
+  it("pays the dead money of somebody who left to whoever wins the hand", () => {
+    const made = table([1_000, 1_000, 1_000]);
+    made.deal();
+    const potWas = made.pot;
+    const blind = made.seats.find((seat) => seat.paid > 0 && seat.id !== made.toAct);
+    made.leave((blind as { id: string }).id);
+
+    // The other two fold it out, so the last one standing takes the lot —
+    // including the blind of somebody who is no longer at the table.
+    while (made.street === "preflop" && made.toAct !== null && made.seats.length > 1) {
+      const before = made.toAct;
+      made.act(before, "fold");
+      if (made.toAct === before) {
+        break;
+      }
+    }
+    expect(made.street).toBe("showdown");
+    const won = made.paid.reduce((total, one) => total + one.chips, 0);
+    expect(won).toBe(potWas);
   });
 
   it("ends the hand when everybody but one has gone", () => {

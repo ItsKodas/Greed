@@ -8,8 +8,29 @@
 export type { Card, Rank, Suit } from "./cards.js";
 export { Deck, freshDeck, rankValue, RANKS, shuffle, SUITS } from "./cards.js";
 export type { Category, Score } from "./hand.js";
-export { best, CATEGORIES, compare, describe, scoreFive } from "./hand.js";
+export {
+  best,
+  CATEGORIES,
+  compare,
+  describe,
+  meaningful,
+  scoreFive,
+  title,
+  TITLES,
+} from "./hand.js";
 export type { Contribution, Pot } from "./pot.js";
 export { pots, split } from "./pot.js";
-export type { Move, Payout, Seat, Street } from "./table.js";
-export { MIN_SEATS, Table } from "./table.js";
+export type { Move, OwnView, Payout, Seat, SeatView, Street, TableView } from "./table.js";
+export { FUN_STACK, MIN_SEATS, Table } from "./table.js";
+export type { Choice } from "./bot.js";
+export { decide, strength, thinkingTime } from "./bot.js";
+export { pokerAdapter } from "./adapter.js";
+export {
+  BIG_BLIND,
+  blindsFor,
+  BUY_IN,
+  POKER,
+  SMALL_BLIND,
+  stakeFor,
+  STAKES,
+} from "./listing.js";

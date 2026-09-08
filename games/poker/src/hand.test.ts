@@ -1,7 +1,16 @@
 import { describe as group, expect, it } from "vitest";
 import type { Card, Rank, Suit } from "./cards.js";
 import { freshDeck, rankValue } from "./cards.js";
-import { best, compare, describe, scoreFive } from "./hand.js";
+import {
+  best,
+  CATEGORIES,
+  compare,
+  describe,
+  meaningful,
+  scoreFive,
+  title,
+  TITLES,
+} from "./hand.js";
 
 /**
  * What a hand is worth.
@@ -228,3 +237,104 @@ group("a full ring", () => {
   });
 });
 
+/*
+ * What a hand is called when it is shown to somebody.
+ *
+ * A separate question from what it is worth. The scoring uses the short names
+ * a card room says out loud — trips, quads — and nobody learning the game has
+ * met them; these are the ones written on the wall beside the table.
+ */
+group("naming a hand", () => {
+  const of = (...cards: string[]) =>
+    best(
+      cards.map((text) => {
+        const suits = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" } as const;
+        return {
+          rank: text.slice(0, -1) as Card["rank"],
+          suit: suits[text.slice(-1) as keyof typeof suits],
+        };
+      }),
+    );
+
+  it("spells out the ones the code says in shorthand", () => {
+    expect(title(of("5s", "5h", "5d", "Kc", "9s"))).toBe("Three of a kind");
+    expect(title(of("Qs", "Qh", "Qd", "Qc", "7s"))).toBe("Four of a kind");
+    expect(title(of("Js", "Jh", "4d", "4c", "As"))).toBe("Two pair");
+    expect(title(of("10s", "10h", "Kd", "7c", "2s"))).toBe("One pair");
+  });
+
+  it("gives the top straight flush the name it has of its own", () => {
+    expect(title(of("As", "Ks", "Qs", "Js", "10s"))).toBe("Royal flush");
+    // And every other one is just a straight flush.
+    expect(title(of("9h", "8h", "7h", "6h", "5h"))).toBe("Straight flush");
+  });
+
+  it("has a name for every category, so none can come out undefined", () => {
+    for (const category of CATEGORIES) {
+      expect(TITLES[category], `no name for ${category}`).toBeTruthy();
+    }
+  });
+});
+
+/*
+ * Which cards the felt should point at.
+ *
+ * Not the same question as which five score the hand. A pair of nines is two
+ * cards; the king, ten and eight beside them settle ties and are not the pair,
+ * and pointing at all five tells somebody learning the game the wrong thing.
+ */
+group("the cards a hand is made of", () => {
+  const of = (...cards: string[]) =>
+    best(
+      cards.map((text) => {
+        const suits = { s: "spades", h: "hearts", d: "diamonds", c: "clubs" } as const;
+        return {
+          rank: text.slice(0, -1) as Card["rank"],
+          suit: suits[text.slice(-1) as keyof typeof suits],
+        };
+      }),
+    );
+  const said = (score: ReturnType<typeof best>) =>
+    meaningful(score)
+      .map((card) => `${card.rank}${card.suit[0]}`)
+      .sort()
+      .join(" ");
+
+  it("points at the pair and not at the kickers", () => {
+    // The example that prompted this: a pair of nines with K, 10, 8 alongside.
+    expect(said(of("9c", "8h", "Kh", "10c", "6s", "5c", "9s"))).toBe("9c 9s");
+  });
+
+  it("points at both pairs, and at neither kicker", () => {
+    expect(said(of("Js", "Jh", "4d", "4c", "As", "7h", "2d"))).toBe("4c 4d Jh Js");
+  });
+
+  it("points at all three of a set and all four of quads", () => {
+    expect(said(of("5s", "5h", "5d", "Kc", "9s", "2h", "3d"))).toBe("5d 5h 5s");
+    expect(said(of("Qs", "Qh", "Qd", "Qc", "7s", "2h", "3d"))).toBe("Qc Qd Qh Qs");
+  });
+
+  it("points at all five when all five are doing the work", () => {
+    /*
+     * A straight, a flush and a full house have no kickers — every card is
+     * load-bearing, so every card is the hand.
+     */
+    expect(meaningful(of("9c", "8d", "7s", "6h", "5c", "2d", "3h"))).toHaveLength(5);
+    expect(meaningful(of("Ad", "Jd", "9d", "6d", "3d", "2h", "4s"))).toHaveLength(5);
+    expect(meaningful(of("8s", "8h", "8d", "3c", "3s", "2h", "4d"))).toHaveLength(5);
+  });
+
+  it("points at one card when there is nothing but a high card", () => {
+    const one = meaningful(of("Ah", "Jc", "8d", "5s", "3h", "2c", "7d"));
+    expect(one).toHaveLength(1);
+    expect(one[0]?.rank).toBe("A");
+  });
+
+  it("never points at a card that is not in the hand it scored", () => {
+    const score = of("9c", "8h", "Kh", "10c", "6s", "5c", "9s");
+    const inHand = new Set(score.cards.map((card) => `${card.rank}${card.suit}`));
+    for (const card of meaningful(score)) {
+      expect(inHand.has(`${card.rank}${card.suit}`)).toBe(true);
+    }
+  });
+});

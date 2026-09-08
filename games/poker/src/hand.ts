@@ -28,6 +28,77 @@ export const CATEGORIES = [
 
 export type Category = (typeof CATEGORIES)[number];
 
+/**
+ * What a hand is called, when it is being shown to somebody.
+ *
+ * The list above is what a card room says out loud — trips, quads — and this
+ * is the same thing written the way it appears on the wall beside the table.
+ * Both exist because they are for different readers: the short ones are for
+ * the code, and nobody learning the game has met them.
+ */
+export const TITLES: Record<Category, string> = {
+  "high card": "High card",
+  pair: "One pair",
+  "two pair": "Two pair",
+  trips: "Three of a kind",
+  straight: "Straight",
+  flush: "Flush",
+  "full house": "Full house",
+  quads: "Four of a kind",
+  "straight flush": "Straight flush",
+};
+
+/**
+ * The cards that actually make the hand, without the ones riding along.
+ *
+ * Five cards score a hand but five cards are rarely what the hand *is*. A pair
+ * of nines is two cards; the king, ten and eight beside them are kickers —
+ * they settle ties and they are not the pair. Pointing at all five says "these
+ * five are your hand", which is true and is not the thing somebody learning
+ * needs to see; pointing at the two nines says what they have.
+ *
+ * A straight, a flush and a full house are the exceptions, and they are not
+ * exceptions really: all five cards are load-bearing in each, so all five are
+ * the hand.
+ */
+export function meaningful(score: Score): Card[] {
+  const ofRanks = (howMany: number): Card[] => {
+    const keep = new Set(score.ranks.slice(0, howMany));
+    return score.cards.filter((card) => keep.has(rankValue(card.rank)));
+  };
+
+  switch (score.category) {
+    case "straight flush":
+    case "flush":
+    case "straight":
+    case "full house":
+      return score.cards;
+    case "quads":
+    case "trips":
+    case "pair":
+      return ofRanks(1);
+    case "two pair":
+      return ofRanks(2);
+    default: {
+      /*
+       * High card: the one card that is playing. `ranks` here is every rank in
+       * order, so the first is the card doing the work and the rest are the
+       * kickers behind it.
+       */
+      const top = score.ranks[0];
+      const best = score.cards.find((card) => rankValue(card.rank) === top);
+      return best === undefined ? [] : [best];
+    }
+  }
+}
+
+/** The name of a hand, allowing for the one that has a name of its own. */
+export function title(score: Score): string {
+  return score.category === "straight flush" && score.ranks[0] === 14
+    ? "Royal flush"
+    : TITLES[score.category];
+}
+
 export interface Score {
   category: Category;
   /**

@@ -34,6 +34,16 @@ export interface Face {
  * table would give it, and the fifty is green because this house says so.
  */
 export const FACES: Record<number, Face> = {
+  /*
+   * The two small plates a poker table needs, which no other game here does:
+   * blinds are ten and twenty, and without a face for them every bet on the
+   * felt would come out as one anonymous odd chip. White and blue because
+   * nothing else in the house is either — the rest of this list is greens,
+   * roses, violets and golds, and a low chip has to be told apart at a glance
+   * from the stack it is sitting next to.
+   */
+  10: { body: "#cfd6e0", trim: "#39404d", spots: 8 },
+  20: { body: "#2a5f8f", trim: "#d5e6f5", spots: 8 },
   50: { body: "#2f6b45", trim: "#d7f0e0", spots: 8 },
   100: { body: "#2b3038", trim: "#eceff3", spots: 8 },
   250: { body: "#8e3358", trim: "#f6d7e4", spots: 6 },

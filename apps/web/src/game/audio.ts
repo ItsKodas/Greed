@@ -35,7 +35,18 @@ export type Cue =
   | "jackpot"
   | "bonus"
   | "bonusAppear"
-  | "coin";
+  | "coin"
+  /*
+   * A table talking. One short tone per move, quiet enough to sit under a
+   * ten-handed table where somebody acts every second or two — these fire far
+   * more often than anything else in the building, so they are the ones that
+   * have to be almost not there.
+   */
+  | "sayCheck"
+  | "sayFold"
+  | "sayCall"
+  | "sayRaise"
+  | "sayAllIn";
 
 interface Manifest {
   dice?: string[];
@@ -668,6 +679,39 @@ export function play(
     case "hotDice":
       [523, 659, 784, 1046].forEach((frequency, step) => {
         tone({ frequency, duration: 0.16, type: "triangle", gain: 0.13, delay: step * 0.07 });
+      });
+      break;
+    case "sayCheck":
+      /*
+       * Two knuckles on the table, which is what a check actually is. Noise
+       * rather than a tone, because a knock has no pitch.
+       */
+      noise(0.03, 900, 0.05);
+      window.setTimeout(() => noise(0.03, 900, 0.045), 95);
+      break;
+    case "sayFold":
+      // Cards pushed away: short, soft, and downward.
+      tone({ frequency: 300, to: 190, duration: 0.12, type: "sine", gain: 0.05 });
+      break;
+    case "sayCall":
+      // Matching, so: one note, flat, no opinion about it.
+      tone({ frequency: 520, duration: 0.09, type: "triangle", gain: 0.05 });
+      break;
+    case "sayRaise":
+      // Putting it up, so the tone goes up with it.
+      tone({ frequency: 520, duration: 0.09, type: "triangle", gain: 0.05 });
+      tone({ frequency: 700, duration: 0.11, type: "triangle", gain: 0.05, delay: 0.07 });
+      break;
+    case "sayAllIn":
+      // Everything, and the only one of these allowed to be a moment.
+      [520, 700, 940].forEach((frequency, step) => {
+        tone({
+          frequency,
+          duration: 0.16,
+          type: "triangle",
+          gain: 0.06,
+          delay: step * 0.06,
+        });
       });
       break;
     case "yourTurn":

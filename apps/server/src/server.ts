@@ -14,6 +14,7 @@ import {
   maxStake as blackjackMaxStake,
 } from "@backroom/game-blackjack";
 import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
+import { POKER, pokerAdapter } from "@backroom/game-poker";
 import {
   countScatters,
   drawGrid,
@@ -86,7 +87,7 @@ import { Avatars, Cards } from "./og.js";
  */
 const CATALOGUE = COMING.reduce(
   (catalogue, game) => catalogue.add(game),
-  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS),
+  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER),
 );
 
 
@@ -799,6 +800,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         },
       }) as GameAdapter<PlayTable>,
     ],
+    [
+      POKER.id,
+      pokerAdapter({
+        /*
+         * The shuffle, from the same source the reels come from. A table hands
+         * every player cards it will later hand somebody else, and a shuffle
+         * anybody can predict is a game everybody else is losing on purpose.
+         */
+        random: spinRandom,
+        ...(turnMs === undefined ? {} : { turnMs }),
+      }) as GameAdapter<PlayTable>,
+    ],
   ]);
 
   /**
@@ -1281,6 +1294,21 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         .then(() => payTaunts(code, seated, won))
         .catch((error) => console.error("settling failed", error));
     }
+    /*
+     * And separately, anything owed to somebody who has already left.
+     *
+     * Deliberately outside the flag above. That guards a state — a hand stays
+     * settled for as long as its result is up, and without the flag it would
+     * pay every time anybody was sent anything. What this drains is a queue,
+     * so the guard against paying twice is that the game empties it before its
+     * first await, and the guard against never paying is that this is asked
+     * every time rather than once.
+     */
+    if (seated.game.payOut !== undefined) {
+      void seated.game
+        .payOut(seated.table, deps)
+        .catch((error) => console.error("paying out failed", error));
+    }
   }
 
 
@@ -1642,6 +1670,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           ruleset: parsed.data.ruleset,
           forFun: parsed.data.forFun,
           maxSeats: parsed.data.maxSeats,
+          buyIn: parsed.data.buyIn,
         });
         rooms.set(code, { game, table, listed: parsed.data.listed ?? true });
         table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
@@ -1758,9 +1787,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         reapWhenEmpty(seat.code);
         return;
       }
-      // Deliberate, so the seat goes now rather than being held for a
-      // reconnection that is not coming.
-      if (room.table.status === "lobby") {
+      /*
+       * Deliberate, so the seat goes now rather than being held for a
+       * reconnection that is not coming.
+       *
+       * Mid-hand it usually cannot: a blackjack stake is on the felt and the
+       * hand has to play out before anybody can be paid, so the seat is held
+       * and the player is treated as dropped. A game that says it can be left
+       * mid-hand has somewhere for the chips to go, and holding the seat there
+       * would strand them — nothing schedules the grace reaper on this path,
+       * because nothing here is waiting for a reconnection.
+       */
+      if (room.table.status === "lobby" || room.table.leavesMidHand === true) {
         room.table.removeSeat(seat.seatId);
       } else {
         room.table.disconnect(seat.seatId);

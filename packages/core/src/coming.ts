@@ -17,33 +17,14 @@ import type { GameListing } from "./catalogue.js";
  * before they can take a chip: a bank players fill, a cap derived from its own
  * worst outcome, and a cryptographic source for whatever it turns over.
  * Roulette and Baccarat and Craps are house games, so none of those can be
- * built without that argument being made again. Poker and Liar's Dice are not
- * — the stake goes into a pot and one of the players takes it, so the chips
- * never leave the table and there is nothing for a bank to do.
+ * built without that argument being made again. Liar's Dice is not — the stake
+ * goes into a pot and one of the players takes it, so the chips never leave
+ * the table and there is nothing for a bank to do.
+ *
+ * Poker was on this list and has been built; its listing lives in its own
+ * package now, beside the rules, the way the other three do.
  */
 export const COMING: readonly GameListing[] = [
-  {
-    id: "poker",
-    name: "Poker",
-    blurb: "Up to ten to a table, and the pot is everybody's chips.",
-    shape: "table",
-    /*
-     * Two is a real game of poker — heads up — and the whole building's
-     * ceiling is ten. Twenty hole cards, five on the board and three burnt is
-     * twenty-eight of fifty-two, so a full ring never runs the deck out.
-     */
-    minSeats: 2,
-    maxSeats: 10,
-    /*
-     * The one on this list that needs no bank. Players bet into a pot and one
-     * of them takes it, so the chips never leave the table — the same footing
-     * Greed already stands on, and the reason this is the cheapest of the six
-     * to make honest.
-     */
-    open: false,
-    mark: { text: "POKER", accentAt: 0 },
-    theme: { wall: "#141a17", felt: "#1c3a2c", accent: "#3f9d6a", accentHi: "#7fe0a8" },
-  },
   {
     id: "liars-dice",
     name: "Liar's Dice",

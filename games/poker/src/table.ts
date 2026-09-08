@@ -1,7 +1,14 @@
-import { TableError } from "@backroom/core";
+import type {
+  BotSkill,
+  PlayTable,
+  Seat as TableSeat,
+  SeatIdentity,
+  TableStatus,
+} from "@backroom/core";
+import { Seating, TableError } from "@backroom/core";
 import type { Card } from "./cards.js";
 import { Deck } from "./cards.js";
-import { best, compare, describe } from "./hand.js";
+import { best, compare, describe, meaningful, title } from "./hand.js";
 import type { Score } from "./hand.js";
 import type { Contribution } from "./pot.js";
 import { pots, split } from "./pot.js";
@@ -24,10 +31,7 @@ export type Street = "waiting" | "preflop" | "flop" | "turn" | "river" | "showdo
 
 export type Move = "fold" | "check" | "call" | "raise" | "allIn";
 
-export interface Seat {
-  id: string;
-  userId: string | null;
-  name: string;
+export interface Seat extends TableSeat {
   /** Chips in front of them at this table. */
   stack: number;
   /** Their two cards, once they have been dealt any. */
@@ -42,8 +46,27 @@ export interface Seat {
   acted: boolean;
   /** Sat down mid-hand, and dealt in from the next one. */
   waiting: boolean;
+  /**
+   * The last thing they did, and when they did it.
+   *
+   * Kept per seat rather than read off `lastEvent`, which is one line for the
+   * whole table: a bubble belongs over the person who said it, and at a table
+   * of ten the last thing to happen is rarely the last thing *you* did. The
+   * moment is carried with it so the felt can let it fade on its own clock
+   * rather than needing to be told when to.
+   */
+  spoke: { move: Move; said: string; at: number } | null;
+
   /** What they turned over, once there has been a showdown. */
   showed: Score | null;
+  /**
+   * Whether their cards are face up, which is not the same as having a hand.
+   *
+   * A hand that ends before the flop has two cards and no name — there is
+   * nothing to read from two. Somebody can still turn them over, so what is
+   * face up and what has been read are two facts and this is the first one.
+   */
+  revealed: boolean;
 }
 
 /** What a hand paid, once it is over. */
@@ -58,18 +81,196 @@ export interface Payout {
 /** The smallest table that can play a hand: heads up. */
 export const MIN_SEATS = 2;
 
-export class Table {
-  readonly seats: Seat[] = [];
+/**
+ * What a seat sits down with at a table playing for nothing.
+ *
+ * The same as anywhere else — a for-fun table costs what the host said, it is
+ * simply made up on the spot rather than taken from an account, and gone when
+ * the table closes. That is what makes it safe to put bots at: a hand won here
+ * moves a number that exists only at this table.
+ *
+ * Kept as a name because several places ask "what does it cost to sit down",
+ * and at a for-fun table the honest answer is the table's own entry.
+ */
+export const FUN_STACK = 2_000;
+
+/** One seat, as somebody at the table is allowed to see it. */
+export interface SeatView {
+  id: string;
+  name: string;
+  connected: boolean;
+  waiting: boolean;
+  avatar: string | null;
+  accentColor: number | null;
+  stack: number;
+  committed: number;
+  folded: boolean;
+  allIn: boolean;
+  /** Marked on the felt, so nobody wonders who they are playing. */
+  isBot: boolean;
+  /** The last thing they did, for the felt to say over their head. */
+  spoke: { move: Move; said: string; at: number } | null;
+  /**
+   * Their two cards — or two nulls, which is a hand that exists and is not
+   * yours to see. Null rather than absent so the felt can lay a face-down card
+   * where a face-up one would go without measuring anything.
+   */
+  hole: Array<Card | null>;
+  /** How their hand read, once they have turned it over. */
+  showed: string | null;
+}
+
+/**
+ * What the seat this view was built for may do right now.
+ *
+ * Sent rather than worked out in the browser, and the difference matters. The
+ * smallest legal raise depends on `raiseSize` — the size of the last raise
+ * made on this street — which is not otherwise anywhere in the view. A client
+ * left to guess would have to guess it, and a slider whose minimum is a guess
+ * spends half its range on amounts the table refuses.
+ *
+ * It also keeps the rule in one place. The felt may show what a player can do;
+ * what a player may actually do is the table's answer, and this is the table
+ * answering rather than the browser deciding.
+ */
+export interface OwnView {
+  /** What it costs to stay in. Zero when checking is free. */
+  toCall: number;
+  /** The smallest and largest raise, each as a total to raise *to*. */
+  minRaiseTo: number;
+  maxRaiseTo: number;
+  /** Whether there is any raise to make: false once calling is all they have. */
+  canRaise: boolean;
+  /**
+   * What you are holding, once there is enough on the table to hold anything.
+   *
+   * Read here rather than in the browser, though the browser has every card it
+   * would need. One reading of a hand means the felt cannot tell you one thing
+   * during the hand and the table announce another at the showdown — and of
+   * the two, the one that pays out is this one.
+   */
+  hand: {
+    title: string;
+    said: string;
+    /**
+     * The cards the hand is actually made of, for the felt to point at.
+     *
+     * Not always five. A pair of nines is two cards and the three beside them
+     * are kickers, which settle ties and are not the pair — pointing at all
+     * five is true and is not what somebody learning the game needs to see.
+     */
+    using: Card[];
+  } | null;
+}
+
+/** The table as one seat sees it. What crosses the wire, and nothing more. */
+export interface TableView {
+  /** Null for somebody watching, and for a seat with no decision to make. */
+  you: OwnView | null;
+  /** Whether the chips here are real. Bots sit only where they are not. */
+  forFun: boolean;
+  /** What it costs to sit down, which the host chose when they opened it. */
+  entry: number;
+  /**
+   * Whether you have a hand you could turn over and have not.
+   *
+   * Answered per seat because it is a question about yours, and answered here
+   * rather than worked out on the felt because "still holding cards nobody
+   * made you show" is a rule about a hand rather than a fact about a picture.
+   */
+  canShow: boolean;
+  /** Whether you have chips you are free to take off the table right now. */
+  canTakeOff: boolean;
+  /** Whose table it is, so the controls that are theirs are offered to them. */
+  hostId: string | null;
+  code: string;
+  street: Street;
+  board: Card[];
+  pot: number;
+  toAct: string | null;
+  /** When their turn runs out, so the felt can show it running out. */
+  turnEndsAt: number | null;
+  button: string | null;
+  /** Who put the blinds in this hand, for the felt to mark. */
+  smallBlindId: string | null;
+  bigBlindId: string | null;
+  smallBlind: number;
+  bigBlind: number;
+  paid: Payout[];
+  lastEvent: string | null;
+  watching: number;
+  seats: SeatView[];
+}
+
+export class Table implements PlayTable {
   street: Street = "waiting";
   board: Card[] = [];
+
+  private acting: string | null = null;
+  /**
+   * When the seat now to act was first asked.
+   *
+   * Stamped by the setter below rather than by every place that hands the turn
+   * on, because there are several and one of them forgetting would leave a
+   * player with somebody else's clock — which reads as a turn that expires the
+   * instant it arrives.
+   */
+  actingSince: number | null = null;
+
   /** Whose turn it is, or null when nobody is being waited on. */
-  toAct: string | null = null;
+  get toAct(): string | null {
+    return this.acting;
+  }
+
+  set toAct(id: string | null) {
+    if (id !== this.acting) {
+      this.actingSince = id === null ? null : Date.now();
+    }
+    this.acting = id;
+  }
   /** Which seat has the button, by id. */
   button: string | null = null;
+  /**
+   * Who posted the blinds this hand.
+   *
+   * Kept rather than worked out from the button, because it cannot be worked
+   * out from the button once the hand is going: who is small and who is big
+   * depends on how many were dealt in, and heads up the button is the small
+   * blind. Somebody leaving changes that count without changing who actually
+   * put the money in, so the answer is recorded when it is true.
+   */
+  smallBlindId: string | null = null;
+  bigBlindId: string | null = null;
   /** What the last hand paid out, for the felt to show. */
   paid: Payout[] = [];
   lastEvent: string | null = null;
 
+  /**
+   * Chips owed back to people who have stood up, and not yet handed over.
+   *
+   * A queue rather than a payment, because the table cannot pay anybody — it
+   * has never heard of an account. Whoever is holding the economy drains this
+   * once and gives the chips back, which is the only moment poker touches it
+   * apart from sitting down.
+   */
+  readonly owedOut: Array<{ userId: string; name: string; chips: number }> = [];
+
+  /**
+   * What people who have left already put in this hand.
+   *
+   * Their seat goes with them, and their money does not: chips stop being
+   * yours the moment you bet them. Without this the pot is rebuilt from the
+   * seats still at the table, so somebody standing up takes what they had bet
+   * out of the middle — money the hand had already been played for, gone from
+   * a pot somebody else is about to win.
+   *
+   * Held as contributions rather than a single total because side pots are
+   * built from levels: dead money at one level is claimable by everybody at or
+   * above it, and a scalar cannot say which.
+   */
+  private ghosts: Contribution[] = [];
+
+  private readonly seating: Seating;
   private deck: Deck | null = null;
   /** The largest raise made on this street, which sets the minimum for the next. */
   private raiseSize = 0;
@@ -79,61 +280,397 @@ export class Table {
     private readonly random: () => number,
     readonly smallBlind: number,
     readonly bigBlind: number,
-    readonly maxSeats: number,
-  ) {}
+    maxSeats: number,
+    /**
+     * How long a seat gets to act.
+     *
+     * On the table rather than only in the adapter because the felt has to
+     * draw it: a clock the player cannot see is a clock that folds their hand
+     * without warning. The adapter reads its deadline from here too, so there
+     * is one answer to how long a turn is rather than two that can disagree.
+     */
+    readonly turnMs = 30_000,
+    /**
+     * Whether this table plays for nothing.
+     *
+     * It changes three things and they are all the same thing: nobody needs an
+     * account to sit down, bots may be dealt in, and no chip that moves here
+     * ever reaches the economy. Play money lives at the table and dies with it.
+     */
+    readonly forFun = false,
+    /**
+     * What it costs to sit down here.
+     *
+     * The host's, chosen when the table was opened, and not called `buyIn`
+     * because that is already the name of the thing that puts chips in front
+     * of a seat. This is the price of doing it.
+     */
+    readonly entry = FUN_STACK,
+  ) {
+    this.seating = new Seating(maxSeats);
+  }
+
+  /** When the seat now to act runs out of time, or null if nobody is on one. */
+  get turnEndsAt(): number | null {
+    return this.actingSince === null ? null : this.actingSince + this.turnMs;
+  }
 
   // ------------------------------------------------------------- the table
 
-  join(id: string, name: string, userId: string | null, stack: number): Seat {
-    if (this.seats.length >= this.maxSeats) {
-      throw new TableError("That table is full.");
+  get seats(): Seat[] {
+    return this.seating.seats as Seat[];
+  }
+
+  get maxSeats(): number {
+    return this.seating.limit;
+  }
+
+  get hostId(): string | null {
+    return this.seating.hostId;
+  }
+
+  get isEmpty(): boolean {
+    return this.seating.isEmpty;
+  }
+
+  get watching(): number {
+    return this.seating.watching;
+  }
+
+  /**
+   * A poker table is only ever playing or waiting to.
+   *
+   * There is no lobby: a hand starts when two people are sitting down and
+   * stops when they are not, so there is nothing for a host to start.
+   */
+  get status(): TableStatus {
+    return this.street === "waiting" ? "lobby" : "playing";
+  }
+
+  /*
+   * Yes — `leave` below is written for exactly this. It folds them, leaves what
+   * they bet in the pot, moves the turn on if it was theirs and finishes the
+   * hand if that was the last decision in it. There is nothing about a live
+   * hand that a poker table needs somebody to stay for.
+   */
+  readonly leavesMidHand = true;
+
+  watch(socketId: string): void {
+    this.seating.watch(socketId);
+  }
+
+  unwatch(socketId: string): void {
+    this.seating.unwatch(socketId);
+  }
+
+  disconnect(seatId: string): void {
+    this.seating.disconnect(seatId);
+    /*
+     * A hand does not wait for somebody who has gone. Their chips stay in —
+     * dropping out is folding, not taking your money back off the table.
+     */
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat !== undefined && this.street !== "waiting" && !seat.folded) {
+      seat.folded = true;
+      if (this.toAct === seatId) {
+        this.moveOn(seatId);
+      }
+      this.settleIfDone();
     }
-    const seat: Seat = {
-      id,
-      userId,
-      name,
-      stack,
-      hole: [],
-      committed: 0,
-      paid: 0,
-      folded: false,
-      allIn: false,
-      acted: false,
-      /*
-       * Dealt in from the next hand rather than this one. Sitting down in the
-       * middle of a hand and being handed cards would be playing a hand whose
-       * betting had already happened without you.
-       */
-      waiting: this.street !== "waiting",
-      showed: null,
-    };
-    this.seats.push(seat);
-    this.lastEvent = `${name} sat down`;
+  }
+
+  reconnect(seatId: string): Seat {
+    return this.seating.reconnect(seatId) as Seat;
+  }
+
+  removeSeat(seatId: string): void {
+    this.leave(seatId);
+  }
+
+  join(id: string, name: string, identity: SeatIdentity | null): Seat {
+    /*
+     * Playing for chips, a seat has to be somebody: a pot is other people's
+     * money and there is an account at the end of it. Playing for nothing,
+     * anybody can sit down, because there is no account at either end.
+     */
+    const seat = this.seating.join(id, name, this.status, identity, !this.forFun) as Seat;
+    this.blank(seat);
+    this.lastEvent = `${seat.name} sat down`;
     return seat;
   }
 
-  leave(id: string): void {
-    const at = this.seats.findIndex((seat) => seat.id === id);
-    if (at === -1) {
+  /**
+   * Sits a bot down with play money in front of it.
+   *
+   * Only ever at a table playing for nothing. Chips are only won from real
+   * people: a bot has no account to take them from and none to pay them to, so
+   * a hand won against one at a table paying real chips would be chips out of
+   * thin air. The same reason the other two games refuse one.
+   */
+  addBot(id: string, name: string, skill: BotSkill): Seat {
+    if (!this.forFun) {
+      throw new TableError("Bots only sit at tables playing for fun.");
+    }
+    const seat = this.seating.addBot(id, name, skill) as Seat;
+    this.blank(seat);
+    // Straight to a stack, and the same one everybody else buys: nobody is
+    // going to press sit-down for it.
+    seat.stack = this.entry;
+    this.lastEvent = `${seat.name} sat down`;
+    return seat;
+  }
+
+  /** A seat with nothing of a hand on it yet. */
+  private blank(seat: Seat): void {
+    seat.stack = 0;
+    seat.hole = [];
+    seat.committed = 0;
+    seat.paid = 0;
+    seat.folded = false;
+    seat.allIn = false;
+    seat.acted = false;
+    seat.showed = null;
+    seat.revealed = false;
+    seat.spoke = null;
+  }
+
+  /**
+   * Puts chips on the table in front of a seat.
+   *
+   * The table never asks anybody for them: whoever calls this has already
+   * taken them off an account, and this is only the other half of that move.
+   * Keeping it this way round is what stops the rules ever touching the
+   * economy — a hand of poker is arithmetic over stacks, and where the stacks
+   * came from is somebody else's problem.
+   */
+  buyIn(seatId: string, chips: number): void {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined) {
+      throw new TableError("You are not at this table.");
+    }
+    if (chips <= 0) {
       return;
     }
-    const [gone] = this.seats.splice(at, 1);
+    seat.stack += chips;
+    this.lastEvent = `${seat.name} sat down with ${chips.toLocaleString("en-US")}`;
+  }
+
+  /**
+   * Takes a seat's chips off the table, and says how many there were.
+   *
+   * Refuses nothing, deliberately: `leave` calls it in the middle of a hand,
+   * where taking your stack is exactly right — what you have already bet stays
+   * in the pot and the rest comes with you. The rule about when somebody may
+   * choose to do this is in `takeOffTable` below, which is the door a player
+   * goes through; this is the mechanism both use.
+   */
+  cashOut(seatId: string): number {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined) {
+      return 0;
+    }
+    const chips = seat.stack;
+    seat.stack = 0;
+    return chips;
+  }
+
+  /**
+   * Cashing out on purpose, without leaving the table.
+   *
+   * Refused while you hold cards. Chips on the felt are not yours to take back
+   * — that is the whole of what a bet is — and a player who could lift their
+   * stack mid-hand could sit down, see a flop, and take the money back off the
+   * table when it missed.
+   *
+   * Between hands it is simply yours. The seat stays, empty, and buying in
+   * again is the same press it always was.
+   */
+  takeOffTable(seatId: string): number {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined) {
+      throw new TableError("You are not at this table.");
+    }
+    if (!this.canTakeOff(seatId)) {
+      throw new TableError("You cannot take chips off the table mid-hand.");
+    }
+    const chips = this.cashOut(seatId);
+    if (chips > 0 && seat.userId !== null && !this.forFun) {
+      this.owedOut.push({ userId: seat.userId, name: seat.name, chips });
+    }
+    if (chips > 0) {
+      this.lastEvent = `${seat.name} took ${chips.toLocaleString("en-US")} off the table`;
+    }
+    return chips;
+  }
+
+  /** Whether this seat has chips it is free to take back right now. */
+  canTakeOff(seatId: string): boolean {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined || seat.stack <= 0) {
+      return false;
+    }
+    // In a hand means holding cards you have not thrown away.
+    return this.street === "waiting" || seat.folded || seat.hole.length === 0;
+  }
+
+  leave(id: string): void {
+    const gone = this.seating.find(id) as Seat | undefined;
     if (gone === undefined) {
       return;
     }
-    this.lastEvent = `${gone.name} left`;
+    const wasIn = this.street !== "waiting" && !gone.folded && gone.hole.length > 0;
     /*
-     * Their chips stay in the pot. Standing up mid-hand is folding, not taking
-     * your money back off the table — otherwise the way to never lose a hand
-     * would be to close the tab whenever it was going badly.
+     * Standing up mid-hand is folding, not taking your money back off the
+     * table — otherwise the way to never lose a hand would be to close the tab
+     * whenever it was going badly.
+     *
+     * The hand moves on first, while they are still sitting there. It is the
+     * same order `disconnect` uses and it matters for the same reason: `award`
+     * builds the pot out of the seats at the table, so a seat taken away
+     * before the hand finished would take what it had bet with it.
      */
-    if (this.street !== "waiting" && !gone.folded) {
+    if (wasIn) {
       gone.folded = true;
       if (this.toAct === id) {
         this.moveOn(id);
       }
       this.settleIfDone();
     }
+    /*
+     * Whatever they bet in a hand that is still going stays in the middle
+     * after their seat has gone. Nothing is left to record when the hand ended
+     * just above: `award` empties the middle into the winner's stack and zeroes
+     * every `paid` on the way, so this reads as nothing owed to nobody.
+     */
+    if (gone.paid > 0) {
+      this.ghosts.push({ seatId: gone.id, paid: gone.paid, contesting: false });
+    }
+    // What is still in front of them, though, comes off the table with them.
+    const left = this.cashOut(id);
+    /*
+     * Guarded on the table rather than only on the seat. Somebody signed in
+     * may perfectly well sit at a table playing for nothing, and paying their
+     * play-money stack into their account would be the one thing this whole
+     * building is arranged to prevent.
+     */
+    if (left > 0 && gone.userId !== null && !this.forFun) {
+      this.owedOut.push({ userId: gone.userId, name: gone.name, chips: left });
+    }
+    this.seating.remove(id);
+    this.lastEvent = `${gone.name} left`;
+    /*
+     * Asked again, because the hand may only now be down to one player: the
+     * seat that just went could have been the last one anybody was waiting on.
+     */
+    if (!wasIn) {
+      this.settleIfDone();
+    }
+  }
+
+  /**
+   * Turns a hand face up that nobody could make you turn up.
+   *
+   * A hand that was not called does not have to be shown — that is a rule
+   * about privacy, and the felt keeps it. But a player may want to anyway: to
+   * prove a bluff, or because the hand was worth seeing. It is theirs to
+   * choose, so it is a move rather than something the table decides.
+   *
+   * Only while the hand is being read. Before that it would be showing your
+   * cards to people still deciding what to do about them, which is not a
+   * flourish — it is handing them the hand.
+   */
+  show(seatId: string): void {
+    if (this.street !== "showdown") {
+      throw new TableError("There is nothing to show yet.");
+    }
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined || seat.hole.length < 2) {
+      throw new TableError("You have no cards to show.");
+    }
+    if (seat.revealed || seat.showed !== null) {
+      return;
+    }
+    /*
+     * Face up either way; named only when there is a hand to name. A hand that
+     * ended before the flop is two cards, and two cards do not make one — the
+     * cards are still theirs to turn over, and the felt simply has nothing to
+     * call them.
+     */
+    seat.revealed = true;
+    const cards = [...seat.hole, ...this.board];
+    if (cards.length >= 5) {
+      seat.showed = best(cards);
+      this.lastEvent = `${seat.name} showed ${describe(seat.showed)}`;
+      return;
+    }
+    this.lastEvent = `${seat.name} showed their hand`;
+  }
+
+  /** Whether this seat has a hand it could turn over and has not. */
+  canShow(seatId: string): boolean {
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    return (
+      this.street === "showdown" &&
+      seat !== undefined &&
+      seat.hole.length >= 2 &&
+      !seat.revealed &&
+      seat.showed === null
+    );
+  }
+
+  /** The table as one seat may see it: everybody else's cards stay face down. */
+  view(forSeatId: string | null): TableView {
+    const mine = forSeatId === null ? undefined : (this.seating.find(forSeatId) as Seat | undefined);
+    return {
+      you: mine === undefined ? null : this.ownView(mine),
+      forFun: this.forFun,
+      entry: this.entry,
+      canShow: forSeatId !== null && this.canShow(forSeatId),
+      canTakeOff: forSeatId !== null && this.canTakeOff(forSeatId),
+      hostId: this.hostId,
+      code: this.code,
+      street: this.street,
+      board: this.board,
+      pot: this.pot,
+      toAct: this.toAct,
+      turnEndsAt: this.turnEndsAt,
+      button: this.button,
+      smallBlindId: this.smallBlindId,
+      bigBlindId: this.bigBlindId,
+      smallBlind: this.smallBlind,
+      bigBlind: this.bigBlind,
+      paid: this.paid,
+      lastEvent: this.lastEvent,
+      watching: this.seating.watching,
+      seats: this.seats.map((seat) => ({
+        id: seat.id,
+        name: seat.name,
+        connected: seat.connected,
+        waiting: seat.waiting,
+        avatar: seat.avatar,
+        accentColor: seat.accentColor,
+        stack: seat.stack,
+        committed: seat.committed,
+        folded: seat.folded,
+        allIn: seat.allIn,
+        isBot: seat.isBot,
+        spoke: seat.spoke,
+        /*
+         * The whole reason a view is per-seat. Your own cards, and anybody
+         * else's only once they have been turned over at a showdown — a hand
+         * that reached another player's browser face down would be a hand they
+         * could read out of the network tab.
+         */
+        hole:
+          seat.id === forSeatId || seat.showed !== null || seat.revealed
+            ? seat.hole
+            : seat.hole.map(() => null),
+        showed:
+          seat.showed === null
+            ? null
+            : `${title(seat.showed)}, ${describe(seat.showed)}`,
+      })),
+    };
   }
 
   /** Everybody who could be dealt into a hand right now. */
@@ -186,11 +723,9 @@ export class Table {
       seat.allIn = false;
       seat.acted = false;
       seat.showed = null;
-      // Anybody who sat out the last hand is dealt into this one.
-      if (seat.stack > 0) {
-        seat.waiting = false;
-      }
     }
+    // Anybody who sat out the last hand is dealt into this one.
+    this.seating.dealInWaiting();
 
     this.moveButton();
     const playing = this.ready;
@@ -243,6 +778,8 @@ export class Table {
   private postBlinds(playing: Seat[]): void {
     const small = this.smallBlindSeat(playing);
     const big = this.bigBlindSeat(playing);
+    this.smallBlindId = small?.id ?? null;
+    this.bigBlindId = big?.id ?? null;
     if (small !== undefined) {
       this.put(small, Math.min(this.smallBlind, small.stack));
     }
@@ -292,6 +829,45 @@ export class Table {
     return this.highest + Math.max(this.raiseSize, this.bigBlind) - seat.committed;
   }
 
+  /**
+   * The same two rules, as totals rather than deltas, for the felt to draw.
+   *
+   * Totals because that is what a raise is sent as, and a client converting
+   * between the two is a client with its own copy of the arithmetic.
+   */
+  private ownView(seat: Seat): OwnView {
+    const most = seat.committed + seat.stack;
+    const least = Math.min(this.minRaise(seat) + seat.committed, most);
+    return {
+      toCall: this.owed(seat),
+      minRaiseTo: least,
+      maxRaiseTo: most,
+      /*
+       * Somebody who cannot cover the smallest legal raise has no raise to
+       * make — only a call, or all their chips, which is what the all-in
+       * button is for. Offering a slider with one stop on it says otherwise.
+       */
+      canRaise: most > this.highest && seat.stack > this.owed(seat),
+      hand: this.reading(seat),
+    };
+  }
+
+  /**
+   * The best five cards this seat can make right now, named.
+   *
+   * Null before the flop, because there is no hand yet — five cards are the
+   * smallest thing that can be read, and calling two cards a hand would be the
+   * felt inventing one.
+   */
+  private reading(seat: Seat): OwnView["hand"] {
+    const cards = [...seat.hole, ...this.board];
+    if (seat.hole.length < 2 || cards.length < 5) {
+      return null;
+    }
+    const score = best(cards);
+    return { title: title(score), said: describe(score), using: meaningful(score) };
+  }
+
   // ------------------------------------------------------------- the moves
 
   act(seatId: string, move: Move, amount = 0): void {
@@ -307,12 +883,14 @@ export class Table {
       case "fold":
         seat.folded = true;
         this.lastEvent = `${seat.name} folded`;
+        seat.spoke = { move, said: "Fold", at: Date.now() };
         break;
       case "check":
         if (this.owed(seat) > 0) {
           throw new TableError("You cannot check for free.");
         }
         this.lastEvent = `${seat.name} checked`;
+        seat.spoke = { move, said: "Check", at: Date.now() };
         break;
       case "call": {
         const owed = this.owed(seat);
@@ -321,6 +899,7 @@ export class Table {
         }
         this.put(seat, owed);
         this.lastEvent = `${seat.name} called ${owed.toLocaleString("en-US")}`;
+        seat.spoke = { move, said: `Call ${owed.toLocaleString("en-US")}`, at: Date.now() };
         break;
       }
       case "allIn": {
@@ -330,9 +909,11 @@ export class Table {
         }
         this.raiseBy(seat, all);
         this.lastEvent = `${seat.name} is all in`;
+        seat.spoke = { move, said: "All in", at: Date.now() };
         break;
       }
       case "raise": {
+        const was = this.highest;
         const more = Math.floor(amount) - seat.committed;
         if (more <= this.owed(seat)) {
           throw new TableError("A raise has to be more than a call.");
@@ -347,6 +928,12 @@ export class Table {
         }
         this.raiseBy(seat, more);
         this.lastEvent = `${seat.name} raised to ${seat.committed.toLocaleString("en-US")}`;
+        seat.spoke = {
+          move,
+          /* A first bet is a bet; putting it up over somebody is a raise. */
+          said: `${was === 0 ? "Bet" : "Raise"} ${seat.committed.toLocaleString("en-US")}`,
+          at: Date.now(),
+        };
         break;
       }
     }
@@ -473,11 +1060,16 @@ export class Table {
   /** Works out who won what, moves the chips, and ends the hand. */
   private award(): void {
     const contested = this.live;
-    const contributions: Contribution[] = this.inHand.map((seat) => ({
-      seatId: seat.id,
-      paid: seat.paid,
-      contesting: !seat.folded,
-    }));
+    const contributions: Contribution[] = [
+      ...this.inHand.map((seat) => ({
+        seatId: seat.id,
+        paid: seat.paid,
+        contesting: !seat.folded,
+      })),
+      // Money from seats that are no longer here. Nobody is contesting it, so
+      // it is claimable by whoever is still in at that level, same as a fold.
+      ...this.ghosts,
+    ];
 
     /*
      * A showdown only happens if more than one player is still in it. When
@@ -503,15 +1095,29 @@ export class Table {
       }
       let winners = runners;
       if (shown) {
-        winners = runners.reduce<string[]>((best_, id) => {
-          if (best_.length === 0) {
-            return [id];
+        /*
+         * A plain sweep for the best hand, keeping ties. Written as a loop
+         * rather than a reduce because the accumulator is a list that grows on
+         * a tie, and rebuilding it each time is a copy per player for no
+         * reason — the shape of a split pot is exactly the case that makes it
+         * grow.
+         */
+        winners = [];
+        for (const id of runners) {
+          if (winners.length === 0) {
+            winners.push(id);
+            continue;
           }
-          const against = scores.get(best_[0] as string) as Score;
-          const mine = scores.get(id) as Score;
-          const how = compare(mine, against);
-          return how > 0 ? [id] : how === 0 ? [...best_, id] : best_;
-        }, []);
+          const how = compare(
+            scores.get(id) as Score,
+            scores.get(winners[0] as string) as Score,
+          );
+          if (how > 0) {
+            winners = [id];
+          } else if (how === 0) {
+            winners.push(id);
+          }
+        }
       }
       for (const [id, chips] of split(pot.chips, winners)) {
         won.set(id, (won.get(id) ?? 0) + chips);
@@ -543,6 +1149,7 @@ export class Table {
       seat.committed = 0;
       seat.paid = 0;
     }
+    this.ghosts = [];
 
     const first = this.paid[0];
     this.lastEvent =
@@ -563,6 +1170,8 @@ export class Table {
     for (const seat of this.seats) {
       seat.hole = [];
       seat.showed = null;
+      seat.revealed = false;
+      seat.spoke = null;
       seat.committed = 0;
       seat.paid = 0;
       seat.folded = false;
@@ -573,6 +1182,9 @@ export class Table {
 
   /** Everything in the middle: what has been swept in plus what is on the felt. */
   get pot(): number {
-    return this.seats.reduce((total, seat) => total + seat.paid, 0);
+    return (
+      this.seats.reduce((total, seat) => total + seat.paid, 0) +
+      this.ghosts.reduce((total, ghost) => total + ghost.paid, 0)
+    );
   }
 }

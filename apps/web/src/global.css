@@ -42,17 +42,35 @@ body {
 /*
  * The air in the room.
  *
- * Fixed and behind everything: a negative z-index puts it under the page's
- * content but still over the body's own background, which is exactly the layer
- * a room's atmosphere belongs in. It takes no pointer events and no space, so
+ * Fixed and behind everything: it takes no pointer events and no space, so
  * removing it would move nothing.
+ *
+ * Ordered by putting the page above it rather than by putting it below the
+ * page. A negative z-index reads as the same thing and is not: it takes the
+ * haze out of the normal painting order altogether, and a fixed layer sitting
+ * outside that order over a fixed body background is a region the browser
+ * stops repainting. What that looked like was a game lobby with the home
+ * page's cards still showing underneath it — pixels of a page that was no
+ * longer in the document, left behind when a shorter page replaced a taller
+ * one. Zero and one say the same thing about which is in front, and stay in
+ * the order everything else is painted in.
  */
 .haze {
   position: fixed;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
   display: block;
+}
+
+/*
+ * The page itself, over the air in it. Needs a position for the z-index to
+ * mean anything, and needs the z-index because the haze is now a sibling in
+ * the same painting order rather than something hidden behind it.
+ */
+.haze ~ * {
+  position: relative;
+  z-index: 1;
 }

@@ -38,6 +38,15 @@ export const createSchema = z.object({
    * table nobody can render. Absent means as many as the game allows.
    */
   maxSeats: z.number().int().min(2).max(10).optional(),
+  /**
+   * What the host wants it to cost to sit down.
+   *
+   * Bounded here and snapped to a real level by the game, which is the part
+   * that matters: this is the number deciding how much of somebody's balance
+   * is at risk at a table they sat down at, so a client naming its own would
+   * be a client setting the stakes for other people.
+   */
+  buyIn: z.number().int().min(1).max(1_000_000).optional(),
 });
 
 export const setListedSchema = z.object({ listed: z.boolean() });
