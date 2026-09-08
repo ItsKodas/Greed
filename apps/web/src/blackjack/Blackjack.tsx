@@ -301,6 +301,7 @@ function Felt({
             onStake={intent.place}
             forFun={state.forFun}
             chips={chips}
+            me={me}
           />
         ) : state.phase === "settled" ? (
           <>
@@ -536,6 +537,7 @@ function Betting({
   onStake,
   forFun,
   chips,
+  me,
 }: {
   table: Table;
   mine: number;
@@ -552,6 +554,8 @@ function Betting({
   forFun: boolean;
   /** What the player has to bet with, or null for a guest. */
   chips: number | null;
+  /** This player's own seat, for the things only it knows about itself. */
+  me: TableView["seats"][number] | null;
 }) {
   const stake = (amount: number) => {
     // Sounded and shown on the press rather than on the state coming back: the
@@ -617,6 +621,23 @@ function Betting({
           </button>
         ))}
       </div>
+      {/*
+        * Done deciding.
+        *
+        * The window is a clock everybody waits out, and most of the time
+        * everybody made their mind up long before it ran down. Saying so lets
+        * the table get on with it — and it takes nobody else's time away,
+        * because it only ends the window once every seat has said it.
+        */}
+      <button
+        type="button"
+        className={`bj__ready${mine > 0 && me?.ready === true ? " bj__ready--on" : ""}`}
+        disabled={mine < min && mine > 0}
+        onClick={() => table.act({ type: "ready", ready: me?.ready !== true })}
+      >
+        {me?.ready === true ? "Waiting for the others" : "Ready"}
+      </button>
+
       {/* The pile you have built, beside the figure. The number is the exact
           answer; the stack is the one you can read without counting. */}
       <div

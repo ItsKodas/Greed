@@ -46,6 +46,18 @@ export interface Seat extends TableSeat {
    * and the economy is asked instead.
    */
   purse: number;
+  /**
+   * Whether this seat has said it is done betting.
+   *
+   * The betting window is a clock everybody waits out, and most of the time
+   * everybody has decided long before it runs down. Saying so lets the table
+   * get on with it — and a table that deals when the players are ready rather
+   * than when a timer says so is the difference between a game and a queue.
+   *
+   * Cleared whenever the stake changes, because changing your mind about the
+   * bet is changing your mind about being ready.
+   */
+  ready: boolean;
 }
 
 export type Outcome = "blackjack" | "won" | "push" | "lost" | "bust";
@@ -67,6 +79,8 @@ export interface HandView {
 
 /** What one seat may see of another. */
 export interface SeatView {
+  /** Whether this seat has said it is finished betting. */
+  ready: boolean;
   id: string;
   name: string;
   connected: boolean;
@@ -489,6 +503,8 @@ export class Table {
     }
 
     hand.bet = amount;
+    // Changing your mind about the bet is changing your mind about being ready.
+    seat.ready = false;
     this.lastEvent = withdrawn
       ? `${seat.name} took their chips back`
       : `${seat.name} bet ${amount.toLocaleString("en-US")}`;
@@ -558,6 +574,54 @@ export class Table {
    * felt opens again. A table with nobody betting at it simply keeps offering,
    * which is what an empty table in a real room does too.
    */
+  /**
+   * Says this seat has finished betting, or has changed its mind.
+   *
+   * A seat with nothing on the felt may still be ready: that is how somebody
+   * sits a hand out without holding the table up behind them.
+   */
+  setReady(seatId: string, ready: boolean): void {
+    if (this.phase !== "betting") {
+      throw new TableError("There is nothing to be ready for.");
+    }
+    const seat = this.seating.find(seatId) as Seat | undefined;
+    if (seat === undefined) {
+      throw new TableError("You are not at this table.");
+    }
+    seat.ready = ready;
+    this.lastEvent = ready ? `${seat.name} is ready` : `${seat.name} is thinking again`;
+  }
+
+  /**
+   * Whether the table can stop waiting for the clock.
+   *
+   * Everybody who is actually here has to have said so, and somebody has to
+   * have bet — otherwise the first person to click ready at an empty felt
+   * would deal a hand nobody is in. Somebody who has dropped out is not asked:
+   * a table held up by an empty chair is a table that never deals again.
+   */
+  get everyoneReady(): boolean {
+    if (this.phase !== "betting" || !this.canDeal) {
+      return false;
+    }
+    /*
+     * Everybody who could actually press it. A bot never will — it has no
+     * opinion about when to deal — and somebody who has dropped out never will
+     * either, so waiting on either is waiting for ever. Both are dealt in;
+     * neither gets a say in when.
+     */
+    const here = this.seats.filter(
+      (seat) => !seat.waiting && seat.connected && !seat.isBot,
+    );
+    if (here.length === 0) {
+      return false;
+    }
+    if (!here.some((seat) => staked(seat) > 0)) {
+      return false;
+    }
+    return here.every((seat) => seat.ready);
+  }
+
   closeBetting(): void {
     if (this.phase !== "betting") {
       return;
@@ -867,6 +931,8 @@ export class Table {
   beginBetting(): void {
     for (const seat of this.seats) {
       this.clear(seat);
+      // A new hand is a new decision: nobody carries "ready" into it.
+      seat.ready = false;
       /*
        * Topped back up rather than shown the door. There is nothing to protect
        * at a table playing for nothing — the point of play money is that
@@ -924,6 +990,7 @@ export class Table {
       seats: this.seats.map((seat) => ({
         id: seat.id,
         name: seat.name,
+        ready: seat.ready,
         connected: seat.connected,
         waiting: seat.waiting,
         isBot: seat.isBot,

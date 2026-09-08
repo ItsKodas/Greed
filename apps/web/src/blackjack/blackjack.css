@@ -1006,3 +1006,47 @@
   color: var(--gr-color-chip);
   white-space: nowrap;
 }
+
+/*
+ * Done deciding.
+ *
+ * Quiet until it is pressed, and plainly latched once it is: the point of the
+ * button is that everybody can see who the table is still waiting on, and a
+ * control that looked the same either way would answer nothing.
+ */
+.bj__ready {
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--gr-space-2);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink);
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.bj__ready:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--gr-color-good) 50%, transparent);
+}
+
+.bj__ready:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 3px;
+}
+
+.bj__ready:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.bj__ready--on {
+  border-color: var(--gr-color-good);
+  background: color-mix(in srgb, var(--gr-color-good) 16%, transparent);
+  color: var(--gr-color-ink-lit);
+}
+

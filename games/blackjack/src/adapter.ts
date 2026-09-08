@@ -87,7 +87,7 @@ export function blackjackAdapter(
     },
 
     async act(table, seatId, action, deps) {
-      const move = action as { type?: string; amount?: number; ms?: number };
+      const move = action as { type?: string; amount?: number; ms?: number; ready?: boolean };
       const seat = table.seats.find((candidate) => candidate.id === seatId);
       if (seat === undefined) {
         throw new TableError("You are not at this table.");
@@ -142,6 +142,15 @@ export function blackjackAdapter(
            * which is what makes the payout arithmetic hold.
            */
           await bank?.add(owed);
+          /*
+           * The last bet can be the thing that finishes the window: somebody
+           * who was already ready, then bet, is ready again the moment the
+           * chips land. Without this the table would sit waiting for a click
+           * that has already happened.
+           */
+          if (table.everyoneReady) {
+            table.deal();
+          }
           return;
         }
         case "deal":
@@ -155,6 +164,19 @@ export function blackjackAdapter(
           }
           table.deal();
           return;
+        case "ready": {
+          /*
+           * Not the host's call, unlike dealing early. Saying you have
+           * finished betting is a statement about your own hand; it only ends
+           * the window once everybody else has said it too, so it takes
+           * nobody's time away from them.
+           */
+          table.setReady(seatId, move.ready !== false);
+          if (table.everyoneReady) {
+            table.deal();
+          }
+          return;
+        }
         case "window":
           /*
            * How long everybody gets to bet, which is the host's call for the

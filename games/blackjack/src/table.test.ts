@@ -515,3 +515,141 @@ describe("the next round", () => {
     expect(table.seats.find((seat) => seat.id === "c")?.hands[0]?.bet).toBe(500);
   });
 });
+
+/*
+ * Saying you have finished betting.
+ *
+ * The window is a clock everybody waits out, and most of the time everybody
+ * decided long before it ran down. What matters is the cases where the table
+ * must *not* deal early: one keen player must not cut short everybody else,
+ * and a chair nobody is sitting in must not hold the table up for ever.
+ */
+describe("being ready", () => {
+  const seated = (names: string[]) => {
+    const table = new Table("READY", () => 0.5, false, 6);
+    for (const name of names) {
+      table.join(name, name, { userId: `u-${name}`, avatar: null, accentColor: null });
+    }
+    return table;
+  };
+
+  it("does not deal while somebody has not said so", () => {
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.setReady("a", true);
+    expect(table.everyoneReady).toBe(false);
+    expect(table.phase).toBe("betting");
+  });
+
+  it("is ready once everybody has said so", () => {
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    expect(table.everyoneReady).toBe(true);
+  });
+
+  it("will not deal a hand nobody is in", () => {
+    // Everybody ready with nothing on the felt is everybody sitting out, which
+    // is not a hand — it is an empty table agreeing to look at each other.
+    const table = seated(["a", "b"]);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    expect(table.everyoneReady).toBe(false);
+  });
+
+  it("lets somebody sit a hand out without holding the table up", () => {
+    // A seat with nothing on the felt can still be ready. That is how you skip
+    // a hand rather than making everybody else wait out the clock for you.
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    expect(table.everyoneReady).toBe(true);
+  });
+
+  it("does not wait for a chair nobody is sitting in", () => {
+    /*
+     * Somebody who has dropped out will never click anything. A table that
+     * waited for them would never deal again, which is a worse outcome than
+     * dealing without them.
+     */
+    const table = seated(["a", "b", "c"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    table.disconnect("c");
+    expect(table.everyoneReady).toBe(true);
+  });
+
+  it("does not wait for a bot to press anything", () => {
+    /*
+     * A bot has no opinion about when to deal and will never click. A table
+     * that waited on one would never leave the betting window at all, which
+     * is the whole of what this button exists to avoid.
+     */
+    const table = new Table("READY", () => 0.5, true, 6);
+    table.join("a", "a", { userId: "u-a", avatar: null, accentColor: null });
+    table.addBot("bot1", "Bot", "normal");
+    table.bet("a", 100);
+    table.setReady("a", true);
+    expect(table.seats.some((seat) => seat.isBot)).toBe(true);
+    expect(table.everyoneReady).toBe(true);
+  });
+
+  it("forgets it when the bet changes", () => {
+    // Changing your mind about the bet is changing your mind about being ready.
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    table.bet("b", 500);
+    expect(table.everyoneReady).toBe(false);
+  });
+
+  it("can be taken back", () => {
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    table.setReady("a", false);
+    expect(table.everyoneReady).toBe(false);
+  });
+
+  it("does not carry into the next hand", () => {
+    // A new window is a new decision. Carrying it over would deal the second
+    // hand the instant the first one settled, before anybody had bet.
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.setReady("a", true);
+    table.setReady("b", true);
+    table.deal();
+    table.beginBetting();
+    expect(table.seats.every((seat) => seat.ready === false)).toBe(true);
+    expect(table.everyoneReady).toBe(false);
+  });
+
+  it("is not something to say once the cards are out", () => {
+    const table = seated(["a", "b"]);
+    table.bet("a", 100);
+    table.bet("b", 100);
+    table.deal();
+    expect(() => table.setReady("a", true)).toThrow(/nothing to be ready for/i);
+  });
+
+  it("will not deal to one player at a chips table", () => {
+    // The house rule outranks the button: ready or not, a chips table needs
+    // somebody to play it with.
+    const table = seated(["a"]);
+    table.bet("a", 100);
+    table.setReady("a", true);
+    expect(table.everyoneReady).toBe(false);
+  });
+});
+
