@@ -166,17 +166,31 @@ permits roughly 3× the typical stake and rises as the bank grows.
 **A thin bank means a smaller maximum bet — never a short payout, and never a
 dark machine.** That is the whole reason this cap exists rather than a refusal.
 
-## Credits are a display convention, not a currency
+## The cabinet counts in chips
 
-The glass reads in credits at **1 chip = 100 credits**. A 5-chip wager shows
-as 500 CREDITS and the bank sign shows seven digits.
+Every figure on the machine — the stake, the purse, the jackpot sign, what a
+spin paid — is chips, the same unit as the rest of the building.
 
-There is no second ledger and no second currency. A stored second currency
-convertible back to chips would be chips with an extra step: minting a credit
-would mint a chip, every rule protecting chips would have to protect credits
-identically, and the name "not real chips" is an invitation to exactly the
-looseness those rules exist to prevent. The multiplication happens at the edge,
-on the way to the screen. Everything underneath is chips.
+It read in credits at a hundred to the chip for a while, on the argument that a
+machine saying 500 feels more like a slot machine than one saying 5. That was
+wrong, and worth recording as wrong: the moment any one figure on a cabinet is
+a chip, they all have to be, because a player cannot tell what they are playing
+for when the stake and the prize are in different units. A jackpot of 19,850
+beside a stake of 500 reads as forty times the bet when it is nearer four
+hundred.
+
+What stands from that argument is the narrower point it was built on: there is
+one ledger in this building and it is in chips. A second stored currency
+convertible back to chips would be chips with an extra step, and the name "not
+real chips" is an invitation to exactly the looseness these rules exist to
+prevent. That part has not changed — what changed is that the display no longer
+pretends otherwise either.
+
+**The jackpot is written in full, never shortened.** It is the one number on the
+page somebody is there for, and "19.9K" is a rounder answer to "what am I
+playing for" than the question deserves. Shortening belongs where a figure is
+glanced at rather than read — the balance pill in the navbar — and nowhere on
+this cabinet.
 
 ## Not a table
 
