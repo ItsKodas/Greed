@@ -272,19 +272,66 @@
  * touch any of them, and it looks like what it is — chips pushed out in front
  * of somebody, in a ring around the pot.
  */
+/*
+ * A stake, as chips over its figure.
+ *
+ * The pile is drawn head-on and reads by colour and height, which is what
+ * anybody actually takes in across a table; the figure underneath is for when
+ * the exact number matters. Column rather than row so the marker stays narrow
+ * — there are up to ten of these round one ellipse.
+ */
+.pk__bet-figure {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Beside the figure and centred against it, rather than sitting on its
+   baseline — a pile has no baseline to sit on. */
+.pk__pot-chips {
+  display: block;
+  align-self: center;
+}
+
+/*
+ * What a seat still has, beside the number rather than instead of it. Small on
+ * purpose: it is a sense of how deep somebody is, and the figure is already
+ * there for anybody who wants to count it.
+ */
+.pk__pile {
+  display: inline-flex;
+  align-items: flex-end;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.pk__stack {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/*
+ * A stake out on the cloth.
+ *
+ * The gold pill this used to be was standing in for chips. There are chips
+ * now, so it has gone: a pill behind them reads as a coin with chips on top of
+ * it, and the drawing was doing the pill's job anyway. What is left is what a
+ * stake looks like on a table — a pile, and the figure under it.
+ */
 .pk__bet {
   position: absolute;
   left: calc(50% + var(--cos) * var(--bet-across));
   top: calc(50% + var(--sin) * var(--bet-down));
   transform: translate(-50%, -50%);
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--gr-color-chip);
-  color: #2a1704;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: var(--gr-color-chip);
   font-size: 11px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.5);
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.95);
   white-space: nowrap;
 }
 
@@ -607,5 +654,15 @@
 
   .pk__wager {
     display: block;
+  }
+
+  /*
+   * The piles go with them. A seat is 64px wide here and every pixel of it is
+   * doing something; chips beside the figure would push the name out of the
+   * seat to say a thing the figure already says.
+   */
+  .pk__pile,
+  .pk__pot-chips {
+    display: none;
   }
 }

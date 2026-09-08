@@ -4,6 +4,7 @@ import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, FaceDown } from "../blackjack/Cards.js";
+import { ChipStack } from "../chips/ChipStack.js";
 import { Chat } from "../game/Chat.js";
 import { compact } from "../game/money.js";
 import type { Account } from "../game/useAccount.js";
@@ -35,6 +36,16 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 
 /** The five places a board card goes, in the order they are dealt. */
 const SLOTS = ["flop1", "flop2", "flop3", "turn", "river"];
+
+/**
+ * What a poker table counts in.
+ *
+ * Down to the small blind, which the betting tray's plates do not reach: this
+ * game's numbers are multiples of ten, and counted in hundreds every bet on
+ * the felt would come out as one odd chip standing for the remainder. With
+ * tens and twenties in the ladder every amount here lands on real plates.
+ */
+const TABLE_CHIPS = [1000, 500, 250, 100, 50, 20, 10];
 
 export function Poker() {
   const navigate = useNavigate();
@@ -152,6 +163,11 @@ export function Felt({
           <p className="pk__pot">
             <span className="pk__pot-label">Pot</span>
             <strong>{fmt(state.pot)}</strong>
+            {state.pot > 0 ? (
+              <span className="pk__pot-chips">
+                <ChipStack amount={state.pot} width={20} ladder={TABLE_CHIPS} most={4} />
+              </span>
+            ) : null}
           </p>
           <div className="pk__board">
             {state.board.map((one, at) => (
@@ -192,7 +208,14 @@ export function Felt({
             seat.id === seatId && intent.committed !== null ? intent.committed : seat.committed;
           return chips > 0 ? (
             <span className="pk__bet" key={`bet-${seat.id}`} style={seatAt(at, seats.length)}>
-              {fmt(chips)}
+              {/*
+                * Chips and the figure, not one or the other. The pile is what
+                * is read across a table — two chips against nine says who is
+                * in for what before either number has been — and the figure is
+                * what settles it once you care about the exact amount.
+                */}
+              <ChipStack amount={chips} width={18} ladder={TABLE_CHIPS} most={5} />
+              <span className="pk__bet-figure">{fmt(chips)}</span>
             </span>
           ) : null;
         })}
@@ -301,7 +324,19 @@ function Seat({
           {seat.name}
           {seat.isBot ? <span className="pk__bot-mark">bot</span> : null}
         </span>
-        <span className="pk__stack">{fmt(seat.stack)}</span>
+        <span className="pk__stack">
+          {/*
+            * What they have left, as weight rather than only as a figure. Off
+            * on a narrow felt, where the seat has no room to spare and the
+            * number says it on its own.
+            */}
+          {seat.stack > 0 ? (
+            <span className="pk__pile">
+              <ChipStack amount={seat.stack} width={13} ladder={TABLE_CHIPS} most={4} />
+            </span>
+          ) : null}
+          {fmt(seat.stack)}
+        </span>
         {seat.committed > 0 ? <span className="pk__wager">bet {fmt(seat.committed)}</span> : null}
       </div>
       {mark === null ? null : (

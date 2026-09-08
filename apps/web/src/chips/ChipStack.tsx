@@ -48,14 +48,38 @@ export function chipsFor(amount: number, ladder: readonly number[] = MINTED): nu
   return chips;
 }
 
-export function ChipStack({ amount, width = 40 }: { amount: number; width?: number }) {
+export function ChipStack({
+  amount,
+  width = 40,
+  ladder,
+  most = MOST,
+}: {
+  amount: number;
+  width?: number;
+  /**
+   * How many chips to draw before the rest become a count.
+   *
+   * The default is where a pile stops being countable. Somewhere with a fixed
+   * amount of room — a pot beside its own figure, which can be any size at all
+   * — needs to say a smaller number, or the pile grows past whatever it was
+   * drawn to sit in.
+   */
+  most?: number;
+  /**
+   * What to count in. The betting tray's plates by default, which is right for
+   * a stake somebody pushed out with the chip buttons — but a game whose
+   * numbers do not divide into those has to say so, or every pile it draws
+   * ends in an odd chip that stands for a remainder rather than for money.
+   */
+  ladder?: readonly number[];
+}) {
   const lift = useId();
-  const all = chipsFor(amount);
+  const all = ladder === undefined ? chipsFor(amount) : chipsFor(amount, ladder);
   if (all.length === 0) {
     return null;
   }
 
-  const shown = all.slice(0, MOST);
+  const shown = all.slice(0, Math.max(1, most));
   const hidden = all.length - shown.length;
 
   /*
