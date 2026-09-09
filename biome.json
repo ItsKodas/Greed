@@ -7,7 +7,8 @@
       "**/*.mjs",
       "!**/dist",
       "!**/node_modules",
-      "!apps/web/public"
+      "!apps/web/public",
+      "!.claude/worktrees"
     ]
   },
   "formatter": {
