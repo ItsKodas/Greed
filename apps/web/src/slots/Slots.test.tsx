@@ -20,6 +20,7 @@ import {
   teaseMs,
   Marquee,
   PaylineOverlay,
+  roomShow,
   winningCells,
 } from "./Slots.js";
 
@@ -717,5 +718,49 @@ describe("how long there is left to tease", () => {
     const ordinary = teaseMs(holdsFor(FOUR_CHEAP), 2);
     const jackpot = teaseMs(holdsFor(FOUR_SEVENS), 2);
     expect(jackpot).toBeGreaterThan(ordinary);
+  });
+});
+
+describe("how much of the room a win lights up", () => {
+  /* Nine lines at twenty a line: an ordinary spin off the tray. */
+  const BET = 180;
+  const line = (won: number) => roomShow({ won, bet: BET, jackpot: false });
+
+  it("leaves the page dark for an ordinary line", () => {
+    // Most paying lines come to less than the spin cost. The glass says so on
+    // its own; the room has no business joining in for that.
+    expect(line(BET / 2)).toBe(0);
+  });
+
+  it("leaves the page dark a chip under the bar", () => {
+    expect(line(BET * 10 - 1)).toBe(0);
+  });
+
+  it("throws its first shells at ten times the stake", () => {
+    expect(line(BET * 10)).toBeGreaterThan(0);
+  });
+
+  it("grows with the win", () => {
+    expect(line(BET * 40)).toBeGreaterThan(line(BET * 12));
+    expect(line(BET * 90)).toBeGreaterThan(line(BET * 40));
+  });
+
+  it("stops growing at the top of what the paytable can pay", () => {
+    // A hundred times the stake is about a five-of-a-kind diamond, which is
+    // the biggest a line gets. Anything past it is the same barrage, so a
+    // stake nobody expected cannot ask the page for a thousand shells.
+    expect(line(BET * 5000)).toBe(line(BET * 100));
+  });
+
+  it("gives the jackpot more than any line can", () => {
+    expect(roomShow({ won: BET, bet: BET, jackpot: true })).toBeGreaterThan(line(BET * 5000));
+  });
+
+  it("asks nothing of a spin with no bet behind it", () => {
+    // A free spin's *stake* is zero — nothing left the account. Sized off that
+    // rather than off the bet it replays, every free spin would divide by
+    // nothing. The caller passes the bet; this is the guard for when it does
+    // not.
+    expect(roomShow({ won: 9000, bet: 0, jackpot: false })).toBe(0);
   });
 });
