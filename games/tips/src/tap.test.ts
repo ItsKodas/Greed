@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { REFUSALS, buy, emptyJar, rollNight, tap, type Outcome } from "./tap.js";
 import { NIGHT_MS, levelAt, type Jar } from "./jar.js";
 import { BASE, FAVOUR_PER_CHIPS, MAX, numbersFor } from "./ladder.js";
-import { RHYTHM_MIN_SAMPLES } from "./rhythm.js";
+import { RHYTHM_MIN_SAMPLES, TAP_FLOOR_MS } from "./rhythm.js";
 
 /** Deterministic tokens, so a test can say which one it means. */
 function minter() {
@@ -55,6 +55,26 @@ describe("a tap", () => {
     expect(tooSoon.ok === false && tooSoon.error).toBe(REFUSALS.fast);
   });
 
+  it("lets a floor refusal's gap keep growing, so a later tap gets through", () => {
+    // Unlike a rhythm refusal, an interval-floor refusal must NOT advance
+    // lastTapAt. Someone hammering the button has each attempt's gap measured
+    // from the same last accepted tap, so the gap grows with every refused
+    // attempt until one finally clears TAP_FLOOR_MS — a throttle. If refusing
+    // for speed also reset the clock, hammering would instead measure every
+    // attempt from the last refusal and could refuse forever: a lockout,
+    // which is a harsher rule than the floor is supposed to be.
+    const jar = full({ token: "t0" });
+    const mint = minter();
+    const first = tap(jar, 1_000, "t0", mint);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const tooSoon = tap(first.jar, 1_010, first.jar.token, mint);
+    expect(tooSoon.ok).toBe(false);
+    expect(tooSoon.ok === false && tooSoon.error).toBe(REFUSALS.fast);
+    const later = tap(tooSoon.jar, 1_000 + TAP_FLOOR_MS + 1, tooSoon.jar.token, mint);
+    expect(later.ok).toBe(true);
+  });
+
   it("still enforces the floor on the tap right after one that rolled the night", () => {
     // Finding 1: a jar left idle past NIGHT_MS has levelAt === nightStartedAt
     // and an empty rhythm before the tap, and again right after it (both get
@@ -85,6 +105,33 @@ describe("a tap", () => {
       }
     }
     expect(refused).toBe(REFUSALS.even);
+  });
+
+  it("keeps a metronome refused, instead of settling into a cycle that pays it", () => {
+    // Fix round 2: lastTapAt used to advance only on a paid tap, so the tap
+    // right after a rhythm refusal saw a doubled gap (200ms against a 100ms
+    // metronome). That outlier alone pushed spread past RHYTHM_SPREAD_MS, so
+    // the refused tap's successor was accepted and the cycle restarted —
+    // roughly one refusal in every thirteen taps, not a deterrent. A refusal
+    // now advances the clock too, so the metronome's gaps stay a true 100ms
+    // and it stays flagged for as long as it keeps tapping on the beat.
+    let jar = full({ level: MAX.brim });
+    const mint = minter();
+    let at = 0;
+    let firstRefusalAt: number | null = null;
+    let acceptedAfterFirstRefusal = 0;
+    for (let i = 0; i < 40; i++) {
+      at += 100;
+      const out = tap(jar, at, jar.token, mint);
+      jar = out.jar;
+      if (!out.ok) {
+        firstRefusalAt ??= i;
+      } else if (firstRefusalAt !== null) {
+        acceptedAfterFirstRefusal++;
+      }
+    }
+    expect(firstRefusalAt).not.toBeNull();
+    expect(acceptedAfterFirstRefusal).toBe(0);
   });
 
   it("keeps the gap that tripped a rhythm refusal, instead of throwing it away", () => {

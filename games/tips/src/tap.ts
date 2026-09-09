@@ -94,7 +94,16 @@ export function tap(jar: Jar, now: number, token: string, mint: () => string): O
     // The gap still goes in, though: it is the sample that tripped the check,
     // and a jar whose recorded rhythm is missing the very gap it judged is a
     // jar lying to the next check about what it saw.
-    return refuse(REFUSALS.even, { ...rolled, rhythm });
+    //
+    // lastTapAt advances here too, unlike every other refusal. The rhythm
+    // window judges the cadence of *attempts*, and an attempt refused for its
+    // cadence is still an attempt made at that cadence — leaving the clock
+    // frozen would make the very next gap double (200ms against a steady
+    // 100ms), which alone clears RHYTHM_SPREAD_MS and lets that next tap
+    // through, settling a constant metronome into a cycle that mostly pays.
+    // Advancing the clock keeps the metronome's gaps at their true interval,
+    // so it stays flagged until the cadence itself actually changes.
+    return refuse(REFUSALS.even, { ...rolled, rhythm, lastTapAt: now });
   }
 
   const paidThisNight = rolled.paidThisNight + pay;
