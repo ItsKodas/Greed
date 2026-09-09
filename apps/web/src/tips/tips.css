@@ -123,6 +123,26 @@
   }
 }
 
+/*
+ * A chip leaving the jar. Positioned in screen coordinates and driven by its
+ * own rAF loop (see ChipFlight.tsx) rather than by a transition or keyframe —
+ * every flight's start and end point is different, which a keyframe cannot
+ * take as an argument. No motion is declared here at all: `top`/`left` place
+ * the element at the origin the script's own translate is written against,
+ * and the script is the only thing that ever moves it, which is what keeps
+ * this from becoming a second animation fighting the one in Jar.tsx or the
+ * one driving the creep.
+ */
+.tips__flight {
+  position: fixed;
+  top: 0;
+  left: 0;
+  display: block;
+  pointer-events: none;
+  z-index: 20;
+  will-change: transform, opacity;
+}
+
 /* -------------------------------------------------------------- what it said */
 
 .tips__said {

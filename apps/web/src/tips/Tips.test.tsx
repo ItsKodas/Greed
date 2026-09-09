@@ -18,6 +18,24 @@ import type { Account } from "../game/useAccount.js";
 const account = vi.hoisted(() => ({ current: null as Account | null }));
 vi.mock("../game/useAccount.js", () => ({ useAccount: () => account.current }));
 
+/**
+ * Only `play` is stubbed — the Navbar mounted underneath every test here
+ * carries its own volume control, which reaches for the rest of this
+ * module's real exports (getVolume, isMuted...) and would break without
+ * them. What these tests are checking is only whether a tap does or does
+ * not ask the building's one sound module to play something.
+ */
+const played = vi.hoisted(() => ({ calls: [] as string[] }));
+vi.mock("../game/audio.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../game/audio.js")>();
+  return {
+    ...actual,
+    play: (cue: string) => {
+      played.calls.push(cue);
+    },
+  };
+});
+
 /** What "tips:open" answers with, one test's worth at a time. */
 let openJar: JarView = jarView();
 /** The ack a held tap or buy is waiting to be given. */
@@ -112,6 +130,7 @@ afterEach(() => {
   account.current = null;
   openJar = jarView();
   heldAck = null;
+  played.calls = [];
 });
 
 describe("the jar you tap", () => {
@@ -198,4 +217,79 @@ describe("the jar you tap", () => {
     expect(screen.getByTestId("tonight").textContent).toBe("0");
   });
 
+  /*
+   * "A chip arcs from where the thumb hit into the... out of the jar" — the
+   * design's own words for what a tap looks like. The chip flies on the
+   * press itself, the same instant the level drops and the counter ticks,
+   * because the scoop is deterministic and both sides already agree what it
+   * is — there is nothing here to wait on an ack for.
+   */
+  it("sends a chip out of the jar on an accepted tap", async () => {
+    account.current = signedIn();
+
+    show();
+    await tapTheJar();
+
+    expect(screen.queryByTestId("chip-flight")).not.toBeNull();
+  });
+
+  /*
+   * The clink follows the same rule as the chip: it is the tap's own
+   * consequence, not the ack's — it plays at the same instant the chip
+   * leaves, on the press.
+   */
+  it("plays the clink on an accepted tap", async () => {
+    account.current = signedIn();
+
+    show();
+    await tapTheJar();
+
+    expect(played.calls).toEqual(["payout"]);
+  });
+
+  /*
+   * A tap the client already knows is dry never gets far enough to be
+   * "accepted" — nothing left the jar, so nothing sounds like it did.
+   */
+  it("stays silent on a dry tap", async () => {
+    account.current = signedIn();
+    openJar = jarView({ level: 0, trickle: 0, scoop: 25 });
+
+    show();
+    await tapTheJar();
+
+    expect(await screen.findByText(/the jar is dry/i)).toBeDefined();
+    expect(played.calls).toEqual([]);
+  });
+
+  /*
+   * The one thing reduced motion is allowed to take away. The level and the
+   * counter still change on the press either way — this only checks that
+   * the decorative flight itself does not, and that the clink (governed by
+   * the player's own mute and volume, not by this setting) still does.
+   */
+  it("sends no chip when the player has asked for less motion, but still plays the clink", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("prefers-reduced-motion"),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+
+    try {
+      account.current = signedIn();
+      show();
+      await tapTheJar();
+
+      expect(screen.queryByTestId("chip-flight")).toBeNull();
+      expect(played.calls).toEqual(["payout"]);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
 });

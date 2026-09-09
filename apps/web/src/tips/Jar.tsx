@@ -1,3 +1,5 @@
+import type { MouseEvent } from "react";
+
 /**
  * The glass, and the tap target.
  *
@@ -7,11 +9,21 @@
  * make the glass decoration for a number instead of the number's only home.
  */
 
+/** Where a press landed, in the viewport's own coordinates. */
+export interface TapPoint {
+  x: number;
+  y: number;
+}
+
 export interface JarProps {
   /** Chips showing in the glass right now — reconciled, or optimistic. */
   level: number;
   brim: number;
-  onTap: () => void;
+  /**
+   * Where the thumb hit, so a chip can be shown leaving from there rather
+   * than from the middle of the glass every time.
+   */
+  onTap: (point: TapPoint) => void;
   /**
    * Bumped once per accepted press, so the glass wobbles exactly once.
    *
@@ -32,12 +44,23 @@ export function Jar({ level, brim, onTap, tapped }: JarProps) {
   const pct = brim > 0 ? Math.min(1, Math.max(0, level / brim)) : 0;
   const liquidY = GLASS_BOTTOM - (GLASS_BOTTOM - GLASS_TOP) * pct;
 
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    // clientX/Y are 0 on a keyboard-activated click (Enter/Space on a
+    // focused button never moved a pointer), which would otherwise send a
+    // flight arcing from the top-left corner of the screen. The button's
+    // own centre is the honest answer for a press that has no point.
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX || rect.left + rect.width / 2;
+    const y = event.clientY || rect.top + rect.height / 2;
+    onTap({ x, y });
+  };
+
   return (
     <button
       type="button"
       className="jar"
       aria-label="Tap the jar"
-      onClick={onTap}
+      onClick={handleClick}
     >
       {/* Reset every accepted tap, and only then — a jar sitting untapped
           must not wobble on its own. */}

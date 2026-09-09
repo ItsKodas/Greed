@@ -3,10 +3,12 @@ import type { JarView, TapResult } from "@backroom/shared";
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { DiscordIcon } from "../blackjack/Icons.js";
+import { play } from "../game/audio.js";
 import { exact } from "../game/money.js";
 import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
-import { Jar } from "./Jar.js";
+import { ChipFlight, type FlightPoint } from "./ChipFlight.js";
+import { Jar, type TapPoint } from "./Jar.js";
 import { Upgrades } from "./Upgrades.js";
 import "@backroom/game-tips/theme.css";
 
@@ -118,6 +120,21 @@ export default function Tips() {
    */
   const [pendingTaps, setPendingTaps] = useState(0);
   const pendingTapsRef = useRef(0);
+
+  /**
+   * Chips currently arcing out of the jar, one per accepted tap.
+   *
+   * A list rather than a single "current flight": taps can land faster than
+   * one flight takes to finish, and each one keeps travelling once thrown —
+   * a fast run of taps is several chips in the air at once, not one chip
+   * restarting its trip.
+   */
+  const [flights, setFlights] = useState<Array<{ id: number; from: FlightPoint; to: FlightPoint }>>(
+    [],
+  );
+  const flightIdRef = useRef(0);
+  /** Where a flight lands — the same figure the counter itself ticks on. */
+  const tonightRef = useRef<HTMLElement | null>(null);
 
   const socketRef = useRef<TipsSocket | null>(null);
   /**
@@ -246,7 +263,7 @@ export default function Tips() {
     return () => window.cancelAnimationFrame(frame);
   }, [serverJar, reducedMotion, pendingTaps]);
 
-  const doTap = () => {
+  const doTap = (point: TapPoint) => {
     const socket = socketRef.current;
     const server = serverJarRef.current;
     if (socket === null || server === null) {
@@ -262,7 +279,8 @@ export default function Tips() {
     if (pay < 1) {
       // The client can already tell the jar is dry from the same numbers the
       // server would use — not a guess, the same arithmetic — so this is said
-      // at once rather than sent off to be refused for the same reason.
+      // at once rather than sent off to be refused for the same reason. No
+      // sound, no chip — nothing left the jar, so nothing is shown leaving it.
       setMessage(REFUSALS.dry);
       return;
     }
@@ -273,6 +291,23 @@ export default function Tips() {
     // a mutable copy of it.
     pendingTapsRef.current += 1;
     setPendingTaps(pendingTapsRef.current);
+
+    // The scoop is deterministic — both sides compute it from the same
+    // JarView — so this is a fact the client already knows, not a guess: the
+    // chip leaves and the clink sounds on the press, the same instant the
+    // level itself drops, rather than waiting on a round trip that would
+    // only ever confirm what was already certain.
+    play("payout");
+    const target = tonightRef.current?.getBoundingClientRect();
+    if (!reducedMotion && target !== undefined) {
+      flightIdRef.current += 1;
+      const id = flightIdRef.current;
+      const to: FlightPoint = {
+        x: target.left + target.width / 2,
+        y: target.top + target.height / 2,
+      };
+      setFlights((current) => [...current, { id, from: point, to }]);
+    }
 
     enqueue(() => {
       // Read fresh rather than closed over: by the time this actually sends,
@@ -326,6 +361,19 @@ export default function Tips() {
         <div className="tips__floor">
           <Jar level={displayLevel} brim={serverJar.brim} onTap={doTap} tapped={tapped} />
 
+          {/* Chips still arcing out of the jar. Fixed-position, so where in
+              the tree this sits does not matter — each one is keyed by its
+              own id so React never reuses one flight's element for another
+              still-running one. */}
+          {flights.map((flight) => (
+            <ChipFlight
+              key={flight.id}
+              from={flight.from}
+              to={flight.to}
+              onDone={() => setFlights((current) => current.filter((f) => f.id !== flight.id))}
+            />
+          ))}
+
           {/* Said, not proven — a message here is a courtesy, never the rule
               the server just applied. */}
           <p className="tips__said" role="status" aria-live="polite">
@@ -335,7 +383,7 @@ export default function Tips() {
           <div className="tips__figures">
             <p className="tips__figure">
               <span className="tips__figure-label">Tonight</span>
-              <b className="tips__figure-value" data-testid="tonight">
+              <b className="tips__figure-value" data-testid="tonight" ref={tonightRef}>
                 {/* The server's own figure plus what every still-pending tap
                     would pay — the same overlay the glass itself wears. */}
                 {exact(serverJar.chipsTonight + pendingTaps * serverJar.scoop)}
