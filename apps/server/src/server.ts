@@ -1012,6 +1012,13 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * The same reasoning as the machine's sign: the bank is what makes a table
    * against the dealer possible, so a table that will not deal has to be able
    * to say why without asking who is asking.
+   *
+   * The top of the range rather than a promise about any particular felt. A
+   * round is settled all at once, so the cap is a budget the whole table draws
+   * on and what is left falls as people bet — this is what the first of them
+   * can have. The felt itself says the rest, which is where it belongs: a
+   * number on a sign cannot know who has sat down since it was read, and the
+   * table refusing the message is the rule whatever the sign said.
    */
   app.get("/api/blackjack", (_request, response) => {
     void (async () => {
