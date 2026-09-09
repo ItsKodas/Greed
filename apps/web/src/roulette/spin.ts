@@ -99,12 +99,14 @@ export function easing(profile: Profile): string {
  * makes them land on the pockets a player can watch going past, and is the
  * whole reason this file exists rather than a second set of timings.
  *
- * Clicks closer together than `closest` are dropped. Early in a spin the rim
- * passes some fifty pockets a second, which is not a tick but a buzz, and a
- * hundred and fifty scheduled nodes for the part nobody can hear as separate
- * sounds. What is left is the half of the spin where the ticking is the point.
+ * Every pocket gets one. An earlier version dropped any click within 55ms of
+ * the last, on the theory that fifty a second is a buzz rather than a tick —
+ * which was wrong twice over. It is what a wheel at speed actually sounds
+ * like, and cutting them left a faint ticking through the slow tail only,
+ * which is the opposite of the thing being drawn. `closest` survives as a
+ * guard against a degenerate profile scheduling thousands, not as a thinning.
  */
-export function ticks(profile: Profile, turns: number, closest = 0.055): number[] {
+export function ticks(profile: Profile, turns: number, closest = 0.002): number[] {
   const at = progress(profile);
   const total = turns * POCKETS;
   const out: number[] = [];

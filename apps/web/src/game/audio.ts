@@ -1255,9 +1255,12 @@ export function spinWheel(options: {
   for (const share of options.ticks ?? []) {
     const when = now + rimRun * share;
     const level = context.createGain();
-    // Louder as they thin out, so the last few carry without the first
-    // dozen turning into a rattle.
-    level.gain.value = 0.02 + 0.05 * share;
+    /*
+     * Loud enough to be a tick from the first one. They still swell as they
+     * thin out, so the last few carry, but the floor is what a wheel at speed
+     * is: a fast, present rattle rather than something faint behind the roll.
+     */
+    level.gain.value = 0.075 + 0.09 * share;
     level.connect(bus);
     const tick = context.createBufferSource();
     const short = Math.floor(context.sampleRate * 0.012);

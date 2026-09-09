@@ -1,3 +1,4 @@
+import { POCKETS } from "@backroom/game-roulette";
 import { describe, expect, it } from "vitest";
 import { BALL, RIM, easing, progress, speed, ticks } from "./spin.js";
 
@@ -86,12 +87,23 @@ describe("how a spin loses its speed", () => {
     expect(last).toBeGreaterThan(first);
   });
 
-  it("does not schedule a click for every pocket of a wheel at full speed", () => {
-    // Fifty a second is a buzz, not a tick, and a hundred and fifty audio
-    // nodes for the part nobody can hear as separate sounds.
+  it("clicks once for every pocket, including at full speed", () => {
+    /*
+     * One per pocket, all the way through. An earlier version dropped anything
+     * within 55ms of the last click, which at fifty pockets a second deleted
+     * almost the whole fast phase and left a faint ticking through the tail —
+     * the opposite of a wheel running down.
+     */
+    const turns = 4;
+    const beats = ticks(RIM, turns);
+    expect(beats.length).toBe(turns * POCKETS);
+  });
+
+  it("ticks fastest at the start and slowest at the end", () => {
+    // The rate is the rotation, so it has to fall the way the speed does.
     const beats = ticks(RIM, 4);
-    for (let at = 1; at < beats.length; at += 1) {
-      expect((beats[at] as number) - (beats[at - 1] as number)).toBeGreaterThanOrEqual(0.05);
-    }
+    const early = (beats[3] as number) - (beats[2] as number);
+    const late = (beats.at(-1) as number) - (beats.at(-2) as number);
+    expect(late).toBeGreaterThan(early * 3);
   });
 });
