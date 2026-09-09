@@ -1,5 +1,7 @@
 import { POCKETS, WHEEL, colourOf } from "@backroom/game-roulette";
 import { type CSSProperties, useState } from "react";
+import { BALL, easing, RIM, ticks } from "./spin.js";
+import { useCalledSound, useSpinSound } from "./useSpinSound.js";
 
 /**
  * The wheel.
@@ -66,6 +68,29 @@ const RIM_TURNS = 4;
  */
 const BALL_TURNS = 11;
 
+/**
+ * Where the wheel stops and where the ball drops, as shares of the spin.
+ *
+ * These two still live in the stylesheet as well, in the rim's duration and in
+ * the fall's keyframes, because neither can be expressed any other way.
+ */
+const RIM_AT = 0.82;
+const DROP_AT = 0.55;
+
+/*
+ * The curves, written once and handed to everything that needs them.
+ *
+ * The stylesheet animates from these and the sound is scheduled against them,
+ * which is what stops the two drifting: they had been separate sets of numbers
+ * that "have to agree", and that agreement lasts exactly until the first
+ * change. Computed once at module load — they are constants, and re-deriving
+ * an integral on every render of a felt would be a strange way to spend a
+ * frame.
+ */
+const RIM_EASE = easing(RIM);
+const BALL_EASE = easing(BALL);
+const RIM_TICKS = ticks(RIM, RIM_TURNS);
+
 export function Wheel({
   /** Where the ball is sitting, or null while it is still in the air. */
   pocket,
@@ -116,6 +141,8 @@ export function Wheel({
    * rather than as a loading spinner.
    */
   const turning = spinning && pocket !== null;
+  useSpinSound(turning, spinMs, { rimAt: RIM_AT, dropAt: DROP_AT, ticks: RIM_TICKS });
+  useCalledSound(pocket, turning);
   /*
    * The pocket is `home` degrees round *from the rim*, so once the rim can
    * stop anywhere the ball has to be sent that much further. These two are
@@ -124,6 +151,8 @@ export function Wheel({
    * one, which is the worst way for this to be wrong.
    */
   const style = {
+    "--rim-ease": RIM_EASE,
+    "--ball-ease": BALL_EASE,
     "--rim-rest": `${rest}deg`,
     "--rim-from": `${rest + RIM_TURNS * 360}deg`,
     "--ball-to": `${home + rest}deg`,
