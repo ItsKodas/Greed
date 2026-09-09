@@ -37,6 +37,21 @@
   stroke-width: 0.6;
 }
 
+/*
+ * Where the rim is left standing between spins.
+ *
+ * It has to be stated here and not merely held by the animation, because the
+ * animation is dropped the moment the wheel leaves the spinning state — it
+ * stops before the ball does. Without this the rim would snap back to zero at
+ * the instant it settled, with the ball still hunting, which is a worse bug
+ * than the one this replaced.
+ */
+.rl__wheel-rim {
+  transform-box: view-box;
+  transform-origin: 50px 50px;
+  transform: rotate(var(--rim-rest, 0deg));
+}
+
 .rl__pocket {
   stroke: var(--rl-brass);
   stroke-width: 0.25;
@@ -185,6 +200,12 @@
  * read, and a still wheel gives the ball its last seconds alone. Which is the
  * moment everyone at the table is actually waiting for.
  *
+ * It also stops somewhere different every time. What has to be whole is the
+ * number of turns, not the finish: whole turns keep a pocket its own angle
+ * away from wherever the rim ended, and the ball is sent that much further to
+ * meet it. Pinning the finish to zero made that arithmetic free and made the
+ * wheel park identically every spin, which reads as a machine resetting.
+ *
  * Sampled to six decimals and densely over the last stretch: at four decimals
  * the tail collapses into a couple of visible steps, because near 1.0 there is
  * no resolution left to describe a creep.
@@ -266,10 +287,10 @@
 
 @keyframes rl-rim {
   from {
-    transform: rotate(var(--rim-from, 1080deg));
+    transform: rotate(var(--rim-from, 1440deg));
   }
   to {
-    transform: rotate(0deg);
+    transform: rotate(var(--rim-rest, 0deg));
   }
 }
 

@@ -1,5 +1,5 @@
 import { POCKETS, WHEEL, colourOf } from "@backroom/game-roulette";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useState } from "react";
 
 /**
  * The wheel.
@@ -48,11 +48,12 @@ function wedge(at: number, inner: number, outer: number): string {
 /**
  * How far the rim turns while the ball is in the air.
  *
- * A whole number of turns, so the rim finishes exactly where it started and a
- * pocket at rest is where {@link angleOf} says it is. That is what lets the
- * ball's landing angle be the pocket's own angle and nothing more — the two
- * would otherwise have to be reconciled every spin, which is the sort of
- * arithmetic that is right until somebody changes one of the numbers.
+ * A whole number of *turns*, which is not the same as finishing in the same
+ * place — and the difference is the whole of this. Whole turns keep the rim's
+ * travel a multiple of a full revolution, so a pocket is always its own angle
+ * away from wherever the rim finished. Where it finishes is then free, and it
+ * has to be: a wheel that parks at the same orientation every spin is a
+ * machine resetting itself, and it is obvious after two goes.
  */
 const RIM_TURNS = 4;
 
@@ -90,6 +91,24 @@ export function Wheel({
   const ball = pocket === null ? null : point(home, 41);
 
   /*
+   * Where the rim is left standing, which is different every spin.
+   *
+   * A real wheel is not re-set between games: it stops where it stops and the
+   * next spin starts from there. This keeps that, and picks a new resting
+   * place at the moment a spin begins rather than in an effect afterwards —
+   * an effect would render one frame with the old one and the wheel would
+   * jump as it started.
+   */
+  const [rest, setRest] = useState(() => Math.random() * 360);
+  const [spun, setSpun] = useState(spinning);
+  if (spinning !== spun) {
+    setSpun(spinning);
+    if (spinning) {
+      setRest(Math.random() * 360);
+    }
+  }
+
+  /*
    * Where each thing ends, handed to CSS as angles it can animate towards.
    *
    * The rim goes one way and the ball the other, which is not decoration: it
@@ -97,10 +116,18 @@ export function Wheel({
    * rather than as a loading spinner.
    */
   const turning = spinning && pocket !== null;
+  /*
+   * The pocket is `home` degrees round *from the rim*, so once the rim can
+   * stop anywhere the ball has to be sent that much further. These two are
+   * written next to each other deliberately: if they ever drift apart the ball
+   * lands visibly in the wrong number while the table pays out on the right
+   * one, which is the worst way for this to be wrong.
+   */
   const style = {
-    "--rim-from": `${RIM_TURNS * 360}deg`,
-    "--ball-from": `${home - BALL_TURNS * 360}deg`,
-    "--ball-to": `${home}deg`,
+    "--rim-rest": `${rest}deg`,
+    "--rim-from": `${rest + RIM_TURNS * 360}deg`,
+    "--ball-to": `${home + rest}deg`,
+    "--ball-from": `${home + rest - BALL_TURNS * 360}deg`,
     "--spin-ms": `${spinMs}ms`,
   } as CSSProperties;
 

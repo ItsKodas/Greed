@@ -27,30 +27,69 @@ describe("where the ball ends up", () => {
     expect(angleOf(WHEEL.at(-1) as number)).toBeCloseTo((360 / POCKETS) * 36, 6);
   });
 
-  it("sends the ball to the pocket's own angle", () => {
-    // The landing angle is the pocket's angle and nothing else. Anything added
-    // here is a second source of truth about where the ball goes.
+  it("brings the ball round a whole number of times to get there", () => {
+    /*
+     * Where it lands is the pocket's business — see "still puts the ball in the
+     * true pocket" below. What this pins is the travel: the ball must arrive
+     * from a whole number of turns away, or the number of revolutions changes
+     * with the pocket and a spin to 32 looks visibly longer than a spin to 3.
+     */
     const { container } = render(<Wheel pocket={17} spinning />);
-    expect(styleOf(container).getPropertyValue("--ball-to")).toBe(`${angleOf(17)}deg`);
+    const style = styleOf(container);
+    const from = Number.parseFloat(style.getPropertyValue("--ball-from"));
+    const to = Number.parseFloat(style.getPropertyValue("--ball-to"));
+    expect((to - from) % 360).toBe(0);
+    expect(to - from).toBeGreaterThan(0);
   });
 
   it("turns the rim a whole number of times", () => {
     /*
-     * What makes the line above true, and it is now load-bearing twice over.
-     *
-     * The rim carries the pockets, so it has to finish exactly where it started
-     * or a pocket at rest is no longer where the geometry says it is — and the
-     * ball would need the rim's final rotation added to its own, every spin.
-     *
-     * The rim also stops before the ball does, and its animation is dropped
-     * when the wheel leaves the spinning state. A whole number of turns is why
-     * that costs nothing: the held final frame and the untransformed rim are
-     * the same picture, so the wheel does not jump at the moment it settles.
+     * The rim carries the pockets, so the *amount* it turns has to be whole
+     * turns. Where it ends up is free — see the test below — but how far it
+     * travels is not: anything else and a pocket at rest is no longer the
+     * pocket's own angle away from where the rim finished.
      */
     const { container } = render(<Wheel pocket={17} spinning />);
-    const from = Number.parseFloat(styleOf(container).getPropertyValue("--rim-from"));
-    expect(from % 360).toBe(0);
-    expect(from).toBeGreaterThan(0);
+    const style = styleOf(container);
+    const from = Number.parseFloat(style.getPropertyValue("--rim-from"));
+    const rest = Number.parseFloat(style.getPropertyValue("--rim-rest"));
+    expect((from - rest) % 360).toBe(0);
+    expect(from - rest).toBeGreaterThan(0);
+  });
+
+  it("does not park in the same place every time", () => {
+    /*
+     * A wheel that finishes at the same orientation every spin is a machine
+     * resetting itself, and it is obvious after two goes. This was the earlier
+     * behaviour, because pinning the rim's finish to zero made the landing
+     * arithmetic free — the fix is to keep the *amount* whole and let the
+     * finish fall where it likes.
+     */
+    const seen = new Set<string>();
+    for (let go = 0; go < 12; go += 1) {
+      const { container } = render(<Wheel pocket={17} spinning />);
+      seen.add(styleOf(container).getPropertyValue("--rim-rest"));
+      cleanup();
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("still puts the ball in the true pocket wherever the rim finishes", () => {
+    /*
+     * The whole reason the rim's finish could not move before. A pocket sits at
+     * its own angle *from the rim*, so once the rim stops somewhere other than
+     * zero the ball has to be sent that much further round — and if these two
+     * ever drift apart the ball lands visibly in the wrong number while the
+     * table pays out on the right one.
+     */
+    for (let go = 0; go < 8; go += 1) {
+      const { container } = render(<Wheel pocket={17} spinning />);
+      const style = styleOf(container);
+      const rest = Number.parseFloat(style.getPropertyValue("--rim-rest"));
+      const to = Number.parseFloat(style.getPropertyValue("--ball-to"));
+      expect(to - rest).toBeCloseTo(angleOf(17), 6);
+      cleanup();
+    }
   });
 
   it("sends the ball the opposite way to the rim", () => {
