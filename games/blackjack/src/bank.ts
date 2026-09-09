@@ -106,3 +106,45 @@ export function worstCase(stake: number): { back: number; staked: number } {
   }
   return worst;
 }
+
+/**
+ * The most this bank could owe a whole round that opened at these bets.
+ *
+ * `worstCase` answers about a seat, and a blackjack round is not a seat: the
+ * dealer turns one hand over and every seat at the table settles against it,
+ * so a felt of six players each holding the cap is six times the exposure the
+ * cap was derived to cover. The bank ran out partway down the row and the last
+ * winner was handed their stake back instead of their winnings — nothing
+ * minted, which is why it was quiet, and somebody short-paid all the same.
+ *
+ * Summed rather than multiplied, because `worstCase` floors and a sum of
+ * floors is not the floor of a sum. It is the same shape as its per-seat
+ * cousin for the same reason: what goes back to the players, and what they put
+ * up along the way, so the guarantee reads identically at either size.
+ */
+export function roundWorstCase(stakes: Iterable<number>): { back: number; staked: number } {
+  let back = 0;
+  let staked = 0;
+  for (const stake of stakes) {
+    const worst = worstCase(stake);
+    back += worst.back;
+    staked += worst.staked;
+  }
+  return { back, staked };
+}
+
+/**
+ * The largest opening bet a seat may add to a round already carrying these.
+ *
+ * The cap as a budget for the felt rather than an allowance per chair. `bank`
+ * is what the bank holds that this round has no claim on yet — the stakes
+ * already down are in there, and they are the very chips those seats may have
+ * to be paid out of, so they buy nobody else a bigger hand.
+ *
+ * With an empty felt this is exactly `maxStake`, which is the point: the old
+ * answer was never wrong, only incomplete.
+ */
+export function maxStakeAgainst(bank: number, committed: Iterable<number>): number {
+  const round = roundWorstCase(committed);
+  return maxStake(bank - (round.back - round.staked));
+}

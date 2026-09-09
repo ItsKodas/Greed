@@ -1,7 +1,7 @@
 import type { BotMove, Clock, GameAdapter } from "@backroom/core";
 import { seatLimit, TableError } from "@backroom/core";
 import { betFor, decide, thinkingTime, upcardValue } from "./bot.js";
-import { maxStake } from "./bank.js";
+import { maxStake, maxStakeAgainst } from "./bank.js";
 import { value } from "./hand.js";
 import { BLACKJACK } from "./listing.js";
 import { Table, TURN_MS } from "./table.js";
@@ -116,15 +116,44 @@ export function blackjackAdapter(
            * worst hand — split, both doubled, both won — has to be payable out
            * of what is in there, and a bet the bank cannot cover is refused
            * rather than paid out of nothing later.
+           *
+           * A budget for the round rather than an allowance per chair, because
+           * the dealer turns one hand over and every seat settles against it.
+           * Six players each holding the per-seat cap is six times the
+           * exposure that cap was derived to cover: the bank emptied partway
+           * down the row and the last winner got their stake back instead of
+           * their winnings.
            */
-          if (bank !== null && amount > maxStake(await bank.holds())) {
-            table.bet(seatId, already);
-            const cap = maxStake(await bank.holds());
-            throw new TableError(
-              cap < 1
-                ? "The bank is empty. Nothing to play for yet."
-                : `The bank covers ${cap.toLocaleString("en-US")} a hand at the moment.`,
-            );
+          if (bank !== null) {
+            /*
+             * The stakes already on this felt come back out of what the bank
+             * holds. They went in as they were placed, so asking the bank
+             * partway through a betting window gives a fatter answer every
+             * time somebody bets — and the chips making it fatter are the very
+             * ones those seats may have to be paid out of. Counting them as
+             * headroom is how a table talked itself into a round it could not
+             * settle.
+             */
+            // Asked first, and the felt read after it without yielding in
+            // between: a bet landing mid-question would otherwise be counted
+            // in the bank and not on the table, which is the fatter answer
+            // again by another route.
+            const held = await bank.holds();
+            const others = table.seats
+              .filter((other) => other.id !== seatId)
+              .map((other) => other.hands[0]?.bet ?? 0);
+            const free = held - others.reduce((total, bet) => total + bet, 0) - already;
+            const cap = maxStakeAgainst(free, others);
+            if (amount > cap) {
+              table.bet(seatId, already);
+              throw new TableError(
+                cap < 1
+                  ? maxStake(free) < 1
+                    ? "The bank is empty. Nothing to play for yet."
+                    : "The bank is covering the rest of this hand. Wait for the next one."
+                  : `The bank covers ${cap.toLocaleString("en-US")} more on this hand.`,
+              );
+            }
           }
           // Only the difference, so changing a bet before the deal does not
           // charge twice for the same hand.
@@ -489,21 +518,29 @@ export function blackjackAdapter(
         if (seat.back > 0) {
           /*
            * Out of the bank before it reaches the account, and only if the
-           * bank actually holds it. The stake cap means this cannot refuse —
-           * which is exactly why it is checked. The alternative to checking is
-           * a bank that goes negative in silence and a table that has quietly
-           * started minting chips, which is the thing this whole arrangement
-           * exists to prevent.
+           * bank actually holds it.
            *
-           * If it ever does refuse, the player keeps their stake rather than
-           * being paid winnings the building has not got: the stakes are
-           * already in the bank, so handing back what went in is the one
-           * answer that moves no chips that do not exist.
+           * What the round budget guarantees is this table: every seat's worst
+           * hand was checked against the bank as it stood before any of this
+           * round's chips landed, so no arrangement of this felt can empty it.
+           * What it cannot guarantee is the building — every blackjack table
+           * is paid from the one bank, and another of them settling between
+           * this seat and the next takes chips this round was counting on. So
+           * it is still asked rather than assumed, because the alternative to
+           * asking is a bank that goes negative in silence and a table that
+           * has quietly started minting chips, which is the thing this whole
+           * arrangement exists to prevent.
+           *
+           * If it does refuse, the player keeps their stake rather than being
+           * paid winnings the building has not got — and only as much of it as
+           * the bank can still find, because handing back a stake out of a
+           * bank that no longer holds it is minting in the one branch nobody
+           * watches.
            */
           if (bank !== null && !(await bank.take(seat.back))) {
-            if (seat.out > 0) {
-              await bank.take(Math.min(seat.out, await bank.holds()));
-              await deps.give(seat.userId, seat.out);
+            const rescued = Math.min(seat.out, await bank.holds());
+            if (rescued > 0 && (await bank.take(rescued))) {
+              await deps.give(seat.userId, rescued);
             }
           } else {
             await deps.give(seat.userId, seat.back);
