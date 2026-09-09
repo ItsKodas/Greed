@@ -214,19 +214,19 @@
  * `linear()`.
  */
 .rl__wheel--spinning .rl__wheel-rim {
-  animation: rl-rim calc(var(--spin-ms, 7000ms) * 0.82) cubic-bezier(0.25, 0.55, 0.3, 1) forwards;
+  animation: rl-rim calc(var(--spin-ms, 8500ms) * 0.84) cubic-bezier(0.25, 0.55, 0.3, 1) forwards;
   animation-timing-function: var(--rim-ease);
   transform-box: view-box;
   transform-origin: 50px 50px;
 }
 
 .rl__wheel--spinning .rl__ball-arm {
-  animation: rl-ball-round var(--spin-ms, 7000ms) cubic-bezier(0.22, 0.52, 0.3, 1) forwards;
+  animation: rl-ball-round var(--spin-ms, 8500ms) cubic-bezier(0.22, 0.52, 0.3, 1) forwards;
   animation-timing-function: var(--ball-ease);
 }
 
 .rl__wheel--spinning .rl__ball {
-  animation: rl-ball-fall var(--spin-ms, 7000ms) ease-in-out forwards;
+  animation: rl-ball-fall var(--spin-ms, 8500ms) ease-in-out forwards;
 }
 
 @keyframes rl-rim {

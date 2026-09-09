@@ -33,8 +33,14 @@ export interface Profile {
 /**
  * The wheel: heavy, on a bearing, so it barely slows and then gives its speed
  * up over most of the spin.
+ *
+ * The tail is the number that matters and it has been raised twice. Higher
+ * means the deceleration eases off further as the wheel settles, so the last
+ * of the speed goes slowly instead of at the rate the middle of the spin was
+ * losing it — which is the difference between a wheel running down and a wheel
+ * being stopped, and is what "still slowing too quickly at the end" was.
  */
-export const RIM: Profile = { free: 0.15, keep: 0.98, tail: 1.35 };
+export const RIM: Profile = { free: 0.15, keep: 0.98, tail: 1.8 };
 
 /**
  * The ball: a hard rim holds its speed almost completely, and then it comes

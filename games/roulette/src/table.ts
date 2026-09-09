@@ -38,7 +38,7 @@ export const LAST_CALL_MS = 5_000;
  * length — with a curve that coasts, eleven was simply a long wait between
  * bets. Seven, with the coast doing the work.
  */
-export const SPIN_MS = 7_000;
+export const SPIN_MS = 8_500;
 
 /** How long a finished spin stays up to be read. */
 export const SETTLE_MS = 6_000;

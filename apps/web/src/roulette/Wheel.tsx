@@ -57,7 +57,7 @@ function wedge(at: number, inner: number, outer: number): string {
  * has to be: a wheel that parks at the same orientation every spin is a
  * machine resetting itself, and it is obvious after two goes.
  */
-const RIM_TURNS = 4;
+const RIM_TURNS = 5;
 
 /**
  * How many times the ball goes round before it drops. Opposite way to the rim.
@@ -66,7 +66,7 @@ const RIM_TURNS = 4;
  * revolutions is a faster ball, and a ball that is still visibly travelling
  * late in the spin is the difference between coasting and grinding to a halt.
  */
-const BALL_TURNS = 11;
+const BALL_TURNS = 13;
 
 /**
  * Where the wheel stops and where the ball drops, as shares of the spin.
@@ -74,7 +74,7 @@ const BALL_TURNS = 11;
  * These two still live in the stylesheet as well, in the rim's duration and in
  * the fall's keyframes, because neither can be expressed any other way.
  */
-const RIM_AT = 0.82;
+const RIM_AT = 0.84;
 const DROP_AT = 0.55;
 
 /*
@@ -105,7 +105,7 @@ export function Wheel({
    * this long before it settles the cloth. If the two disagree the felt either
    * announces a number the ball has not reached or sits on a finished spin.
    */
-  spinMs = 7_000,
+  spinMs = 8_500,
 }: {
   pocket: number | null;
   spinning?: boolean;
