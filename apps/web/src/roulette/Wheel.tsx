@@ -54,7 +54,7 @@ function wedge(at: number, inner: number, outer: number): string {
  * would otherwise have to be reconciled every spin, which is the sort of
  * arithmetic that is right until somebody changes one of the numbers.
  */
-const RIM_TURNS = 6;
+const RIM_TURNS = 4;
 
 /**
  * How many times the ball goes round before it drops. Opposite way to the rim.
@@ -63,7 +63,7 @@ const RIM_TURNS = 6;
  * revolutions is a faster ball, and a ball that is still visibly travelling
  * late in the spin is the difference between coasting and grinding to a halt.
  */
-const BALL_TURNS = 14;
+const BALL_TURNS = 11;
 
 export function Wheel({
   /** Where the ball is sitting, or null while it is still in the air. */
@@ -79,7 +79,7 @@ export function Wheel({
    * this long before it settles the cloth. If the two disagree the felt either
    * announces a number the ball has not reached or sits on a finished spin.
    */
-  spinMs = 11_000,
+  spinMs = 7_000,
 }: {
   pocket: number | null;
   spinning?: boolean;

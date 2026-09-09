@@ -32,13 +32,13 @@ export const LAST_CALL_MS = 5_000;
 /**
  * How long the ball is in the air.
  *
- * Long, deliberately. A roulette spin is the one moment at this table where
- * nothing is being decided by anybody and everyone is watching the same thing,
- * and cutting it short to get back to the betting window trades away the only
- * part of the game that is pure anticipation. Six seconds read as a ball
- * fighting its way to a stop; this is a ball coasting.
+ * Long enough to be worth watching and short enough to sit through, which is a
+ * narrower window than it sounds. Six seconds felt like a ball fighting its way
+ * to a stop, but that turned out to be the deceleration curve rather than the
+ * length — with a curve that coasts, eleven was simply a long wait between
+ * bets. Seven, with the coast doing the work.
  */
-export const SPIN_MS = 11_000;
+export const SPIN_MS = 7_000;
 
 /** How long a finished spin stays up to be read. */
 export const SETTLE_MS = 6_000;
