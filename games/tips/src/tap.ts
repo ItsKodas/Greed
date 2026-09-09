@@ -35,6 +35,7 @@ export function emptyJar(now: number, token: string): Jar {
     paidThisNight: 0,
     token,
     rhythm: [],
+    lastTapAt: null,
   };
 }
 
@@ -54,7 +55,7 @@ export function rollNight(jar: Jar, now: number): Jar {
 
 /** The gap since the last accepted tap, or null when this is the first. */
 function lastGap(jar: Jar, now: number): number | null {
-  return jar.rhythm.length === 0 && jar.levelAt === jar.nightStartedAt ? null : now - jar.levelAt;
+  return jar.lastTapAt === null ? null : now - jar.lastTapAt;
 }
 
 export function tap(jar: Jar, now: number, token: string, mint: () => string): Outcome {
@@ -90,7 +91,10 @@ export function tap(jar: Jar, now: number, token: string, mint: () => string): O
   const rhythm = gap === null ? rolled.rhythm : remember(rolled.rhythm, gap);
   if (tooEven(rhythm)) {
     // Refused *before* the level is touched, so nothing is lost by tripping it.
-    return refuse(REFUSALS.even, rolled);
+    // The gap still goes in, though: it is the sample that tripped the check,
+    // and a jar whose recorded rhythm is missing the very gap it judged is a
+    // jar lying to the next check about what it saw.
+    return refuse(REFUSALS.even, { ...rolled, rhythm });
   }
 
   const paidThisNight = rolled.paidThisNight + pay;
@@ -104,6 +108,7 @@ export function tap(jar: Jar, now: number, token: string, mint: () => string): O
       favours: rolled.favours + favoursFor(rolled.paidThisNight, paidThisNight),
       paidThisNight,
       rhythm,
+      lastTapAt: now,
       token: mint(),
     },
   };
@@ -156,6 +161,9 @@ export function buy(
       ...rolled,
       level,
       levelAt: now,
+      // lastTapAt is deliberately untouched: it clocks taps, not writes to the
+      // jar. If a buy moved it, the interval floor would measure a tap's gap
+      // from a buy that came after it instead of from the tap itself.
       favours: rolled.favours - upgrade.favours,
       bought: [...rolled.bought, upgrade.id],
       token: mint(),

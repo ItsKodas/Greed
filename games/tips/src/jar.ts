@@ -21,6 +21,15 @@ export interface Jar {
   token: string;
   /** The last dozen accepted gaps between taps, in ms. */
   rhythm: number[];
+  /**
+   * When the last ACCEPTED tap landed, or null when there has not been one.
+   *
+   * Not inferred from `levelAt`: `buy` also moves `levelAt` (to carry the
+   * level across an upgrade at the *old* numbers), so two fields that can
+   * coincide by construction are not a reliable signal of "a tap happened
+   * here." The interval floor needs its own clock.
+   */
+  lastTapAt: number | null;
 }
 
 /** What a jar's three numbers are, once its upgrades are accounted for. */

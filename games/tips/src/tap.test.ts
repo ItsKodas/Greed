@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { REFUSALS, buy, emptyJar, rollNight, tap } from "./tap.js";
+import { REFUSALS, buy, emptyJar, rollNight, tap, type Outcome } from "./tap.js";
 import { NIGHT_MS, levelAt, type Jar } from "./jar.js";
 import { BASE, FAVOUR_PER_CHIPS, MAX, numbersFor } from "./ladder.js";
+import { RHYTHM_MIN_SAMPLES } from "./rhythm.js";
 
 /** Deterministic tokens, so a test can say which one it means. */
 function minter() {
@@ -54,6 +55,21 @@ describe("a tap", () => {
     expect(tooSoon.ok === false && tooSoon.error).toBe(REFUSALS.fast);
   });
 
+  it("still enforces the floor on the tap right after one that rolled the night", () => {
+    // Finding 1: a jar left idle past NIGHT_MS has levelAt === nightStartedAt
+    // and an empty rhythm before the tap, and again right after it (both get
+    // set to `now`). Those two fields coinciding is not evidence a tap just
+    // happened — lastTapAt is what tracks that, and this is the case that
+    // catches a lastGap built from the wrong fields.
+    const jar = full();
+    const first = tap(jar, NIGHT_MS + 1, jar.token, minter());
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const tooSoon = tap(first.jar, NIGHT_MS + 2, first.jar.token, minter());
+    expect(tooSoon.ok).toBe(false);
+    expect(tooSoon.ok === false && tooSoon.error).toBe(REFUSALS.fast);
+  });
+
   it("refuses a metronome once there is enough of it to judge", () => {
     let jar = full({ level: MAX.brim });
     const mint = minter();
@@ -69,6 +85,32 @@ describe("a tap", () => {
       }
     }
     expect(refused).toBe(REFUSALS.even);
+  });
+
+  it("keeps the gap that tripped a rhythm refusal, instead of throwing it away", () => {
+    // Finding 3: a refusal used to hand back `rolled` — the jar exactly as it
+    // stood before this attempt — so the gap that tripped tooEven was
+    // computed only to be thrown away. The refused jar's rhythm should hold
+    // all eight recorded gaps, ending in the one that tripped it, not the
+    // seven that came before: the layer that judges a hand's evenness must
+    // itself remember every gap it judged, or a later check is reasoning
+    // about a rhythm that never actually happened.
+    let jar = full({ level: MAX.brim });
+    const mint = minter();
+    let at = 0;
+    let refused: Outcome | null = null;
+    for (let i = 0; i < 12 && refused === null; i++) {
+      at += 100;
+      const out = tap(jar, at, jar.token, mint);
+      jar = out.jar;
+      if (!out.ok) {
+        refused = out;
+      }
+    }
+    expect(refused?.ok).toBe(false);
+    expect(refused?.ok === false && refused.error).toBe(REFUSALS.even);
+    expect(jar.rhythm).toHaveLength(RHYTHM_MIN_SAMPLES);
+    expect(jar.rhythm.at(-1)).toBe(100);
   });
 
   it("takes what is left when the jar holds less than a scoop", () => {
@@ -198,6 +240,22 @@ describe("buying an upgrade", () => {
   it("does not record a rhythm sample", () => {
     const out = buy(full({ favours: 20 }), 0, "t0", "glass", minter());
     expect(out.jar.rhythm).toEqual([]);
+  });
+
+  it("does not make the next tap look too fast, even a few ms after the buy", () => {
+    // Finding 2: buy moves levelAt (to carry the level across at the old
+    // numbers) but must not move lastTapAt. The real last tap here is at
+    // 1_000; the buy at 1_060 is not a tap and must not reset the clock the
+    // interval floor reads from.
+    const mint = minter();
+    const first = tap(full({ favours: 20 }), 1_000, "t0", mint);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const bought = buy(first.jar, 1_060, first.jar.token, "glass", mint);
+    expect(bought.ok).toBe(true);
+    if (!bought.ok) return;
+    const second = tap(bought.jar, 1_065, bought.jar.token, mint);
+    expect(second.ok).toBe(true);
   });
 });
 

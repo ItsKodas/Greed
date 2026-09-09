@@ -13,6 +13,7 @@ function jar(over: Partial<Jar> = {}): Jar {
     paidThisNight: 0,
     token: "t0",
     rhythm: [],
+    lastTapAt: null,
     ...over,
   };
 }
