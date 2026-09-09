@@ -48,9 +48,17 @@ describe("the wheel", () => {
   });
 
   it("only ever lands in a pocket that exists", () => {
+    const any = (pockets: number) => Math.floor(Math.random() * pockets);
     for (let go = 0; go < 500; go += 1) {
-      expect(WHEEL).toContain(spin());
+      expect(WHEEL).toContain(spin(any));
     }
+  });
+
+  it("reaches every pocket, including both ends", () => {
+    // A source returning the last index must not run off the end, which is the
+    // classic off-by-one in exactly this shape of lookup.
+    expect(spin(() => 0)).toBe(WHEEL[0]);
+    expect(spin((pockets) => pockets - 1)).toBe(WHEEL.at(-1));
   });
 
   it("can be handed a source, so a test can say where the ball went", () => {

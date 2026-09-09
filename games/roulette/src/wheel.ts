@@ -1,5 +1,3 @@
-import { randomInt } from "node:crypto";
-
 /**
  * The wheel: thirty-seven pockets, one zero.
  *
@@ -52,8 +50,14 @@ export function colourOf(pocket: number): Colour | null {
 /**
  * Where the ball lands.
  *
- * From a cryptographic source by default, because this is the one number in
- * the building a player could otherwise learn to predict: a table hands every
+ * The source is always handed in, never defaulted. This module is imported by
+ * the felt as well as by the server — the client needs the wheel's order and
+ * its colours to draw one — and a default would have meant reaching for
+ * `node:crypto` here, in a file that has to run in a browser.
+ *
+ * Handing it in is the better shape regardless. The server passes the same
+ * cryptographic source the reels use, because this is the one number in the
+ * building a player could otherwise learn to predict: a table hands every
  * watcher its whole result every spin, which is exactly the run of
  * observations needed to recover `Math.random`'s state and call the next one.
  *
@@ -61,6 +65,6 @@ export function colourOf(pocket: number): Colour | null {
  * went in the third pocket" without knowing which number that is, and so the
  * wheel's order stays the only place that mapping lives.
  */
-export function spin(pick: (pockets: number) => number = randomInt): number {
+export function spin(pick: (pockets: number) => number): number {
   return WHEEL[pick(POCKETS)] as number;
 }
