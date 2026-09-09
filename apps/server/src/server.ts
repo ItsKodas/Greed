@@ -1578,7 +1578,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
 
   // Joined on a character no id can contain, so no pair of them can be made to
   // spell another pair's key.
-  const openKey = (userId: string, game: string) => `${userId} ${game}`;
+  const openKey = (userId: string, game: string) => `${userId}\u0000${game}`;
 
   /**
    * One window per game, per account.
