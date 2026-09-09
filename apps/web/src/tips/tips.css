@@ -1,0 +1,282 @@
+/*
+ * The bar's corner.
+ *
+ * One column, phone width first: the jar is the screen, so everything else —
+ * what it said, tonight's figure, the ladder — sits under it in the order a
+ * thumb would reach for it, and nothing here is wide enough to need its own
+ * horizontal scroll.
+ */
+
+.tips {
+  min-height: 100dvh;
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-4);
+  /* Inset on both sides, like every other page — not decoration, see
+     slots.css's note on why a page cannot run flush to the edge. */
+  padding: var(--gr-space-4) var(--gr-space-5) var(--gr-space-6);
+}
+
+.tips__loading {
+  margin: var(--gr-space-6) 0 0;
+  text-align: center;
+  color: var(--gr-color-ink-dim);
+}
+
+.tips__floor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-4);
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------- the jar */
+
+/*
+ * The tap target itself — the whole glass, not a button drawn near it. Full
+ * width and tall enough that a thumb never has to aim, because this is the
+ * one control on the page that gets pressed over and over.
+ */
+.jar {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.jar:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.jar:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 4px;
+  border-radius: var(--gr-radius-md);
+}
+
+.jar__wobble {
+  display: block;
+}
+
+.jar__glass {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 55vh;
+}
+
+.jar__outline {
+  fill: rgb(255 255 255 / 0.03);
+  stroke: var(--gr-color-ink-faint);
+  stroke-width: 3;
+}
+
+.jar__lid {
+  fill: var(--gr-color-smoke-lit);
+  stroke: var(--gr-color-shadow);
+  stroke-width: 2;
+}
+
+/*
+ * The liquid, moved rather than replaced. Its own short transition rather
+ * than nothing at all: the creep already arrives a frame at a time from the
+ * rAF loop, and without an easing on top of it the fill would step instead
+ * of rise.
+ */
+.jar__liquid {
+  fill: var(--gr-color-neon);
+  transition:
+    y 160ms linear,
+    height 160ms linear;
+}
+
+.jar__shine {
+  fill: var(--gr-color-neon-hi);
+  opacity: 0.6;
+}
+
+/*
+ * The one motion the jar is allowed, and only once per accepted tap — see
+ * Jar.tsx for why this hangs off a remounted `key` instead of a class that
+ * would have to be turned off again to replay.
+ */
+.jar__wobble--tap {
+  transform-origin: 50% 100%;
+  animation: jar-wobble 420ms cubic-bezier(0.16, 1.4, 0.3, 1) both;
+}
+
+@keyframes jar-wobble {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  32% {
+    transform: scale(1.045, 0.96) rotate(-1.6deg);
+  }
+  64% {
+    transform: scale(0.98, 1.02) rotate(1.1deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* -------------------------------------------------------------- what it said */
+
+.tips__said {
+  min-height: 1.4em;
+  margin: 0;
+  text-align: center;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+/* ----------------------------------------------------------------- figures */
+
+/*
+ * The only two numbers on this page: what tonight has earned, and what it
+ * has bought you. The jar is the rest of the state — these are the two
+ * figures a player actually has to spend.
+ */
+.tips__figures {
+  display: flex;
+  justify-content: center;
+  gap: var(--gr-space-5);
+}
+
+.tips__figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tips__figure-label {
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gr-color-ink-faint);
+}
+
+.tips__figure-value {
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--gr-text-lg);
+  color: var(--gr-color-neon-hi);
+}
+
+/* ---------------------------------------------------------------- upgrades */
+
+.upgrades {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  min-width: 0;
+}
+
+.upgrades__label {
+  margin: 0;
+  font-size: var(--gr-text-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gr-color-ink-faint);
+}
+
+/*
+ * Its own scrolling box, not the page's. A ladder four deep growing the page
+ * instead would push the jar off the top the moment somebody opened it —
+ * this is the "list scrolls in its own box" half of the phone rule; the
+ * "nothing goes sideways" half is why every row below wraps instead of
+ * running wide.
+ */
+.upgrades__list {
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  max-height: 260px;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+.upgrades__buy {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--gr-space-1) var(--gr-space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--gr-space-2) var(--gr-space-3);
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-sm);
+  background: rgb(0 0 0 / 0.24);
+  color: var(--gr-color-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.upgrades__buy:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+}
+
+.upgrades__buy:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 2px;
+}
+
+.upgrades__buy:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.upgrades__buy--owned {
+  border-color: var(--gr-color-neon);
+  opacity: 1;
+}
+
+.upgrades__name {
+  font-weight: 600;
+}
+
+.upgrades__effect {
+  color: var(--gr-color-ink-dim);
+  font-size: var(--gr-text-sm);
+}
+
+.upgrades__cost {
+  margin-left: auto;
+  font-family: var(--gr-font-data);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-neon-hi);
+  white-space: nowrap;
+}
+
+.tips__gate {
+  text-align: center;
+}
+
+/* ------------------------------------------------------------------------ off */
+
+@media (prefers-reduced-motion: reduce) {
+  .jar__wobble--tap {
+    animation: none;
+  }
+
+  .jar__liquid {
+    transition: none;
+  }
+}
