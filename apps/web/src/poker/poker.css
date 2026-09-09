@@ -41,23 +41,55 @@
   /* Named once: the face and the clock drawn round it have to agree, and two
      copies of the same clamp is two things to keep in step. */
   --face: clamp(18px, 2.4cqw, 40px);
+  /*
+   * A name and a stack, which are one size for the same reason — they are read
+   * as one line about one person.
+   *
+   * The coefficient is what stops a desktop being handed the phone's floor. At
+   * 1.15cqw a 1080p felt landed on 11px exactly, so somebody at a full-sized
+   * monitor read the other nine seats at the size a phone reads them, beside a
+   * 23px face and a 41px card. It reaches its ceiling a little earlier now and
+   * sits there, which is what a legibility ceiling is for.
+   */
+  --seat-text: clamp(11px, 1.45cqw, 18px);
+  /*
+   * What the window has left for the felt, once everything that is not the
+   * felt has had its share: the bar and the last event above it, and the hand
+   * you are holding, the amount, the sizes and the three buttons below.
+   *
+   * `dvh` rather than `vh` because a phone's address bar is part of that
+   * budget. Measured with the hand-reading pill in place, because that is the
+   * tallest this page gets.
+   */
+  --spare: calc(100dvh - 470px);
+  /*
+   * The flattest a table is allowed to be, as a ratio.
+   *
+   * A real ten-handed table is about two to one across the rail, so this is
+   * the shape of a poker table rather than an arbitrary stop — a felt that
+   * reached it is not a compromise, it is furniture.
+   */
+  --flattest: 2;
 }
 
 /*
- * The felt takes the width it is given, and never more height than the screen
- * can spare.
+ * The felt takes the room it is in, and gives up its shape before its size.
  *
- * Its height comes from its width and its aspect, so on a wide monitor it grew
- * until the buttons went off the bottom — and the buttons are the one part of
- * this screen somebody has to be able to reach. So the width is capped by what
- * is left of the viewport once everything that is not the table has had its
- * share: the bar and the last event above it, and the amount, the sizes and
- * the three buttons below.
+ * The buttons are the one part of this screen somebody has to be able to
+ * reach, so the felt can never be taller than the window has spare. It used to
+ * pay for that in width: holding 16:10 whatever it cost, a 1080p window — 950
+ * pixels of page, less the 470 that are not the table — drew a 768px felt
+ * inside 1556px of room, and every card, name and chip on it is measured in
+ * `cqw`, so the whole drawing came out at half the size of the screen it was
+ * on. It looked right at 1440p only because the height budget there is
+ * generous enough that 16:10 fills the page anyway, which is why it survived.
  *
- * `dvh` rather than `vh` because a phone's address bar is part of that budget,
- * and 1.6 because that is the felt's own aspect — this is its height written
- * as a width. Everything on it is measured against this box, so the whole
- * drawing shrinks together rather than the cards outgrowing the table.
+ * So the felt takes the width, and lets the height cap flatten it instead. A
+ * `max-height` on a box whose width is already settled takes height away
+ * without taking width — the table stops being 16:10 and becomes the long oval
+ * it is in a room, which is the honest way to spend a screen that is wide and
+ * short. It stops at `--flattest`, and the width is capped there too so the
+ * two halves of the same rule cannot disagree.
  */
 @media (min-width: 561px) {
   .pk {
@@ -68,7 +100,33 @@
      * a short window would cross the breakpoint and push the buttons further
      * off the bottom than leaving it alone would have.
      */
-    max-width: max(580px, calc((100dvh - 470px) * 1.6));
+    max-width: max(580px, calc(var(--spare) * var(--flattest)));
+  }
+}
+
+/*
+ * On the container rather than the viewport, because this is the exact
+ * complement of the narrow felt below — that one is square on purpose, to give
+ * ten seats somewhere to go, and a height cap would flatten it back into the
+ * collisions it exists to avoid.
+ *
+ * Floored at the felt's own floor width over the flattest ratio, so that when
+ * the felt is holding its 580px minimum on a very short window it holds a
+ * table's shape with it rather than being squeezed into a letterbox.
+ */
+@container (min-width: 561px) {
+  .pk__table {
+    /*
+     * Stated rather than left to `auto`, and this is the whole trick.
+     *
+     * An automatic width and an aspect ratio are two ways of saying the same
+     * size, so a cap on the height travels back through the ratio and takes
+     * the width with it — which is the shrinking this rule exists to stop. A
+     * width that is already settled has nowhere to travel to, so the cap can
+     * only do what it says: take height.
+     */
+    width: 100%;
+    max-height: max(calc(580px / var(--flattest)), var(--spare));
   }
 }
 
@@ -129,7 +187,7 @@
  * `cqw` the seat is one drawing that gets bigger, like everything else here.
  */
 .pk__name {
-  font-size: clamp(11px, 1.15cqw, 18px);
+  font-size: var(--seat-text);
   color: var(--gr-color-ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -137,7 +195,7 @@
 }
 
 .pk__stack {
-  font-size: clamp(11px, 1.15cqw, 18px);
+  font-size: var(--seat-text);
   font-variant-numeric: tabular-nums;
   color: var(--gr-color-chip);
 }
