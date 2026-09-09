@@ -4,3 +4,6 @@
  */
 export { NIGHT_MS, levelAt } from "./jar.js";
 export type { Jar, Numbers } from "./jar.js";
+
+export { BASE, FAVOUR_PER_CHIPS, MAX, UPGRADES, favoursFor, numbersFor } from "./ladder.js";
+export type { Upgrade } from "./ladder.js";
