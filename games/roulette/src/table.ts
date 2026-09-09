@@ -1,0 +1,429 @@
+import { type Seat, type SeatIdentity, Seating, type TableStatus, TableError } from "@backroom/core";
+import { FUN_BANK, FUN_PURSE, MIN_CHIP } from "./bank.js";
+import { type Paid, type Placed, settle } from "./bets.js";
+import { spotAt } from "./spots.js";
+import { spin } from "./wheel.js";
+
+/**
+ * A roulette table.
+ *
+ * The shape that makes it different from the card tables: nobody has a turn.
+ * Everybody puts chips down at once inside one window, one wheel answers all
+ * of them, and the table has no idea whose decision it is waiting for because
+ * it is not waiting for anybody's. That removes turns, the turn clock and the
+ * skipped-and-folded machinery wholesale, and leaves a table that is really
+ * three timed phases going round.
+ */
+
+export type Phase = "betting" | "spinning" | "settled";
+
+/** How long the felt may be open for bets. The host picks one when they open. */
+export const WINDOWS = [15_000, 30_000, 60_000] as const;
+
+/**
+ * How much of the window takes no more chips, so a late chip is never a race.
+ *
+ * A ceiling rather than a flat figure — see {@link Table.lastCallMs}. Held to
+ * a third of the window, because a last call longer than the window is a table
+ * that refuses every bet ever offered to it.
+ */
+export const LAST_CALL_MS = 5_000;
+
+/** How long the ball is in the air. Long enough to watch, short enough to sit through. */
+export const SPIN_MS = 6_000;
+
+/** How long a finished spin stays up to be read. */
+export const SETTLE_MS = 6_000;
+
+/** How many results the table remembers, for the board beside the wheel. */
+export const HISTORY = 12;
+
+export interface SeatView {
+  id: string;
+  name: string;
+  connected: boolean;
+  waiting: boolean;
+  isBot: boolean;
+  avatar: string | null;
+  accentColor: number | null;
+  /** What this seat has on the cloth this spin. */
+  staked: number;
+  /** What the last spin handed them, or nothing if they were not in it. */
+  paid: number | null;
+  /** Play money left, at a for-fun table. Null anywhere else. */
+  purse: number | null;
+}
+
+export interface TableView {
+  code: string;
+  phase: Phase;
+  /** When the current phase runs out, absolute. Null when nothing is timing. */
+  deadline: number | null;
+  lastCall: boolean;
+  /** Where the ball went, once it has been decided. */
+  pocket: number | null;
+  /** Recent pockets, newest last. */
+  history: readonly number[];
+  /** Every chip on the cloth, everybody's. */
+  placed: readonly Placed[];
+  /** What the last spin paid, by seat. */
+  paid: readonly { seatId: string; name: string; back: number; staked: number }[];
+  /**
+   * What the bank holds.
+   *
+   * For showing only — so a felt can grey out a spot it cannot cover. Every
+   * bet is checked again on the way in, because a number a browser has been
+   * told is a number a browser can change.
+   */
+  bank: number;
+  seats: readonly SeatView[];
+  you: SeatView | null;
+  forFun: boolean;
+  hostId: string | null;
+  watching: number;
+  lastEvent: string | null;
+  window: number;
+}
+
+export class Table {
+  readonly code: string;
+  private readonly seating: Seating;
+  private readonly pick: (pockets: number) => number;
+
+  phase: Phase = "betting";
+  deadline: number | null = null;
+  pocket: number | null = null;
+  placed: Placed[] = [];
+  paid: Map<string, Paid> | null = null;
+  history: number[] = [];
+  /** Last spin's chips, by seat, so "same again" is one press. */
+  private previous = new Map<string, Placed[]>();
+
+  /** What the bank holds, kept fresh by the adapter purely so the view can say. */
+  bank = 0;
+  forFun = false;
+
+  /**
+   * Play money, for a table playing for nothing.
+   *
+   * Both of these live here and are gone when the table closes, which is the
+   * whole rule about play money: it never touches an account. A signed-in
+   * player at a for-fun table is spending these and not their chips, and the
+   * adapter reads `forFun` to decide which — getting that branch wrong is how
+   * a test table quietly spends somebody's real balance.
+   */
+  private readonly purses = new Map<string, number>();
+  funBank = FUN_BANK;
+  window: number = WINDOWS[1];
+  lastEvent: string | null = null;
+
+  constructor(
+    code: string,
+    maxSeats: number,
+    options: { pick?: (pockets: number) => number; window?: number } = {},
+  ) {
+    this.code = code;
+    this.seating = new Seating(maxSeats);
+    this.pick = options.pick ?? ((pockets) => Math.floor(Math.random() * pockets));
+    if (options.window !== undefined) {
+      this.window = options.window;
+    }
+    this.deadline = Date.now() + this.window;
+  }
+
+  // ------------------------------------------------------------- the room
+
+  get seats(): readonly Seat[] {
+    return this.seating.seats;
+  }
+  get hostId(): string | null {
+    return this.seating.hostId;
+  }
+  get isEmpty(): boolean {
+    return this.seating.isEmpty;
+  }
+  get maxSeats(): number {
+    return this.seating.limit;
+  }
+  get watching(): number {
+    return this.seating.watching;
+  }
+  get status(): TableStatus {
+    return this.isEmpty ? "over" : "playing";
+  }
+
+  /**
+   * Standing up mid-spin is honoured there and then.
+   *
+   * Nothing is owed to a seat that leaves: whatever they put on the cloth is
+   * already in the bank, and the wheel does not need them to finish. Holding
+   * the seat would be holding it for nothing.
+   */
+  readonly leavesMidHand = true;
+
+  /**
+   * A seat at the table.
+   *
+   * A chips table insists on knowing who you are; a for-fun one does not, for
+   * the same reason the machine's practice mode does not — nobody signs in to
+   * play for nothing.
+   */
+  join(id: string, name: string, identity: SeatIdentity | null): Seat {
+    return this.seating.join(id, name, this.status, identity, !this.forFun);
+  }
+  removeSeat(seatId: string): void {
+    this.seating.remove(seatId);
+    this.placed = this.placed.filter((one) => one.seatId !== seatId);
+    this.previous.delete(seatId);
+  }
+  disconnect(seatId: string): void {
+    this.seating.disconnect(seatId);
+  }
+  reconnect(seatId: string): Seat {
+    return this.seating.reconnect(seatId);
+  }
+  watch(socketId: string): void {
+    this.seating.watch(socketId);
+  }
+  unwatch(socketId: string): void {
+    this.seating.unwatch(socketId);
+  }
+
+  private seatOf(seatId: string): Seat {
+    const seat = this.seats.find((one) => one.id === seatId);
+    if (seat === undefined) {
+      throw new TableError("You are not at this table.");
+    }
+    return seat;
+  }
+
+  // ----------------------------------------------------------- the chips
+
+  /**
+   * How long before the window shuts that the table stops taking chips.
+   *
+   * Never more than a third of the window. Five seconds is right for the
+   * windows a host can actually pick, but as a flat figure it silently
+   * inverted on any window shorter than itself: the table opened already in
+   * last call and refused every bet for the whole of it.
+   */
+  get lastCallMs(): number {
+    return Math.min(LAST_CALL_MS, Math.floor(this.window / 3));
+  }
+
+  /** Whether the window is close enough to shutting to stop taking chips. */
+  get lastCall(): boolean {
+    if (this.phase !== "betting" || this.deadline === null) {
+      return false;
+    }
+    return this.deadline - Date.now() <= this.lastCallMs;
+  }
+
+  /** What one seat has on one spot. */
+  onSpot(seatId: string, spotId: string): number {
+    return this.placed.find((one) => one.seatId === seatId && one.spotId === spotId)?.chips ?? 0;
+  }
+
+  /** What one seat has on the cloth altogether. */
+  staked(seatId: string): number {
+    return this.placed
+      .filter((one) => one.seatId === seatId)
+      .reduce((sum, one) => sum + one.chips, 0);
+  }
+
+  /** How many separate piles this seat has down, which is what paces the bots. */
+  pilesFor(seatId: string): number {
+    return this.placed.filter((one) => one.seatId === seatId).length;
+  }
+
+  /**
+   * This seat's play money.
+   *
+   * Only meaningful at a for-fun table. Everywhere else a seat's limit is
+   * their account, which this class cannot see and has no business seeing.
+   */
+  purseFor(seatId: string): number {
+    if (!this.forFun) {
+      return Number.MAX_SAFE_INTEGER;
+    }
+    const purse = this.purses.get(seatId);
+    if (purse === undefined) {
+      this.purses.set(seatId, FUN_PURSE);
+      return FUN_PURSE;
+    }
+    return purse;
+  }
+
+  /** Moves play money. Positive puts chips back, negative takes them. */
+  movePurse(seatId: string, by: number): void {
+    this.purses.set(seatId, this.purseFor(seatId) + by);
+  }
+
+  /** What this seat had on the cloth last spin, so it can be put down again. */
+  lastRound(seatId: string): readonly Placed[] {
+    return this.previous.get(seatId) ?? [];
+  }
+
+  /**
+   * Everything this table would refuse a chip for, without moving anything.
+   *
+   * Separate from {@link place} so the adapter can find out whether a bet is
+   * allowed *before* it takes anybody's money. Placing first and unwinding
+   * afterwards looks equivalent and is not: a chip landing on a spot the seat
+   * already has chips on merges into that pile, so undoing it takes the whole
+   * pile back rather than the chip that was just added.
+   *
+   * The bank is not consulted here — the adapter does that, because what the
+   * bank holds is a question for the store and this class is deliberately
+   * synchronous. What is checked here is everything true of the table alone.
+   */
+  check(seatId: string, spotId: string, chips: number): void {
+    if (this.phase !== "betting") {
+      throw new TableError("The wheel is already turning.");
+    }
+    if (this.lastCall) {
+      throw new TableError("No more bets.");
+    }
+    this.seatOf(seatId);
+    if (spotAt(spotId) === null) {
+      throw new TableError("There is no such bet on this table.");
+    }
+    if (!Number.isInteger(chips) || chips < MIN_CHIP) {
+      throw new TableError(`The smallest chip here is ${MIN_CHIP}.`);
+    }
+  }
+
+  /** A chip down. Refuses exactly what {@link check} refuses. */
+  place(seatId: string, spotId: string, chips: number): void {
+    this.check(seatId, spotId, chips);
+    const already = this.placed.find((one) => one.seatId === seatId && one.spotId === spotId);
+    if (already === undefined) {
+      this.placed.push({ seatId, spotId, chips });
+    } else {
+      this.placed = this.placed.map((one) =>
+        one === already ? { ...one, chips: one.chips + chips } : one,
+      );
+    }
+  }
+
+  /** The last chip this seat put down, taken back. */
+  undo(seatId: string): void {
+    if (this.phase !== "betting") {
+      throw new TableError("The wheel is already turning.");
+    }
+    for (let at = this.placed.length - 1; at >= 0; at -= 1) {
+      if (this.placed[at]?.seatId === seatId) {
+        this.placed.splice(at, 1);
+        return;
+      }
+    }
+  }
+
+  /** Every chip this seat has down, taken back. */
+  clear(seatId: string): void {
+    if (this.phase !== "betting") {
+      throw new TableError("The wheel is already turning.");
+    }
+    this.placed = this.placed.filter((one) => one.seatId !== seatId);
+  }
+
+  // ---------------------------------------------------------- the phases
+
+  /**
+   * The window shuts and the ball goes in.
+   *
+   * A cloth with nothing on it does not turn the wheel. A stream of results
+   * nobody bet on is noise, and it would walk the history board along until
+   * the last real spin had scrolled off it. The felt is left exactly as it is
+   * and a fresh window opens — which is also what CLAUDE.md means by a table
+   * that holds with the felt untouched.
+   */
+  closeBetting(): void {
+    if (this.phase !== "betting") {
+      return;
+    }
+    if (this.placed.length === 0) {
+      this.deadline = Date.now() + this.window;
+      return;
+    }
+    this.pocket = spin(this.pick);
+    this.phase = "spinning";
+    this.deadline = Date.now() + SPIN_MS;
+    this.lastEvent = "No more bets.";
+  }
+
+  /** The ball drops, and the cloth is settled. */
+  land(): void {
+    if (this.phase !== "spinning" || this.pocket === null) {
+      return;
+    }
+    this.paid = settle(this.placed, this.pocket);
+    this.history = [...this.history, this.pocket].slice(-HISTORY);
+
+    this.previous = new Map();
+    for (const one of this.placed) {
+      this.previous.set(one.seatId, [...(this.previous.get(one.seatId) ?? []), { ...one }]);
+    }
+
+    this.phase = "settled";
+    this.deadline = Date.now() + SETTLE_MS;
+    this.lastEvent = `${this.pocket}`;
+  }
+
+  /** The cloth is swept and the next window opens. */
+  beginBetting(): void {
+    this.placed = [];
+    this.paid = null;
+    this.pocket = null;
+    this.phase = "betting";
+    this.deadline = Date.now() + this.window;
+    for (const seat of this.seating.seats) {
+      seat.waiting = false;
+    }
+  }
+
+  // ------------------------------------------------------------ the view
+
+  private seatView(seat: Seat): SeatView {
+    return {
+      id: seat.id,
+      name: seat.name,
+      connected: seat.connected,
+      waiting: seat.waiting,
+      isBot: seat.isBot,
+      avatar: seat.avatar,
+      accentColor: seat.accentColor,
+      staked: this.staked(seat.id),
+      paid: this.paid?.get(seat.id)?.back ?? null,
+      purse: this.forFun ? this.purseFor(seat.id) : null,
+    };
+  }
+
+  view(forSeatId: string | null): TableView {
+    const seats = this.seats.map((seat) => this.seatView(seat));
+    const paid = this.paid ?? new Map<string, Paid>();
+    return {
+      code: this.code,
+      phase: this.phase,
+      deadline: this.deadline,
+      lastCall: this.lastCall,
+      pocket: this.pocket,
+      history: this.history,
+      placed: this.placed,
+      paid: [...paid.entries()].map(([seatId, one]) => ({
+        seatId,
+        name: this.seats.find((seat) => seat.id === seatId)?.name ?? "",
+        back: one.back,
+        staked: one.staked,
+      })),
+      bank: this.bank,
+      seats,
+      you: seats.find((seat) => seat.id === forSeatId) ?? null,
+      forFun: this.forFun,
+      hostId: this.hostId,
+      watching: this.watching,
+      lastEvent: this.lastEvent,
+      window: this.window,
+    };
+  }
+}
