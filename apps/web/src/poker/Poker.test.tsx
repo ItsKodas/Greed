@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { SeatView, TableView } from "@backroom/game-poker";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { Actions, Felt } from "./Poker.js";
@@ -410,7 +410,7 @@ describe("when the pot is won", () => {
         table={table}
         seatId="s1"
         state={ended(
-          [{ seatId: "s1", name: "Ada", chips: 1_240, said: "aces and kings" }],
+          [{ pot: 0, seatId: "s1", name: "Ada", chips: 1_240, said: "aces and kings" }],
           [mine, seat({ id: "s2", name: "Bram" })],
         )}
       />,
@@ -437,8 +437,8 @@ describe("when the pot is won", () => {
         seatId="s1"
         state={ended(
           [
-            { seatId: "s1", name: "Ada", chips: 600, said: "a straight" },
-            { seatId: "s2", name: "Bram", chips: 600, said: "a straight" },
+            { pot: 0, seatId: "s1", name: "Ada", chips: 600, said: "a straight" },
+            { pot: 0, seatId: "s2", name: "Bram", chips: 600, said: "a straight" },
           ],
           [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
         )}
@@ -472,7 +472,7 @@ describe("when the pot is won", () => {
         table={table}
         seatId="s2"
         state={ended(
-          [{ seatId: "s1", name: "Ada", chips: 400, said: null }],
+          [{ pot: 0, seatId: "s1", name: "Ada", chips: 400, said: null }],
           [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
         )}
       />,
@@ -490,7 +490,7 @@ describe("when the pot is won", () => {
         table={table}
         seatId="s2"
         state={ended(
-          [{ seatId: "gone", name: "Ada", chips: 400, said: null }],
+          [{ pot: 0, seatId: "gone", name: "Ada", chips: 400, said: null }],
           [seat({ id: "s2", name: "Bram" })],
         )}
       />,
@@ -557,8 +557,8 @@ describe("chips going in and out", () => {
           street: "turn",
           sweptAt: 1_700_000_000_000,
           swept: [
-            { seatId: "s1", chips: 100 },
-            { seatId: "s2", chips: 100 },
+            { pot: 0, seatId: "s1", chips: 100 },
+            { pot: 0, seatId: "s2", chips: 100 },
           ],
           seats: [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
         })}
@@ -576,7 +576,7 @@ describe("chips going in and out", () => {
         state={view({
           street: "turn",
           sweptAt: 1_700_000_000_000,
-          swept: [{ seatId: "gone", chips: 100 }],
+          swept: [{ pot: 0, seatId: "gone", chips: 100 }],
           seats: [seat({ id: "s1", name: "Ada" })],
         })}
       />,
@@ -643,5 +643,107 @@ describe("whose turn it is", () => {
       />,
     );
     expect(container.querySelectorAll(".turn-ring")).toHaveLength(0);
+  });
+});
+
+/*
+ * Announcing a hand with side pots.
+ *
+ * A side pot is a separate thing won by separate people for separate reasons.
+ * Said all at once, the main pot's winner and a short stack's consolation get
+ * the same breath; said one at a time, everybody who won something gets the
+ * felt to themselves for a moment.
+ */
+describe("one winner at a time", () => {
+  const twoPots = () =>
+    view({
+      street: "showdown",
+      pot: 0,
+      paidAt: 1_700_000_000_000,
+      paid: [
+        { pot: 0, seatId: "s1", name: "Ada", chips: 900, said: "a flush" },
+        { pot: 1, seatId: "s2", name: "Bram", chips: 300, said: "two pair" },
+      ],
+      seats: [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
+    });
+
+  it("announces the main pot first, and only the main pot", () => {
+    const table = stub();
+    const { container } = render(<Felt table={table} seatId="s1" state={twoPots()} />);
+
+    const said = container.querySelector(".pk__won")?.textContent ?? "";
+    expect(said).toContain("Ada");
+    expect(said).not.toContain("Bram");
+    // And only that pot's chips are travelling.
+    expect(container.querySelectorAll(".pk__sweep")).toHaveLength(1);
+  });
+
+  it("gives the moment to one seat at a time", () => {
+    const table = stub();
+    const { container } = render(<Felt table={table} seatId="s1" state={twoPots()} />);
+    const lit = [...container.querySelectorAll(".pk__seat--spotlit")];
+    expect(lit).toHaveLength(1);
+    expect(lit[0]?.querySelector(".pk__name")?.textContent).toBe("Ada");
+  });
+
+  it("moves on to the side pot on its own clock", async () => {
+    vi.useFakeTimers();
+    try {
+      const table = stub();
+      const { container } = render(<Felt table={table} seatId="s1" state={twoPots()} />);
+      expect(container.querySelector(".pk__won")?.textContent).toContain("Ada");
+
+      await act(async () => {
+        vi.advanceTimersByTime(2_500);
+      });
+
+      const said = container.querySelector(".pk__won")?.textContent ?? "";
+      expect(said).toContain("Bram");
+      expect(said).not.toContain("Ada");
+      const lit = [...container.querySelectorAll(".pk__seat--spotlit")];
+      expect(lit[0]?.querySelector(".pk__name")?.textContent).toBe("Bram");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stays on the last pot rather than running off the end", async () => {
+    /*
+     * The table holds the showdown open for as long as the announcements take,
+     * so the final one has to still be there when the felt clears — not blank
+     * because the sequence walked past it.
+     */
+    vi.useFakeTimers();
+    try {
+      const table = stub();
+      const { container } = render(<Felt table={table} seatId="s1" state={twoPots()} />);
+      await act(async () => {
+        vi.advanceTimersByTime(30_000);
+      });
+      expect(container.querySelector(".pk__won")?.textContent).toContain("Bram");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks a seat with what it won in total, across both pots", () => {
+    // The announcement is per pot; the seat is the whole hand.
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({
+          street: "showdown",
+          paidAt: 1_700_000_000_000,
+          paid: [
+            { pot: 0, seatId: "s1", name: "Ada", chips: 900, said: "a flush" },
+            { pot: 1, seatId: "s1", name: "Ada", chips: 300, said: "a flush" },
+          ],
+          seats: [seat({ id: "s1", name: "Ada" })],
+        })}
+      />,
+    );
+    expect(container.querySelector(".pk__seat--won .pk__says")?.textContent).toContain("a flush");
   });
 });

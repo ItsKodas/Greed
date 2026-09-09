@@ -26,6 +26,16 @@ const TURN_MS = 30_000;
 /** How long a finished hand stays up to be read. */
 const SHOWDOWN_MS = 5_000;
 
+/**
+ * And how much longer each side pot adds.
+ *
+ * The felt gives every pot its own announcement rather than listing them all
+ * at once, so the wait has to grow with them. It matches the step the felt
+ * uses; the two are a pair, and a table that cleared before the last one was
+ * read would be worse than not announcing them separately at all.
+ */
+const MOMENT_MS = 2_400;
+
 export function pokerAdapter(
   options: {
     random?: () => number;
@@ -259,9 +269,18 @@ export function pokerAdapter(
        * arrived.
        */
       if (table.street === "showdown") {
+        /*
+         * Long enough to say all of it.
+         *
+         * The felt announces the pots one at a time so every winner gets a
+         * moment rather than sharing one — and a fixed wait would clear the
+         * felt in the middle of the second announcement. The main pot gets the
+         * base wait and each side pot adds its own turn.
+         */
+        const moments = Math.max(1, new Set(table.paid.map((one) => one.pot)).size);
         return {
           key: "showdown",
-          ms: showdownMs,
+          ms: showdownMs + (moments - 1) * MOMENT_MS,
           run() {
             table.finish();
           },

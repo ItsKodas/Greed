@@ -530,6 +530,50 @@
   color: var(--gr-color-good);
 }
 
+/*
+ * The seat whose moment it is, right now.
+ *
+ * Not the same as the seat that won: a hand with side pots has several winners
+ * and they are announced one after another, so each gets the felt to itself for
+ * a couple of seconds. Lifted and enlarged rather than merely lit, because at a
+ * table of ten a glow is something you notice and a seat growing is something
+ * you look at.
+ *
+ * Its own stacking context, so it comes up over the seats either side of it
+ * rather than growing underneath them.
+ */
+.pk__seat--spotlit {
+  z-index: 7;
+  animation: pk-spotlit 2.4s cubic-bezier(0.16, 1.06, 0.28, 1) both;
+}
+
+@keyframes pk-spotlit {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  14% {
+    transform: translate(-50%, -50%) scale(1.16);
+  }
+  86% {
+    transform: translate(-50%, -50%) scale(1.16);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * No swell, but it still has to be findable — this is the one thing on the
+   * felt saying whose moment it is. So it holds the larger size rather than
+   * growing into it.
+   */
+  .pk__seat--spotlit {
+    animation: none;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+}
+
 .pk__seat--won::before {
   content: "";
   position: absolute;

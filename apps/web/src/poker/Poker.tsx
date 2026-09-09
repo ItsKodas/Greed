@@ -39,6 +39,65 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 /** The five places a board card goes, in the order they are dealt. */
 const SLOTS = ["flop1", "flop2", "flop3", "turn", "river"];
 
+/**
+ * How long each pot's announcement holds before the next one.
+ *
+ * Paired with the table's own showdown wait, which grows by the same step for
+ * every side pot — if these two disagree the felt clears in the middle of a
+ * sentence.
+ */
+const MOMENT_MS = 2_400;
+
+/**
+ * The pots of a finished hand, in the order they should be announced.
+ *
+ * Grouped rather than listed, because a side pot is a separate thing won by
+ * separate people and saying them all at once gives the main pot's winner and
+ * a short stack's consolation the same breath.
+ */
+function potsOf(paid: TableView["paid"]): TableView["paid"][] {
+  const byPot = new Map<number, TableView["paid"]>();
+  for (const one of paid) {
+    const already = byPot.get(one.pot);
+    if (already === undefined) {
+      byPot.set(one.pot, [one]);
+    } else {
+      already.push(one);
+    }
+  }
+  return [...byPot.entries()].sort(([a], [b]) => a - b).map(([, winners]) => winners);
+}
+
+/**
+ * Which pot is being announced right now.
+ *
+ * Walks forward on its own clock and stops at the last one, so the final
+ * announcement stays up for the rest of the showdown rather than vanishing.
+ * Restarted by the moment the hand paid, which is the one thing that makes
+ * this a different hand's sequence rather than the same one continuing.
+ */
+function useMoment(paidAt: number | null, count: number): number {
+  const [at, setAt] = useState(0);
+
+  useEffect(() => {
+    setAt(0);
+    if (paidAt === null || count <= 1) {
+      return;
+    }
+    const timers: number[] = [];
+    for (let step = 1; step < count; step += 1) {
+      timers.push(window.setTimeout(() => setAt(step), step * MOMENT_MS));
+    }
+    return () => {
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [paidAt, count]);
+
+  return Math.min(at, Math.max(0, count - 1));
+}
+
 /** Nobody else's hand is pointed at, and one empty set does for all of them. */
 const EMPTY: Set<string> = new Set();
 
@@ -172,7 +231,28 @@ export function Felt({
       : [...state.seats.slice(mine), ...state.seats.slice(0, mine)];
   }, [state.seats, seatId]);
 
-  const won = useMemo(() => new Map(state.paid.map((one) => [one.seatId, one])), [state.paid]);
+  /*
+   * What each seat took overall, for the mark on the seat itself. Summed here
+   * because the payouts are per pot now, and somebody who won two of them won
+   * the total rather than whichever happened to be last in the list.
+   */
+  const won = useMemo(() => {
+    const totals = new Map<string, { chips: number; said: string | null }>();
+    for (const one of state.paid) {
+      const already = totals.get(one.seatId);
+      totals.set(one.seatId, {
+        chips: (already?.chips ?? 0) + one.chips,
+        said: one.said ?? already?.said ?? null,
+      });
+    }
+    return totals;
+  }, [state.paid]);
+
+  /* The pots, in the order they are announced, and which one is up now. */
+  const moments = useMemo(() => potsOf(state.paid), [state.paid]);
+  const moment = useMoment(state.paidAt, moments.length);
+  const showing = moments[moment] ?? [];
+  const spotlit = useMemo(() => new Set(showing.map((one) => one.seatId)), [showing]);
 
   /*
    * Which cards on the table are in your hand, held by name rather than by
@@ -277,6 +357,10 @@ export function Felt({
             mine={seat.id === seatId}
             won={won.get(seat.id)?.chips ?? null}
             said={won.get(seat.id)?.said ?? null}
+            /* Whose moment it is right now, which is not the same as who won:
+               at a hand with side pots several seats won and they are announced
+               one at a time. */
+            spotlit={spotlit.has(seat.id)}
             /* What this player asked for, until the table answers. */
             pending={seat.id === seatId ? intent : null}
             /* Only your own hand is pointed at: it is the only one you know. */
@@ -331,7 +415,7 @@ export function Felt({
           * one element that never moves.
           */}
         {state.paidAt != null
-          ? state.paid.map((one) => {
+          ? showing.map((one) => {
               const at = seats.findIndex((seat) => seat.id === one.seatId);
               if (at < 0) {
                 return null;
@@ -339,7 +423,7 @@ export function Felt({
               return (
                 <span
                   className="pk__sweep"
-                  key={`${state.paidAt}:${one.seatId}`}
+                  key={`${state.paidAt}:${one.pot}:${one.seatId}`}
                   style={seatAt(at, seats.length)}
                   aria-hidden="true"
                 >
@@ -408,7 +492,9 @@ export function Felt({
       {state.paid.length > 0 && state.paidAt != null ? (
         <p
             className="pk__won"
-            key={state.paidAt}
+            /* Keyed on the pot as well as the hand, so each announcement is a
+               new element that lands rather than text swapping in place. */
+            key={`${state.paidAt}:${moment}`}
             /*
              * A live region, which is both what this is and what lets it carry
              * a label: a plain paragraph has no role to be named, and a win is
@@ -422,14 +508,14 @@ export function Felt({
              * gap rather than separated by spaces, so read straight off the
              * markup this comes out as "Pocketswins 520kings and 3s".
              */
-            aria-label={state.paid
+            aria-label={showing
               .map(
                 (one) =>
                   `${one.name} wins ${fmt(one.chips)}${one.said === null ? "" : ` with ${one.said}`}`,
               )
               .join(", and ")}
           >
-            {state.paid.map((one, index) => (
+            {showing.map((one, index) => (
               <span className="pk__won-one" key={one.seatId}>
                 {index > 0 ? <span className="pk__won-and">and</span> : null}
                 <strong>{one.name}</strong>
@@ -519,6 +605,7 @@ function Seat({
   said,
   pending,
   using,
+  spotlit,
 }: {
   seat: SeatView;
   at: number;
@@ -530,6 +617,8 @@ function Seat({
   pending: { move: Move | null } | null;
   /** The cards in your own best hand, so yours can be pointed at. */
   using: Set<string>;
+  /** Whether this seat is the one being announced at this moment. */
+  spotlit: boolean;
 }) {
   /*
    * A press shows here before the table has answered it, which is the whole of
@@ -551,7 +640,9 @@ function Seat({
 
   return (
     <div
-      className={`pk__seat pk__seat--${look}${mine ? " pk__seat--you" : ""}${seat.connected ? "" : " pk__seat--away"}`}
+      className={`pk__seat pk__seat--${look}${mine ? " pk__seat--you" : ""}${
+        seat.connected ? "" : " pk__seat--away"
+      }${spotlit ? " pk__seat--spotlit" : ""}`}
       style={seatAt(at, of)}
     >
       <div className="pk__cards">

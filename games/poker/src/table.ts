@@ -71,6 +71,16 @@ export interface Seat extends TableSeat {
 
 /** What a hand paid, once it is over. */
 export interface Payout {
+  /**
+   * Which pot this came out of: zero is the main pot, then the side pots.
+   *
+   * Kept per pot rather than summed per seat, which is what this used to be.
+   * A side pot is a separate thing won by separate people for separate
+   * reasons, and a felt that wants to announce them one at a time cannot
+   * un-add them once they are one number. A seat that wins two pots appears
+   * twice, which is what actually happened.
+   */
+  pot: number;
   seatId: string;
   name: string;
   chips: number;
@@ -1137,7 +1147,13 @@ export class Table implements PlayTable {
       }
     }
 
-    const won = new Map<string, number>();
+    this.paid = [];
+    this.paidAt = Date.now();
+    /*
+     * Counted only for pots that actually paid, so the numbers the felt
+     * sequences through have no gaps in them.
+     */
+    let potIndex = 0;
     for (const pot of pots(contributions)) {
       const runners = pot.eligible.filter((id) => contested.some((seat) => seat.id === id));
       if (runners.length === 0) {
@@ -1170,24 +1186,20 @@ export class Table implements PlayTable {
         }
       }
       for (const [id, chips] of split(pot.chips, winners)) {
-        won.set(id, (won.get(id) ?? 0) + chips);
+        const seat = this.seats.find((one) => one.id === id);
+        if (seat === undefined) {
+          continue;
+        }
+        seat.stack += chips;
+        this.paid.push({
+          pot: potIndex,
+          seatId: id,
+          name: seat.name,
+          chips,
+          said: shown ? describe(scores.get(id) as Score) : null,
+        });
       }
-    }
-
-    this.paid = [];
-    this.paidAt = Date.now();
-    for (const [id, chips] of won) {
-      const seat = this.seats.find((one) => one.id === id);
-      if (seat === undefined) {
-        continue;
-      }
-      seat.stack += chips;
-      this.paid.push({
-        seatId: id,
-        name: seat.name,
-        chips,
-        said: shown ? describe(scores.get(id) as Score) : null,
-      });
+      potIndex += 1;
     }
 
     /*
