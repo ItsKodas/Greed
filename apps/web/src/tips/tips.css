@@ -51,11 +51,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.jar:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
 .jar:focus-visible {
   outline: 2px solid var(--gr-color-neon);
   outline-offset: 4px;
@@ -171,6 +166,18 @@
   font-variant-numeric: tabular-nums;
   font-size: var(--gr-text-lg);
   color: var(--gr-color-neon-hi);
+}
+
+/*
+ * When the night turns over, in the same quiet register as `.tips__said` —
+ * dim and small, because this is a fact worth having on screen rather than
+ * a thing asking to be watched.
+ */
+.tips__night {
+  margin: 0;
+  text-align: center;
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-faint);
 }
 
 /* ---------------------------------------------------------------- upgrades */

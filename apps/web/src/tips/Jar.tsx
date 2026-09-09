@@ -21,8 +21,6 @@ export interface JarProps {
    * fighting its own cleanup on a fast run of taps.
    */
   tapped: number;
-  /** Nothing to tap yet — the jar has not been heard from. */
-  disabled: boolean;
 }
 
 /** The glass, in its own coordinates. Also the clip for what it holds. */
@@ -30,7 +28,7 @@ const GLASS_PATH = "M46,36 H154 V228 A14,14 0 0 1 140,242 H60 A14,14 0 0 1 46,22
 const GLASS_TOP = 36;
 const GLASS_BOTTOM = 242;
 
-export function Jar({ level, brim, onTap, tapped, disabled }: JarProps) {
+export function Jar({ level, brim, onTap, tapped }: JarProps) {
   const pct = brim > 0 ? Math.min(1, Math.max(0, level / brim)) : 0;
   const liquidY = GLASS_BOTTOM - (GLASS_BOTTOM - GLASS_TOP) * pct;
 
@@ -40,7 +38,6 @@ export function Jar({ level, brim, onTap, tapped, disabled }: JarProps) {
       className="jar"
       aria-label="Tap the jar"
       onClick={onTap}
-      disabled={disabled}
     >
       {/* Reset every accepted tap, and only then — a jar sitting untapped
           must not wobble on its own. */}

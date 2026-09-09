@@ -54,6 +54,20 @@ function levelNow(jar: JarView, now: number): number {
   return Math.min(jar.brim, jar.level + (jar.trickle * elapsed) / 60_000);
 }
 
+/**
+ * When upgrades and favours next clear, said plainly rather than counted
+ * down.
+ *
+ * A ticking countdown would be inventing precision the design never
+ * promised — the one rule of the night that costs a player something is
+ * worth saying, not narrating second by second. A clock face is calm in a
+ * way a countdown is not, and it is right the once: nothing here has to
+ * re-render as the minutes pass.
+ */
+function nightEndsLabel(ms: number): string {
+  return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
 function prefersReducedMotion(): boolean {
   try {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -310,13 +324,7 @@ export default function Tips() {
         <p className="tips__loading">Walking over to the bar&hellip;</p>
       ) : (
         <div className="tips__floor">
-          <Jar
-            level={displayLevel}
-            brim={serverJar.brim}
-            onTap={doTap}
-            tapped={tapped}
-            disabled={false}
-          />
+          <Jar level={displayLevel} brim={serverJar.brim} onTap={doTap} tapped={tapped} />
 
           {/* Said, not proven — a message here is a courtesy, never the rule
               the server just applied. */}
@@ -340,6 +348,14 @@ export default function Tips() {
               </b>
             </p>
           </div>
+
+          {/* The one rule of the night that costs a player something: what is
+              bought and earned in favours does not survive the turnover. Said
+              once, in the same quiet register as everything else on the
+              page, not counted down. */}
+          <p className="tips__night">
+            Upgrades and favours reset at {nightEndsLabel(serverJar.nightEndsAt)}.
+          </p>
 
           <Upgrades bought={serverJar.bought} favours={serverJar.favours} onBuy={doBuy} />
         </div>
