@@ -15,4 +15,14 @@ export { isBlackjack, value } from "./hand.js";
 export { BLACKJACK } from "./listing.js";
 export type { Outcome, Phase, Seat, SeatView, TableView } from "./table.js";
 export { LAST_CALL_MS, Table, WINDOWS } from "./table.js";
-export { BLACKJACK_RETURN, DOUBLE, MAX_HANDS, maxStake, STAKE_DIVISOR, WIN_RETURN, worstCase } from "./bank.js";
+export {
+  BLACKJACK_RETURN,
+  DOUBLE,
+  MAX_HANDS,
+  maxStake,
+  maxStakeAgainst,
+  roundWorstCase,
+  STAKE_DIVISOR,
+  WIN_RETURN,
+  worstCase,
+} from "./bank.js";

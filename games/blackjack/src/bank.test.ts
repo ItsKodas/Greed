@@ -4,6 +4,8 @@ import {
   DOUBLE,
   MAX_HANDS,
   maxStake,
+  maxStakeAgainst,
+  roundWorstCase,
   STAKE_DIVISOR,
   WIN_RETURN,
   worstCase,
@@ -139,5 +141,97 @@ describe("the rules the cap is derived from", () => {
 
   it("doubles a bet rather than multiplying it further", () => {
     expect(DOUBLE).toBe(2);
+  });
+});
+
+/*
+ * The same arithmetic for a felt rather than a seat.
+ *
+ * `maxStake` answers about one hand, and a blackjack round settles every seat
+ * at once. Six seats each holding the cap is six times the exposure the cap
+ * was derived to cover, so the bank runs dry partway down the row and the last
+ * winner is handed their stake back instead of their winnings. These say what
+ * a round costs and what is left to offer the next seat to sit down.
+ */
+describe("the stake cap across a whole round", () => {
+  it("charges a round for every seat in it", () => {
+    const one = worstCase(1_000);
+    const three = roundWorstCase([1_000, 1_000, 1_000]);
+    expect(three.back - three.staked).toBe(3 * (one.back - one.staked));
+  });
+
+  it("costs nothing when nobody has bet", () => {
+    expect(roundWorstCase([])).toEqual({ back: 0, staked: 0 });
+  });
+
+  it("offers a clear felt exactly what one seat could have", () => {
+    // The old answer, which was never wrong — only incomplete.
+    for (const bank of [0, 4_000, 12_345, 500_000]) {
+      expect(maxStakeAgainst(bank, [])).toBe(maxStake(bank));
+    }
+  });
+
+  it("offers nothing more once a round has committed the bank", () => {
+    const bank = 4_000;
+    // One seat at the cap is the whole of a bank this thin. The second seat is
+    // told so rather than dealt in and short-paid.
+    expect(maxStakeAgainst(bank, [maxStake(bank)])).toBe(0);
+  });
+
+  it("shrinks as seats sit down rather than growing with their stakes", () => {
+    /*
+     * The shape of the bug: every stake goes into the bank as it is placed, so
+     * asking the bank what it holds partway through a betting window gives a
+     * fatter answer each time somebody bets. What is left to offer has to fall.
+     */
+    const bank = 40_000;
+    const offers = [
+      maxStakeAgainst(bank, []),
+      maxStakeAgainst(bank, [1_000]),
+      maxStakeAgainst(bank, [1_000, 1_000]),
+      maxStakeAgainst(bank, [1_000, 1_000, 1_000]),
+    ];
+    for (let at = 1; at < offers.length; at += 1) {
+      expect(offers[at]).toBeLessThan(offers[at - 1] as number);
+    }
+  });
+
+  it("never lets a whole felt outrun the bank it is paid from", () => {
+    /*
+     * The property the round budget exists for, and the one the per-seat cap
+     * could not state: seat after seat takes whatever is still on offer, and
+     * the worst hand every one of them could play is still payable.
+     */
+    for (const bank of [4, 5, 40, 4_000, 12_345, 500_000, 50_000_000]) {
+      const stakes: number[] = [];
+      // More seats than any blackjack table has, so the sweep runs past the
+      // point where the bank has nothing left to offer.
+      for (let seat = 0; seat < 12; seat += 1) {
+        const stake = maxStakeAgainst(bank, stakes);
+        if (stake < 1) {
+          break;
+        }
+        stakes.push(stake);
+      }
+      const { back, staked } = roundWorstCase(stakes);
+      expect(back).toBeLessThanOrEqual(bank + staked);
+    }
+  });
+
+  it("holds when every seat takes the same stake rather than the most going", () => {
+    // A felt does not fill politely from the top down: everybody bets the same
+    // advertised number, and the last one to do it is the one who finds out.
+    for (const bank of [4_000, 12_345, 500_000]) {
+      const stakes: number[] = [];
+      for (let seat = 0; seat < 8; seat += 1) {
+        const stake = Math.min(maxStake(bank), maxStakeAgainst(bank, stakes));
+        if (stake < 1) {
+          break;
+        }
+        stakes.push(stake);
+      }
+      const { back, staked } = roundWorstCase(stakes);
+      expect(back).toBeLessThanOrEqual(bank + staked);
+    }
   });
 });
