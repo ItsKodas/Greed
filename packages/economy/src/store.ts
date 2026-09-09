@@ -192,8 +192,9 @@ export interface Store {
    *
    * On a failed swap, `ok` is false and the returned `jar`/`chips` are the
    * current values re-read from the store, so the caller can resync.
-   * `chipDelta` may be zero (a buy) or positive (a tap); it is never
-   * negative in this game, but nothing here assumes that.
+   * `chipDelta` may be zero (a buy) or positive (a tap); this game only ever
+   * credits, and there is no floor on the balance here — a caller that ever
+   * needed to debit would have to add one, the way `adjustChips` does.
    */
   applyJar(
     id: string,

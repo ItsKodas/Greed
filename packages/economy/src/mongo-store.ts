@@ -505,6 +505,16 @@ export class MongoStore implements Store {
    * One conditional update rather than a read then a write, in the same
    * shape claimDaily already uses: the whole compare-and-swap is the filter,
    * so two swaps racing on the same token cannot both land.
+   *
+   * The filter runs as a raw query, which mongoose does not hydrate — a
+   * profile written before the jar existed has no `jar` field at all, and
+   * `"jar.token": ""` never matches an absent path. `jar()` reads through
+   * `findById`, which mongoose does hydrate, so it hands such a caller the
+   * schema default of `token: ""` — a blank token that this filter alone
+   * would then refuse forever. A blank token is exactly the never-touched
+   * case this exists for, so when the caller is swapping against blank the
+   * filter has to accept both shapes of "never touched": a stored blank
+   * token, or no jar at all.
    */
   async applyJar(
     id: string,
@@ -515,8 +525,12 @@ export class MongoStore implements Store {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return { ok: false, chips: 0, jar: emptyJarRecord() };
     }
+    const filter =
+      expectedToken === ""
+        ? { _id: id, $or: [{ "jar.token": "" }, { jar: { $exists: false } }] }
+        : { _id: id, "jar.token": expectedToken };
     const doc = await this.users.findOneAndUpdate(
-      { _id: id, "jar.token": expectedToken },
+      filter,
       { $set: { jar: next }, ...(chipDelta !== 0 ? { $inc: { chips: chipDelta } } : {}) },
       { returnDocument: "after" },
     );
