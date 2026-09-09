@@ -6,7 +6,7 @@
 
 **Architecture:** A socket declares its game and a per-tab window id in the handshake `auth`. A second `io.use` middleware, behind the one that already resolves identity, holds a `Map` of account+game to the window holding it and refuses a socket that does not hold the claim. The claim is released when its socket disconnects. Underneath and independent of it, `slots:spin` gains a per-account in-flight guard so a free-spin run cannot be raced by two pulls.
 
-**Tech Stack:** TypeScript, socket.io 4.8 (server and client), zod 4, React 19, vitest, @testing-library/react.
+**Tech Stack:** TypeScript, socket.io 4.8 (server and client), zod 4, React 18, vitest, @testing-library/react.
 
 **Spec:** `docs/superpowers/specs/2026-09-10-one-window-per-game-design.md`
 
@@ -398,6 +398,8 @@ Independent of Task 1 and not conditional on it. The window rule is what a playe
 - Modify: `apps/server/src/server.ts:2073` (the `slots:spin` handler)
 - Test: `apps/server/src/slots.test.ts` (append to the existing `describe("the free spins")`, which ends around line 860)
 
+Line numbers above are as the file stood before Task 1, which lands about seventy lines in `server.ts`. Both anchors quote the code they sit beside — search for the quoted line rather than jumping to the number.
+
 **Interfaces:**
 - Consumes: nothing from Task 1.
 - Produces: a new refusal from `slots:spin` — `{ ok: false, error: "One spin at a time." }`.
@@ -539,49 +541,69 @@ Create `apps/web/src/net/windowId.test.ts`:
 ```ts
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { WINDOW_KEY, windowId } from "./windowId.js";
+
+/*
+ * Imported fresh in every test, never at the top of the file.
+ *
+ * The module holds the id in memory as well as in the store, so a test that
+ * imported once would be answered from that memory and would never reach the
+ * store it is trying to say something about — including, silently, the two
+ * below that mock it. A fresh module per test is what a fresh page load is.
+ */
+async function load() {
+  vi.resetModules();
+  return await import("./windowId.js");
+}
 
 describe("a window's name for itself", () => {
   beforeEach(() => {
     window.sessionStorage.clear();
+    vi.restoreAllMocks();
   });
 
-  it("is the same one twice", () => {
+  it("is the same one twice", async () => {
+    const { windowId } = await load();
     expect(windowId()).toBe(windowId());
   });
 
-  it("survives a refresh, which is what sessionStorage buys", () => {
-    // A refresh is a fresh module against the same store, which is what
-    // reading the key back directly stands in for here.
-    const first = windowId();
+  it("survives a refresh, which is what sessionStorage buys", async () => {
+    const first = (await load()).windowId();
+    // A refresh is a fresh module against the same store. That is the whole
+    // claim, so it is made with a genuinely fresh module rather than a reread.
+    const { WINDOW_KEY, windowId } = await load();
     expect(window.sessionStorage.getItem(WINDOW_KEY)).toBe(first);
+    expect(windowId()).toBe(first);
   });
 
-  it("still answers when the store will not have it", () => {
+  it("does not hand a second tab the first one's name", async () => {
+    /*
+     * sessionStorage is per tab, which a single jsdom cannot have two of. What
+     * is checkable here is the half that matters: an empty store yields a new
+     * id rather than a constant.
+     */
+    const first = (await load()).windowId();
+    window.sessionStorage.clear();
+    const second = (await load()).windowId();
+    expect(second).not.toBe(first);
+  });
+
+  it("still answers when the store will not have it", async () => {
     /*
      * A private window can throw outright on both reads and writes. A browser
      * that will not remember is not a reason to refuse to play — such a window
      * still claims its game, it just cannot prove itself across a refresh.
      */
-    const setItem = vi
-      .spyOn(Storage.prototype, "setItem")
-      .mockImplementation(() => {
-        throw new Error("nope");
-      });
-    const getItem = vi
-      .spyOn(Storage.prototype, "getItem")
-      .mockImplementation(() => {
-        throw new Error("nope");
-      });
-    try {
-      const id = windowId();
-      expect(id.length).toBeGreaterThan(0);
-      // Still stable within the page, because it is held in memory too.
-      expect(windowId()).toBe(id);
-    } finally {
-      setItem.mockRestore();
-      getItem.mockRestore();
-    }
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("nope");
+    });
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("nope");
+    });
+    const { windowId } = await load();
+    const id = windowId();
+    expect(id.length).toBeGreaterThan(0);
+    // Still stable within the page, because it is held in memory too.
+    expect(windowId()).toBe(id);
   });
 });
 ```
@@ -943,14 +965,21 @@ Change the `io()` call (line 143):
     });
 ```
 
-Add, beside the other listeners:
+Add `setTaken(null);` as the **first line inside the existing** `socket.on("connect", ...)` at line 147 — not a second registration of the same event:
 
 ```ts
-    socket.on("connect", () => setTaken(null));
-    socket.on("connect_error", (error: Error) => setTaken(error.message));
+    socket.on("connect", () => {
+      setTaken(null);
+      setConnected(true);
+      const stored = readSeat(game);
+      // …the rest of the existing handler, unchanged…
 ```
 
-Note the existing `socket.on("connect", ...)` already runs the resume; add `setTaken(null)` inside that existing handler rather than registering a second one.
+And add one new listener beside `socket.on("disconnect", ...)`:
+
+```ts
+    socket.on("connect_error", (error: Error) => setTaken(error.message));
+```
 
 Add the callback and return both fields:
 
@@ -1055,17 +1084,33 @@ const made = vi.fn(() => fake);
 
 vi.mock("socket.io-client", () => ({ io: (...args: unknown[]) => made(...args) }));
 
+import { MemoryRouter } from "react-router-dom";
 import Slots from "./Slots.js";
+
+/*
+ * The Navbar reaches for a Link, and useAccount reaches for /api/me. Neither
+ * is what this file is about, so both are stood up rather than worked around.
+ */
+function show() {
+  return render(
+    <MemoryRouter>
+      <Slots />
+    </MemoryRouter>,
+  );
+}
 
 describe("a slots window that came second", () => {
   beforeEach(() => {
     handlers.clear();
     made.mockClear();
     window.sessionStorage.clear();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { headers: { "content-type": "application/json" } }),
+    );
   });
 
   it("names slots and its window in the handshake", () => {
-    render(<Slots />);
+    show();
     const options = made.mock.calls[0]?.[1] as {
       auth?: { game?: string; window?: string };
     };
@@ -1074,7 +1119,7 @@ describe("a slots window that came second", () => {
   });
 
   it("shows the panel in place of the machine, not over it", async () => {
-    render(<Slots />);
+    show();
     handlers.get("connect_error")?.(
       new Error("You already have Slots open in another window."),
     );
@@ -1090,7 +1135,7 @@ describe("a slots window that came second", () => {
 });
 ```
 
-`Slots.tsx` renders inside a router and an account context; if `render(<Slots />)` throws for want of either, wrap it in the same providers `App.test.tsx` uses and keep the assertions as they are.
+`App.test.tsx` uses the same `MemoryRouter` wrapper, which is where `show()` comes from.
 
 - [ ] **Step 2: Run the test and watch it fail**
 
