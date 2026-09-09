@@ -104,8 +104,15 @@ A socket is let in when any of these is true:
 
 1. Nothing holds the claim.
 2. The claim's window id is this window's — the same tab coming back.
-3. The holding socket is no longer in `io.sockets.sockets` — a socket nobody
-   should have to wait out.
+3. The holding socket is no longer in `io.sockets.sockets`.
+
+The third is belt-and-braces and is not what saves anybody from the timeout —
+socket.io drops a socket from that map at the same moment it fires the
+`disconnect` that already releases the claim, so the two normally happen
+together. It is there so a claim cannot outlive its socket if a release is
+ever missed, and the map heals itself rather than holding a game shut for the
+life of the process. **The window id is the thing that removes the lockout**,
+and it does it by making a refresh not need the claim released at all.
 
 Otherwise `next(new Error(...))`, carrying the game's name from `CATALOGUE`:
 *"You already have Slots open in another window."* On the way in, the claim is
@@ -194,9 +201,13 @@ identity is the only way any of this is checkable.
 - Same account, two different games → both allowed.
 - Two guests, same game → both allowed.
 - Holder disconnects → the next window is let in.
-- Holder's socket is gone but its claim is not yet reaped → the next window is
-  let in rather than waiting out the timeout.
 - A refused window disconnecting → the holder keeps its claim.
+
+Not tested, and named here so its absence is a decision rather than an
+oversight: the third allow-condition above. A claim whose socket has left
+`io.sockets.sockets` without its `disconnect` having released it is not a
+state a client can be made to produce, and a test that reached into the
+server's own maps to fake one would be asserting the fake.
 - Slots: two pulls in flight on one free-spin run → the run does not outlast
   its award. Watched failing first.
 
