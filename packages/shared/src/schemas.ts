@@ -156,3 +156,18 @@ export const spinSchema = z.object({
 });
 
 export type SpinPayload = z.infer<typeof spinSchema>;
+
+/**
+ * What a window says about itself as it connects.
+ *
+ * Both optional, and a socket that sends neither is let through: every client
+ * that predates this rule is one of those, and a handshake is not the place to
+ * start refusing people. The window id is the client's own and is trusted only
+ * to tell a refresh from a rival — never as an identity.
+ */
+export const handshakeSchema = z.object({
+  game: z.string().max(24).optional(),
+  window: z.string().min(1).max(64).optional(),
+});
+
+export type HandshakePayload = z.infer<typeof handshakeSchema>;

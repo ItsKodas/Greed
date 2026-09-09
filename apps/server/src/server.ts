@@ -48,6 +48,7 @@ import {
   addBotSchema,
   chatSchema,
   createSchema,
+  handshakeSchema,
   joinSchema,
   mintCodeSchema,
   removeSeatSchema,
@@ -173,6 +174,11 @@ interface SocketIdentity {
   /** Null for a guest, who has no account to be checked against. */
   identity: SeatIdentity | null;
   name: string | null;
+  /**
+   * Which account-and-game claim this socket holds, if it holds one. Kept so
+   * `disconnect` can release exactly the claim this socket took and no other.
+   */
+  atGame: string | null;
 }
 
 /** A table, and the game being played at it. */
@@ -1563,6 +1569,77 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   });
 
   /**
+   * Who has which game open, and from which window.
+   *
+   * Keyed by account and game, so one person may have Slots on the desk and
+   * Blackjack on the phone — that is two games, not two of one.
+   */
+  const openGames = new Map<string, { window: string; socket: string }>();
+
+  // Joined on a character no id can contain, so no pair of them can be made to
+  // spell another pair's key.
+  const openKey = (userId: string, game: string) => `${userId} ${game}`;
+
+  /**
+   * One window per game, per account.
+   *
+   * A middleware for the same reason the one above it is: it settles before the
+   * client's first message is delivered, so a socket refused here never reaches
+   * a room, a lobby or a lever, and there is no second place to remember to
+   * check.
+   *
+   * A window id rather than a socket id, because first-wins is only humane if a
+   * refresh can be told from a rival. A page that reloads is a new socket, and a
+   * socket that died on a train is an old one that has not been noticed yet —
+   * socket.io leaves that one in `io.sockets.sockets` for the best part of a
+   * minute, which is a long time to be locked out of your own machine.
+   *
+   * Not an anti-cheat: the id is the client's own and a script may send any it
+   * likes. It is a rule about windows, enforced honestly for browsers, and
+   * nothing in the economy rests on it.
+   */
+  io.use((socket, next) => {
+    socket.data.atGame = null;
+    const parsed = handshakeSchema.safeParse(socket.handshake.auth ?? {});
+    const declared = parsed.success ? parsed.data : {};
+    const userId = socket.data.identity?.userId ?? null;
+    const game = declared.game ?? null;
+    const listing = game === null ? undefined : CATALOGUE.get(game);
+    // A guest has no account to key on, and a socket naming no game — or one the
+    // building does not have — is not at a game to be turned away from.
+    if (userId === null || game === null || listing === undefined) {
+      next();
+      return;
+    }
+    /*
+     * A window that cannot name itself gets its socket id, which matches
+     * nothing. That is the private-window case: it still claims, it just cannot
+     * prove itself across a refresh.
+     */
+    const windowId = declared.window ?? socket.id;
+    const key = openKey(userId, game);
+    const held = openGames.get(key);
+    const mine =
+      held === undefined ||
+      held.window === windowId ||
+      /*
+       * Belt-and-braces, and not what saves anybody from the ping timeout:
+       * socket.io drops a socket from this map as it fires the disconnect that
+       * already releases the claim. It is here so a claim cannot outlive its
+       * socket if a release is ever missed — the map heals rather than holding a
+       * game shut for the life of the process.
+       */
+      !io.sockets.sockets.has(held.socket);
+    if (!mine) {
+      next(new Error(`You already have ${listing.name} open in another window.`));
+      return;
+    }
+    openGames.set(key, { window: windowId, socket: socket.id });
+    socket.data.atGame = key;
+    next();
+  });
+
+  /**
    * A pull on a machine playing for nothing.
    *
    * Deliberately the same arithmetic as the real one — same strip, same
@@ -2236,6 +2313,16 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     });
 
     socket.on("disconnect", () => {
+      /*
+       * Only if the claim still names this socket. A window that was refused,
+       * or one already replaced by its own refresh, must not be able to
+       * release somebody else's game on its way out.
+       */
+      const claimed = socket.data.atGame;
+      if (claimed !== null && openGames.get(claimed)?.socket === socket.id) {
+        openGames.delete(claimed);
+      }
+
       const seat = sockets.get(socket.id);
       sockets.delete(socket.id);
       // Play money lives at the machine and goes when they do.
