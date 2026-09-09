@@ -40,8 +40,7 @@ export function Cloth({
   onPlace,
   onTake,
   disabled = false,
-  /** The pocket the ball is in, so the winning numbers can be lit. */
-  pocket,
+  landed,
   portrait,
 }: {
   placed: readonly Placed[];
@@ -59,7 +58,17 @@ export function Cloth({
    */
   onTake?: (spotId: string) => void;
   disabled?: boolean;
-  pocket?: number | null;
+  /**
+   * The pocket the ball has come to rest in, so the winning number can be lit.
+   *
+   * Named for the thing that has happened rather than for the value, because
+   * the value exists long before it: the server picks the pocket the moment
+   * betting closes and sends it out so the wheel can roll to it. Passing that
+   * through here while the ball is still travelling lights the winning square
+   * on the cloth several seconds early and gives the result away. Null until
+   * it has landed.
+   */
+  landed?: number | null;
   /** Forces the orientation. Left off, the cloth works it out for itself. */
   portrait?: boolean;
 }) {
@@ -204,7 +213,7 @@ export function Cloth({
       {/* The numbers. */}
       {SQUARES.map((square) => {
         const colour = colourOf(square.n);
-        const won = pocket === square.n;
+        const won = landed === square.n;
         return (
           <div
             key={square.n}

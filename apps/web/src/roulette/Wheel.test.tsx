@@ -95,6 +95,48 @@ describe("where the ball ends up", () => {
     );
   });
 
+  it("keeps the winning pocket to itself until the ball is in it", () => {
+    /*
+     * The result exists from the moment betting closes — the server picks it
+     * then, and the felt needs it to roll the ball to the right place. Which
+     * means every drawing of it is a chance to give the game away, and a
+     * pocket lit up while the ball is still four seconds from it spoils the
+     * only part of roulette that is suspense.
+     */
+    const { container } = render(<Wheel pocket={17} spinning />);
+    expect(container.querySelector(".rl__pocket--home")).toBeNull();
+    expect(container.querySelector(".rl__called")).toBeNull();
+  });
+
+  it("does not name the number to a screen reader while the ball is in the air", () => {
+    /*
+     * The same leak, told rather than shown. A player who cannot see the wheel
+     * should be kept in suspense by it, not read the answer early.
+     *
+     * What is checked is that nothing singles the number out, not that the
+     * number is absent — the rim is labelled with all thirty-seven of them and
+     * always has been.
+     */
+    const { container } = render(<Wheel pocket={17} spinning />);
+    expect(container.querySelector("title")?.textContent).toBe("Roulette wheel");
+    expect(container.querySelector(".rl__wheel")?.getAttribute("aria-label")).toBe(
+      "The wheel is turning.",
+    );
+  });
+
+  it("lights the pocket once the ball is in it", () => {
+    const { container } = render(<Wheel pocket={17} />);
+    expect(container.querySelector(".rl__pocket--home")).toBeTruthy();
+    expect(container.querySelector("title")?.textContent).toBe("The ball is in 17");
+  });
+
+  it("still shows which pockets your own bets cover while it spins", () => {
+    // Covered is not a leak: those are the player's own chips, and knowing what
+    // you are on is half of what makes watching the ball worth anything.
+    const { container } = render(<Wheel pocket={17} spinning covered={new Set([4, 21])} />);
+    expect(container.querySelectorAll(".rl__pocket--covered")).toHaveLength(2);
+  });
+
   it("calls the number in its own colour", () => {
     // Red or black is half of what most bets on this table were about, so the
     // answer says which without being read.

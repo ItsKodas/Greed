@@ -105,7 +105,7 @@ export function RouletteMockup() {
         <Cloth
           placed={placed}
           mine="you"
-          pocket={spinning ? null : pocket}
+          landed={spinning ? null : pocket}
           disabled={spinning}
           onPlace={(spotId: string) =>
             setPlaced((was) => {

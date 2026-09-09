@@ -119,13 +119,31 @@ export function Wheel({
             : `The ball is in ${pocket}.`
       }
     >
+      {/*
+        The title names the number only once the ball is in it.
+
+        The result exists from the moment betting closes — the server picks it
+        then, and this component needs it to roll the ball to the right place.
+        So every drawing of it is a chance to give the game away, and this one
+        would give it away to exactly the people who cannot see the wheel spoil
+        it any other way.
+
+        It sits as the first child of the svg because the lint rule that
+        insists every drawing has one cannot see past a comment.
+      */}
       <svg viewBox="0 0 100 100" className="rl__wheel-face">
-        <title>{pocket === null ? "Roulette wheel" : `The ball is in ${pocket}`}</title>
+        <title>{turning || pocket === null ? "Roulette wheel" : `The ball is in ${pocket}`}</title>
 
         {/* The bowl the rim sits in. */}
         <circle cx="50" cy="50" r="49" className="rl__wheel-bowl" />
 
         <g className="rl__wheel-rim">
+          {/*
+            Two kinds of marking, and only one of them may appear mid-spin.
+            Which pockets a player's own chips cover is theirs to know and is
+            half of what makes watching the ball worth anything. Which pocket
+            the ball is going to end up in is not, until it is there.
+          */}
           {WHEEL.map((n, at) => {
             const colour = colourOf(n);
             const lit = covered?.has(n) === true;
@@ -135,7 +153,7 @@ export function Wheel({
                 d={wedge(at, 32, 47)}
                 className={`rl__pocket rl__pocket--${colour ?? "zero"}${
                   lit ? " rl__pocket--covered" : ""
-                }${pocket === n ? " rl__pocket--home" : ""}`}
+                }${!turning && pocket === n ? " rl__pocket--home" : ""}`}
               />
             );
           })}
