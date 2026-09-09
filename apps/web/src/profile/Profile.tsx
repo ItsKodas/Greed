@@ -23,9 +23,18 @@ const FIGURE_NAMES: Record<string, Record<string, string>> = {
     farkles: "farkles",
     hotDice: "hot dice",
   },
+  tips: {
+    taps: "taps",
+    chipsTipped: "chips tipped",
+    bestNight: "best night",
+  },
 };
 
-const GAME_NAMES: Record<string, string> = { greed: "Greed", blackjack: "Blackjack" };
+const GAME_NAMES: Record<string, string> = {
+  greed: "Greed",
+  blackjack: "Blackjack",
+  tips: "The Tip Jar",
+};
 
 export function Profile() {
   const account = useAccount();

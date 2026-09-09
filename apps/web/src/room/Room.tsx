@@ -91,9 +91,16 @@ export function Room() {
       {bar.length > 0 ? (
         <>
           <p className="room__label">At the bar</p>
+          {/*
+           * Cabinet, not TableTile: a bar game has no rooms to be busy or
+           * idle in, so TableTile's footer would call busyness() and print
+           * "Nobody playing — start one" forever, an instruction nobody
+           * tapping the jar can act on. Cabinet shows the game's blurb
+           * instead, the same as a machine with nobody at it.
+           */}
           <div className="room__few">
             {bar.map((game) => (
-              <TableTile key={game.id} game={game} />
+              <Cabinet key={game.id} game={game} />
             ))}
           </div>
         </>
