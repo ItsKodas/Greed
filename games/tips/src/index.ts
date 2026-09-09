@@ -22,3 +22,5 @@ export {
 
 export { REFUSALS, buy, emptyJar, rollNight, tap } from "./tap.js";
 export type { Outcome } from "./tap.js";
+
+export { TIPS } from "./listing.js";

@@ -59,7 +59,7 @@ describe("the games that are coming", () => {
  */
 describe("the shapes a game can be", () => {
   it("gives every coming game one the room knows how to draw", () => {
-    const drawn = new Set(["table", "machine", "party"]);
+    const drawn = new Set(["table", "machine", "party", "bar"]);
     for (const game of COMING) {
       expect(drawn.has(game.shape)).toBe(true);
     }
