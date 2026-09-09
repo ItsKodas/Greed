@@ -46,7 +46,9 @@ export type Cue =
   | "sayFold"
   | "sayCall"
   | "sayRaise"
-  | "sayAllIn";
+  | "sayAllIn"
+  /* The pot going across the felt to whoever took it. */
+  | "potPush";
 
 interface Manifest {
   dice?: string[];
@@ -679,6 +681,20 @@ export function play(
     case "hotDice":
       [523, 659, 784, 1046].forEach((frequency, step) => {
         tone({ frequency, duration: 0.16, type: "triangle", gain: 0.13, delay: step * 0.07 });
+      });
+      break;
+    case "potPush":
+      /*
+       * Chips sliding, not chips landing. A sampled rattle if the building has
+       * one, because this is a physical thing happening to physical objects;
+       * the synthesised fallback is a soft wash rather than a tone, since a
+       * pot being pushed has no pitch either.
+       */
+      void sample(pickNamed("chips", "slide"), 0.7).then((played) => {
+        if (!played) {
+          noise(0.22, 1600, 0.06);
+          noise(0.16, 900, 0.05);
+        }
       });
       break;
     case "sayCheck":

@@ -197,6 +197,8 @@ export interface TableView {
   smallBlind: number;
   bigBlind: number;
   paid: Payout[];
+  /** When the pot was pushed, so the felt can push it across exactly once. */
+  paidAt: number | null;
   lastEvent: string | null;
   watching: number;
   seats: SeatView[];
@@ -243,6 +245,15 @@ export class Table implements PlayTable {
   bigBlindId: string | null = null;
   /** What the last hand paid out, for the felt to show. */
   paid: Payout[] = [];
+  /**
+   * When it paid out.
+   *
+   * The felt needs the moment, not only the amounts: pushing the pot across to
+   * whoever won is an animation that has to run once and be allowed to finish,
+   * and two identical hands in a row are indistinguishable by their payouts
+   * alone. Stamped when the pot is awarded and cleared when the felt is.
+   */
+  paidAt: number | null = null;
   lastEvent: string | null = null;
 
   /**
@@ -640,6 +651,7 @@ export class Table implements PlayTable {
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
       paid: this.paid,
+      paidAt: this.paidAt,
       lastEvent: this.lastEvent,
       watching: this.seating.watching,
       seats: this.seats.map((seat) => ({
@@ -1125,6 +1137,7 @@ export class Table implements PlayTable {
     }
 
     this.paid = [];
+    this.paidAt = Date.now();
     for (const [id, chips] of won) {
       const seat = this.seats.find((one) => one.id === id);
       if (seat === undefined) {
@@ -1167,6 +1180,7 @@ export class Table implements PlayTable {
     }
     this.street = "waiting";
     this.board = [];
+    this.paidAt = null;
     for (const seat of this.seats) {
       seat.hole = [];
       seat.showed = null;

@@ -45,6 +45,7 @@ const view = (over: Partial<TableView> = {}): TableView => ({
   smallBlind: 10,
   bigBlind: 20,
   paid: [],
+  paidAt: null,
   lastEvent: null,
   watching: 0,
   seats: [],
@@ -383,5 +384,116 @@ describe("deciding before your turn", () => {
       />,
     );
     expect(table.sent).toEqual([]);
+  });
+});
+
+/*
+ * The end of a hand, on screen.
+ *
+ * A number changing in two places says who won and says it to nobody who was
+ * not already looking at both. These are the three things that say it out
+ * loud: the pot travelling to the seat, the seat lighting up, and a line in
+ * the middle naming them.
+ */
+describe("when the pot is won", () => {
+  const ended = (paid: TableView["paid"], seats: SeatView[]) =>
+    view({ street: "showdown", pot: 0, paid, paidAt: 1_700_000_000_000, seats });
+
+  it("says who won, how much, and with what", () => {
+    const table = stub();
+    const mine = seat({ id: "s1", name: "Ada" });
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={ended(
+          [{ seatId: "s1", name: "Ada", chips: 1_240, said: "aces and kings" }],
+          [mine, seat({ id: "s2", name: "Bram" })],
+        )}
+      />,
+    );
+
+    // Scoped to the announcement: the winner's name is also on their seat, and
+    // it being in both places is the point rather than a duplicate.
+    const said = container.querySelector(".pk__won")?.textContent ?? "";
+    expect(said).toContain("Ada");
+    expect(said).toContain("wins 1,240");
+    expect(said).toContain("aces and kings");
+  });
+
+  it("pushes one heap of chips per winner, and lands each on its own seat", () => {
+    /*
+     * A split pot is two heaps going two ways, which is the clearest way to
+     * say a pot was split — one heap arriving somewhere in the middle of two
+     * seats would say nothing.
+     */
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={ended(
+          [
+            { seatId: "s1", name: "Ada", chips: 600, said: "a straight" },
+            { seatId: "s2", name: "Bram", chips: 600, said: "a straight" },
+          ],
+          [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
+        )}
+      />,
+    );
+
+    const sweeps = [...container.querySelectorAll(".pk__sweep")];
+    expect(sweeps).toHaveLength(2);
+    // Each is aimed somewhere different, which is what makes it a split.
+    const aims = sweeps.map((one) => (one as HTMLElement).style.getPropertyValue("--sin"));
+    expect(new Set(aims).size).toBe(2);
+  });
+
+  it("pushes nothing while a hand is still being played", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({ street: "flop", seats: [seat({ id: "s1", name: "Ada" })] })}
+      />,
+    );
+    expect(container.querySelectorAll(".pk__sweep")).toHaveLength(0);
+    expect(container.querySelector(".pk__won")).toBeNull();
+  });
+
+  it("marks the seat that took it", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s2"
+        state={ended(
+          [{ seatId: "s1", name: "Ada", chips: 400, said: null }],
+          [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
+        )}
+      />,
+    );
+    const won = container.querySelectorAll(".pk__seat--won");
+    expect(won).toHaveLength(1);
+    expect(won[0]?.querySelector(".pk__name")?.textContent).toBe("Ada");
+  });
+
+  it("aims nothing at a winner who has already left the table", () => {
+    // The payout names a seat; the seat may be gone by the time it is drawn.
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s2"
+        state={ended(
+          [{ seatId: "gone", name: "Ada", chips: 400, said: null }],
+          [seat({ id: "s2", name: "Bram" })],
+        )}
+      />,
+    );
+    expect(container.querySelectorAll(".pk__sweep")).toHaveLength(0);
+    // Still said out loud, though — somebody won it.
+    expect(screen.getByText("wins 400")).toBeTruthy();
   });
 });

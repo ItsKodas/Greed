@@ -251,6 +251,13 @@ export function Felt({
               <span className="pk__gap" key={slot} />
             ))}
           </div>
+          {/*
+            * Who took it, said in the middle where the pot was.
+            *
+            * The seat says "won 1,240" too, but a seat is small and there are
+            * ten of them; this is the one line somebody who looked away for a
+            * moment can come back to and read.
+            */}
           {state.street === "waiting" ? (
             <p className="pk__waiting">
               {state.seats.filter((seat) => seat.stack > 0).length < 2
@@ -276,6 +283,43 @@ export function Felt({
             using={seat.id === seatId ? using : EMPTY}
           />
         ))}
+
+        {/*
+          * The pot going where it went.
+          *
+          * One heap per winner, starting in the middle and travelling out to
+          * their seat — the same `--cos`/`--sin` the seat itself is placed
+          * with, so it lands on them rather than near them. Split pots send
+          * one to each, which is the clearest way to say a pot was split.
+          *
+          * Keyed on the moment the hand paid, so it runs once per hand and is
+          * allowed to finish: two identical hands in a row would otherwise be
+          * one element that never moves.
+          */}
+        {state.paidAt != null
+          ? state.paid.map((one) => {
+              const at = seats.findIndex((seat) => seat.id === one.seatId);
+              if (at < 0) {
+                return null;
+              }
+              return (
+                <span
+                  className="pk__sweep"
+                  key={`${state.paidAt}:${one.seatId}`}
+                  style={seatAt(at, seats.length)}
+                  aria-hidden="true"
+                >
+                  <ChipStack
+                    amount={one.chips}
+                    width={19}
+                    ladder={TABLE_CHIPS}
+                    most={18}
+                    tallest={3}
+                  />
+                </span>
+              );
+            })
+          : null}
 
         {seats.map((seat, at) => {
           const chips =
@@ -311,7 +355,50 @@ export function Felt({
         * that stands between somebody new and the game, and it is a thing the
         * table already knows the answer to.
         */}
-      {state.you?.hand != null && me !== null && !me.folded ? (
+      {/*
+        * Who took the pot, in the same place the hand you are holding is
+        * announced — one headline slot under the table rather than two.
+        *
+        * Outside the felt on purpose. Every part of the cloth is spoken for at
+        * a showdown: the board is what everybody is reading, the middle is
+        * where the pot was, and below it is your own hand. A banner anywhere on
+        * it covers something somebody is looking at, and this is the moment
+        * they are looking hardest.
+        */}
+      {state.paid.length > 0 && state.paidAt != null ? (
+        <p
+            className="pk__won"
+            key={state.paidAt}
+            /*
+             * A live region, which is both what this is and what lets it carry
+             * a label: a plain paragraph has no role to be named, and a win is
+             * exactly the kind of thing somebody not watching the felt should
+             * be told about when it happens.
+             */
+            role="status"
+            aria-live="polite"
+            /*
+             * Said once, as a sentence. The spans below are laid out with a
+             * gap rather than separated by spaces, so read straight off the
+             * markup this comes out as "Pocketswins 520kings and 3s".
+             */
+            aria-label={state.paid
+              .map(
+                (one) =>
+                  `${one.name} wins ${fmt(one.chips)}${one.said === null ? "" : ` with ${one.said}`}`,
+              )
+              .join(", and ")}
+          >
+            {state.paid.map((one, index) => (
+              <span className="pk__won-one" key={one.seatId}>
+                {index > 0 ? <span className="pk__won-and">and</span> : null}
+                <strong>{one.name}</strong>
+                <span className="pk__won-chips">wins {fmt(one.chips)}</span>
+                {one.said === null ? null : <span className="pk__won-with">{one.said}</span>}
+              </span>
+            ))}
+          </p>
+      ) : state.you?.hand != null && me !== null && !me.folded ? (
         <p
           /* Keyed on what it says, so a hand that becomes a different hand is
              a different element — which is what makes it land rather than

@@ -99,6 +99,18 @@ export function useTableSound(view: TableView | null, seatId: string | null): vo
     }
 
     /*
+     * The pot being pushed, once per hand and for everybody at the table.
+     *
+     * Keyed on the moment rather than on `paid` being non-empty, which stays
+     * true for as long as the result is on screen — that would be the sound of
+     * a pot on a loop. It is not exclusive with the payout below: one is the
+     * table's chips moving and the other is yours arriving.
+     */
+    if (view.paidAt !== null && view.paidAt !== before.paidAt) {
+      play("potPush");
+    }
+
+    /*
      * Being paid is not exclusive with any of the above — a hand is turned
      * over and won in one update, and a return here would swallow the sound
      * of winning it.
