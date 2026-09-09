@@ -307,7 +307,7 @@ function Actions({ turn }: { turn: boolean }) {
           <span className="pk__act-name">Call</span>
           <span className="pk__act-figure">100</span>
         </button>
-        <button type="button" className="pk__act pk__act--raise">
+        <button type="button" className="pk__act">
           <span className="pk__act-name">Raise to</span>
           <span className="pk__act-figure">{raise.toLocaleString("en-US")}</span>
         </button>

@@ -112,6 +112,15 @@ export interface TableView {
   seats: SeatView[];
   /** Whose turn it is, or null between hands. */
   turnSeatId: string | null;
+  /**
+   * When their turn runs out, and how long a turn is.
+   *
+   * Both, because a deadline alone cannot say how much of a turn is left as a
+   * fraction — and a player who arrived mid-turn needs that to be told the
+   * truth rather than that they have a whole one.
+   */
+  turnEndsAt: number | null;
+  turnMs: number;
   hostId: string | null;
   watching: number;
   lastEvent: string | null;
@@ -269,6 +278,14 @@ export class Table {
    * anything a client can reach.
    */
   bettingMs = BETTING_MS;
+  /**
+   * How long a seat gets to act.
+   *
+   * On the table beside the betting window, and for the same reason: the felt
+   * has to draw it. A clock the player cannot see is a clock that folds their
+   * hand without warning.
+   */
+  turnMs = TURN_MS;
   settleMs = SETTLE_MS;
   /**
    * How much of the betting window takes no more chips.
@@ -279,7 +296,35 @@ export class Table {
    * all, which is what a test hurrying the window round wants.
    */
   lastCallMs = LAST_CALL_MS;
-  private turnIndex = -1;
+  private at = -1;
+
+  /**
+   * When the seat now to act was first asked.
+   *
+   * Stamped by the setter below rather than at each of the places that hand
+   * the turn on, because there are several and one of them forgetting would
+   * leave a player on somebody else's clock. Without it the deadline had to be
+   * worked out fresh every time it was asked for — and the room asks on every
+   * broadcast, so a turn's clock restarted whenever anything happened at the
+   * table and the turn it was meant to end never ended.
+   */
+  turnSince: number | null = null;
+
+  private get turnIndex(): number {
+    return this.at;
+  }
+
+  private set turnIndex(index: number) {
+    if (index !== this.at) {
+      this.turnSince = index < 0 ? null : Date.now();
+    }
+    this.at = index;
+  }
+
+  /** When this turn runs out, or null when nobody is being waited on. */
+  get turnEndsAt(): number | null {
+    return this.turnSince === null ? null : this.turnSince + this.turnMs;
+  }
   private readonly seating: Seating;
   private readonly shoe: Shoe;
 
@@ -983,6 +1028,8 @@ export class Table {
       watching: this.seating.watching,
       lastEvent: this.lastEvent,
       turnSeatId: current?.id ?? null,
+      turnEndsAt: this.turnEndsAt,
+      turnMs: this.turnMs,
       minBet: MIN_BET,
       maxBet: MAX_BET,
       forFun: this.forFun,

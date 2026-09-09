@@ -71,6 +71,16 @@ export interface Seat extends TableSeat {
 
 /** What a hand paid, once it is over. */
 export interface Payout {
+  /**
+   * Which pot this came out of: zero is the main pot, then the side pots.
+   *
+   * Kept per pot rather than summed per seat, which is what this used to be.
+   * A side pot is a separate thing won by separate people for separate
+   * reasons, and a felt that wants to announce them one at a time cannot
+   * un-add them once they are one number. A seat that wins two pots appears
+   * twice, which is what actually happened.
+   */
+  pot: number;
   seatId: string;
   name: string;
   chips: number;
@@ -190,6 +200,15 @@ export interface TableView {
   toAct: string | null;
   /** When their turn runs out, so the felt can show it running out. */
   turnEndsAt: number | null;
+  /**
+   * And how long a turn is, which the deadline alone does not say.
+   *
+   * The felt drains a ring over the seat being waited on, and a ring needs to
+   * know what full looks like. Without this it could only start from full at
+   * whatever moment it happened to be mounted, which is wrong for anybody who
+   * arrived — or refreshed — halfway through somebody else's turn.
+   */
+  turnMs: number;
   button: string | null;
   /** Who put the blinds in this hand, for the felt to mark. */
   smallBlindId: string | null;
@@ -197,6 +216,11 @@ export interface TableView {
   smallBlind: number;
   bigBlind: number;
   paid: Payout[];
+  /** When the pot was pushed, so the felt can push it across exactly once. */
+  paidAt: number | null;
+  /** The stakes the closing street swept in, and when, for the felt to draw. */
+  swept: Array<{ seatId: string; chips: number }>;
+  sweptAt: number | null;
   lastEvent: string | null;
   watching: number;
   seats: SeatView[];
@@ -243,6 +267,26 @@ export class Table implements PlayTable {
   bigBlindId: string | null = null;
   /** What the last hand paid out, for the felt to show. */
   paid: Payout[] = [];
+  /**
+   * When it paid out.
+   *
+   * The felt needs the moment, not only the amounts: pushing the pot across to
+   * whoever won is an animation that has to run once and be allowed to finish,
+   * and two identical hands in a row are indistinguishable by their payouts
+   * alone. Stamped when the pot is awarded and cleared when the felt is.
+   */
+  paidAt: number | null = null;
+
+  /**
+   * What each seat had in front of it when the street closed, and when.
+   *
+   * A betting round ends by sweeping every stake into the middle, which is a
+   * thing that happens rather than a state anything is in — a moment later
+   * every `committed` is zero and there is nothing left to say it did. So it is
+   * recorded on the way past, for the felt to draw the chips going in.
+   */
+  swept: Array<{ seatId: string; chips: number }> = [];
+  sweptAt: number | null = null;
   lastEvent: string | null = null;
 
   /**
@@ -634,12 +678,16 @@ export class Table implements PlayTable {
       pot: this.pot,
       toAct: this.toAct,
       turnEndsAt: this.turnEndsAt,
+      turnMs: this.turnMs,
       button: this.button,
       smallBlindId: this.smallBlindId,
       bigBlindId: this.bigBlindId,
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
       paid: this.paid,
+      paidAt: this.paidAt,
+      swept: this.swept,
+      sweptAt: this.sweptAt,
       lastEvent: this.lastEvent,
       watching: this.seating.watching,
       seats: this.seats.map((seat) => ({
@@ -1011,6 +1059,18 @@ export class Table implements PlayTable {
 
   /** Sweeps the street's bets into the hand and turns the next cards over. */
   private nextStreet(): void {
+    /*
+     * Read before it is cleared, which is the whole reason this is here rather
+     * than worked out on the felt: a moment later there is nothing left of it.
+     */
+    const swept = this.seats
+      .filter((seat) => seat.committed > 0)
+      .map((seat) => ({ seatId: seat.id, chips: seat.committed }));
+    if (swept.length > 0) {
+      this.swept = swept;
+      this.sweptAt = Date.now();
+    }
+
     for (const seat of this.seats) {
       seat.committed = 0;
       seat.acted = false;
@@ -1087,7 +1147,13 @@ export class Table implements PlayTable {
       }
     }
 
-    const won = new Map<string, number>();
+    this.paid = [];
+    this.paidAt = Date.now();
+    /*
+     * Counted only for pots that actually paid, so the numbers the felt
+     * sequences through have no gaps in them.
+     */
+    let potIndex = 0;
     for (const pot of pots(contributions)) {
       const runners = pot.eligible.filter((id) => contested.some((seat) => seat.id === id));
       if (runners.length === 0) {
@@ -1120,23 +1186,20 @@ export class Table implements PlayTable {
         }
       }
       for (const [id, chips] of split(pot.chips, winners)) {
-        won.set(id, (won.get(id) ?? 0) + chips);
+        const seat = this.seats.find((one) => one.id === id);
+        if (seat === undefined) {
+          continue;
+        }
+        seat.stack += chips;
+        this.paid.push({
+          pot: potIndex,
+          seatId: id,
+          name: seat.name,
+          chips,
+          said: shown ? describe(scores.get(id) as Score) : null,
+        });
       }
-    }
-
-    this.paid = [];
-    for (const [id, chips] of won) {
-      const seat = this.seats.find((one) => one.id === id);
-      if (seat === undefined) {
-        continue;
-      }
-      seat.stack += chips;
-      this.paid.push({
-        seatId: id,
-        name: seat.name,
-        chips,
-        said: shown ? describe(scores.get(id) as Score) : null,
-      });
+      potIndex += 1;
     }
 
     /*
@@ -1167,6 +1230,9 @@ export class Table implements PlayTable {
     }
     this.street = "waiting";
     this.board = [];
+    this.paidAt = null;
+    this.swept = [];
+    this.sweptAt = null;
     for (const seat of this.seats) {
       seat.hole = [];
       seat.showed = null;

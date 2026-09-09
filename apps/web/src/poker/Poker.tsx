@@ -10,7 +10,7 @@ import { Chat } from "../game/Chat.js";
 import { compact } from "../game/money.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
-import { useCountdown } from "../game/useCountdown.js";
+import { TurnRing } from "../game/TurnRing.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
 import { SeatCount } from "../table/SeatCount.js";
@@ -38,6 +38,65 @@ const fmt = (n: number) => n.toLocaleString("en-US");
 
 /** The five places a board card goes, in the order they are dealt. */
 const SLOTS = ["flop1", "flop2", "flop3", "turn", "river"];
+
+/**
+ * How long each pot's announcement holds before the next one.
+ *
+ * Paired with the table's own showdown wait, which grows by the same step for
+ * every side pot — if these two disagree the felt clears in the middle of a
+ * sentence.
+ */
+const MOMENT_MS = 2_400;
+
+/**
+ * The pots of a finished hand, in the order they should be announced.
+ *
+ * Grouped rather than listed, because a side pot is a separate thing won by
+ * separate people and saying them all at once gives the main pot's winner and
+ * a short stack's consolation the same breath.
+ */
+function potsOf(paid: TableView["paid"]): TableView["paid"][] {
+  const byPot = new Map<number, TableView["paid"]>();
+  for (const one of paid) {
+    const already = byPot.get(one.pot);
+    if (already === undefined) {
+      byPot.set(one.pot, [one]);
+    } else {
+      already.push(one);
+    }
+  }
+  return [...byPot.entries()].sort(([a], [b]) => a - b).map(([, winners]) => winners);
+}
+
+/**
+ * Which pot is being announced right now.
+ *
+ * Walks forward on its own clock and stops at the last one, so the final
+ * announcement stays up for the rest of the showdown rather than vanishing.
+ * Restarted by the moment the hand paid, which is the one thing that makes
+ * this a different hand's sequence rather than the same one continuing.
+ */
+function useMoment(paidAt: number | null, count: number): number {
+  const [at, setAt] = useState(0);
+
+  useEffect(() => {
+    setAt(0);
+    if (paidAt === null || count <= 1) {
+      return;
+    }
+    const timers: number[] = [];
+    for (let step = 1; step < count; step += 1) {
+      timers.push(window.setTimeout(() => setAt(step), step * MOMENT_MS));
+    }
+    return () => {
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [paidAt, count]);
+
+  return Math.min(at, Math.max(0, count - 1));
+}
 
 /** Nobody else's hand is pointed at, and one empty set does for all of them. */
 const EMPTY: Set<string> = new Set();
@@ -172,7 +231,28 @@ export function Felt({
       : [...state.seats.slice(mine), ...state.seats.slice(0, mine)];
   }, [state.seats, seatId]);
 
-  const won = useMemo(() => new Map(state.paid.map((one) => [one.seatId, one])), [state.paid]);
+  /*
+   * What each seat took overall, for the mark on the seat itself. Summed here
+   * because the payouts are per pot now, and somebody who won two of them won
+   * the total rather than whichever happened to be last in the list.
+   */
+  const won = useMemo(() => {
+    const totals = new Map<string, { chips: number; said: string | null }>();
+    for (const one of state.paid) {
+      const already = totals.get(one.seatId);
+      totals.set(one.seatId, {
+        chips: (already?.chips ?? 0) + one.chips,
+        said: one.said ?? already?.said ?? null,
+      });
+    }
+    return totals;
+  }, [state.paid]);
+
+  /* The pots, in the order they are announced, and which one is up now. */
+  const moments = useMemo(() => potsOf(state.paid), [state.paid]);
+  const moment = useMoment(state.paidAt, moments.length);
+  const showing = moments[moment] ?? [];
+  const spotlit = useMemo(() => new Set(showing.map((one) => one.seatId)), [showing]);
 
   /*
    * Which cards on the table are in your hand, held by name rather than by
@@ -251,6 +331,13 @@ export function Felt({
               <span className="pk__gap" key={slot} />
             ))}
           </div>
+          {/*
+            * Who took it, said in the middle where the pot was.
+            *
+            * The seat says "won 1,240" too, but a seat is small and there are
+            * ten of them; this is the one line somebody who looked away for a
+            * moment can come back to and read.
+            */}
           {state.street === "waiting" ? (
             <p className="pk__waiting">
               {state.seats.filter((seat) => seat.stack > 0).length < 2
@@ -270,12 +357,87 @@ export function Felt({
             mine={seat.id === seatId}
             won={won.get(seat.id)?.chips ?? null}
             said={won.get(seat.id)?.said ?? null}
+            /* Whose moment it is right now, which is not the same as who won:
+               at a hand with side pots several seats won and they are announced
+               one at a time. */
+            spotlit={spotlit.has(seat.id)}
             /* What this player asked for, until the table answers. */
             pending={seat.id === seatId ? intent : null}
             /* Only your own hand is pointed at: it is the only one you know. */
             using={seat.id === seatId ? using : EMPTY}
           />
         ))}
+
+        {/*
+          * The street's stakes going into the middle.
+          *
+          * A betting round ends by sweeping every stake in, which is a thing
+          * that happens rather than a state anything is left in — a moment
+          * later every seat reads zero. So the table records what it swept and
+          * the felt draws it going, from each seat's own place on the chip ring
+          * to the pot, which is the way the chips actually travel.
+          */}
+        {state.sweptAt != null
+          ? state.swept.map((one) => {
+              const at = seats.findIndex((seat) => seat.id === one.seatId);
+              if (at < 0) {
+                return null;
+              }
+              return (
+                <span
+                  className="pk__gather"
+                  key={`${state.sweptAt}:${one.seatId}`}
+                  style={seatAt(at, seats.length)}
+                  aria-hidden="true"
+                >
+                  <ChipStack
+                    amount={one.chips}
+                    width={16}
+                    ladder={TABLE_CHIPS}
+                    most={12}
+                    tallest={4}
+                  />
+                </span>
+              );
+            })
+          : null}
+
+        {/*
+          * The pot going where it went.
+          *
+          * One heap per winner, starting in the middle and travelling out to
+          * their seat — the same `--cos`/`--sin` the seat itself is placed
+          * with, so it lands on them rather than near them. Split pots send
+          * one to each, which is the clearest way to say a pot was split.
+          *
+          * Keyed on the moment the hand paid, so it runs once per hand and is
+          * allowed to finish: two identical hands in a row would otherwise be
+          * one element that never moves.
+          */}
+        {state.paidAt != null
+          ? showing.map((one) => {
+              const at = seats.findIndex((seat) => seat.id === one.seatId);
+              if (at < 0) {
+                return null;
+              }
+              return (
+                <span
+                  className="pk__sweep"
+                  key={`${state.paidAt}:${one.pot}:${one.seatId}`}
+                  style={seatAt(at, seats.length)}
+                  aria-hidden="true"
+                >
+                  <ChipStack
+                    amount={one.chips}
+                    width={19}
+                    ladder={TABLE_CHIPS}
+                    most={18}
+                    tallest={3}
+                  />
+                </span>
+              );
+            })
+          : null}
 
         {seats.map((seat, at) => {
           const chips =
@@ -289,7 +451,13 @@ export function Felt({
                * this ring passes through.
                */
               className={`pk__bet${seat.id === seatId ? " pk__bet--yours" : ""}`}
-              key={`bet-${seat.id}`}
+              /*
+               * Keyed on the amount as well as the seat, so a stake that grows
+               * is a new element that slides out again rather than a number
+               * quietly changing in place. Putting chips in is the commonest
+               * thing that happens at a table; it should look like something.
+               */
+              key={`bet-${seat.id}:${chips}`}
               style={{ ...seatAt(at, seats.length), ...dodge(at, seats.length) }}
             >
               {/*
@@ -311,7 +479,52 @@ export function Felt({
         * that stands between somebody new and the game, and it is a thing the
         * table already knows the answer to.
         */}
-      {state.you?.hand != null && me !== null && !me.folded ? (
+      {/*
+        * Who took the pot, in the same place the hand you are holding is
+        * announced — one headline slot under the table rather than two.
+        *
+        * Outside the felt on purpose. Every part of the cloth is spoken for at
+        * a showdown: the board is what everybody is reading, the middle is
+        * where the pot was, and below it is your own hand. A banner anywhere on
+        * it covers something somebody is looking at, and this is the moment
+        * they are looking hardest.
+        */}
+      {state.paid.length > 0 && state.paidAt != null ? (
+        <p
+            className="pk__won"
+            /* Keyed on the pot as well as the hand, so each announcement is a
+               new element that lands rather than text swapping in place. */
+            key={`${state.paidAt}:${moment}`}
+            /*
+             * A live region, which is both what this is and what lets it carry
+             * a label: a plain paragraph has no role to be named, and a win is
+             * exactly the kind of thing somebody not watching the felt should
+             * be told about when it happens.
+             */
+            role="status"
+            aria-live="polite"
+            /*
+             * Said once, as a sentence. The spans below are laid out with a
+             * gap rather than separated by spaces, so read straight off the
+             * markup this comes out as "Pocketswins 520kings and 3s".
+             */
+            aria-label={showing
+              .map(
+                (one) =>
+                  `${one.name} wins ${fmt(one.chips)}${one.said === null ? "" : ` with ${one.said}`}`,
+              )
+              .join(", and ")}
+          >
+            {showing.map((one, index) => (
+              <span className="pk__won-one" key={one.seatId}>
+                {index > 0 ? <span className="pk__won-and">and</span> : null}
+                <strong>{one.name}</strong>
+                <span className="pk__won-chips">wins {fmt(one.chips)}</span>
+                {one.said === null ? null : <span className="pk__won-with">{one.said}</span>}
+              </span>
+            ))}
+          </p>
+      ) : state.you?.hand != null && me !== null && !me.folded ? (
         <p
           /* Keyed on what it says, so a hand that becomes a different hand is
              a different element — which is what makes it land rather than
@@ -392,6 +605,7 @@ function Seat({
   said,
   pending,
   using,
+  spotlit,
 }: {
   seat: SeatView;
   at: number;
@@ -403,6 +617,8 @@ function Seat({
   pending: { move: Move | null } | null;
   /** The cards in your own best hand, so yours can be pointed at. */
   using: Set<string>;
+  /** Whether this seat is the one being announced at this moment. */
+  spotlit: boolean;
 }) {
   /*
    * A press shows here before the table has answered it, which is the whole of
@@ -424,7 +640,9 @@ function Seat({
 
   return (
     <div
-      className={`pk__seat pk__seat--${look}${mine ? " pk__seat--you" : ""}${seat.connected ? "" : " pk__seat--away"}`}
+      className={`pk__seat pk__seat--${look}${mine ? " pk__seat--you" : ""}${
+        seat.connected ? "" : " pk__seat--away"
+      }${spotlit ? " pk__seat--spotlit" : ""}`}
       style={seatAt(at, of)}
     >
       <div className="pk__cards">
@@ -457,6 +675,13 @@ function Seat({
             accentColor={seat.accentColor}
             className="pk__face"
           />
+          {/*
+            * The clock goes round the face, which is the round thing on a seat
+            * and the one that means "who". Around the whole seat it was an
+            * ellipse stretched over a column of cards, drawn straight across
+            * the hand it was waiting on.
+            */}
+          {acting ? <TurnRing endsAt={state.turnEndsAt} turnMs={state.turnMs} /> : null}
           <span className="pk__name">
             {seat.name}
             {seat.isBot ? <span className="pk__bot-mark">bot</span> : null}
@@ -496,18 +721,9 @@ function Seat({
       {said === null && won !== null ? (
         <span className="pk__says">won {fmt(won)}</span>
       ) : null}
-      {acting ? <Clock endsAt={state.turnEndsAt} /> : null}
+
     </div>
   );
-}
-
-/** How long the seat now to act has left, counted down out here. */
-function Clock({ endsAt }: { endsAt: number | null }) {
-  const left = useCountdown(endsAt);
-  if (left === null) {
-    return null;
-  }
-  return <span className="pk__clock">{Math.ceil(left / 1000)}</span>;
 }
 
 /* ----------------------------------------------------------- the controls */
@@ -643,7 +859,7 @@ export function Actions({
         <div className="pk__acts">
           <button
             type="button"
-            className="pk__act pk__act--raise"
+            className="pk__act pk__act--go"
             disabled={table.busy}
             aria-label={`Sit down with ${compact(state.entry)}`}
             onClick={() => table.act({ type: "buyIn" })}
@@ -819,7 +1035,12 @@ function OnTurn({
   const span = Math.max(1, you.maxRaiseTo - you.minRaiseTo);
 
   return (
-    <div className="pk__controls">
+    /*
+     * Keyed on the decision by its caller, so arriving here is arriving at a
+     * new turn — which is what makes the flash below run once rather than on
+     * every broadcast while you sit thinking.
+     */
+    <div className="pk__controls pk__controls--yours">
       {you.canRaise ? (
         <div className="pk__amount">
           <div className="pk__dial">
@@ -927,7 +1148,7 @@ function OnTurn({
         {you.canRaise ? (
           <button
             type="button"
-            className="pk__act pk__act--raise"
+            className="pk__act"
             disabled={busy}
             aria-label={`${all ? "All in" : opening ? "Bet" : "Raise to"} ${fmt(
               all ? me.committed + me.stack : at,

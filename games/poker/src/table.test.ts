@@ -493,3 +493,67 @@ describe("leaving", () => {
     expect(made.street).toBe("showdown");
   });
 });
+
+/*
+ * What a hand paid, pot by pot.
+ *
+ * Payouts used to be summed per seat, which loses the one thing a felt needs to
+ * announce them separately: a side pot is a different pot, won by different
+ * people, and once it is added into a total it cannot be taken back out.
+ */
+describe("paying out a hand with a side pot", () => {
+  /** A short stack that cannot cover the others, which is what makes one. */
+  function shortStacked(): Table {
+    const made = table([300, 5_000, 5_000]);
+    made.deal();
+    // Everybody in, all the way, so the short stack is all in and the other
+    // two keep betting past them.
+    for (let guard = 0; guard < 40 && made.street !== "showdown"; guard += 1) {
+      const seatId = made.toAct;
+      if (seatId === null) {
+        break;
+      }
+      const seat = made.seats.find((one) => one.id === seatId);
+      made.act(seatId, made.owed(seat as never) > 0 ? "call" : "check");
+    }
+    return made;
+  }
+
+  it("says which pot each payout came out of", () => {
+    const made = shortStacked();
+    expect(made.paid.length).toBeGreaterThan(0);
+    for (const one of made.paid) {
+      expect(Number.isInteger(one.pot)).toBe(true);
+      expect(one.pot).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("numbers the pots from the main one outwards, with no gaps", () => {
+    /*
+     * The felt walks these in order and holds the showdown open for one moment
+     * each, so a gap would be a silent pause in the middle of the sequence.
+     */
+    const made = shortStacked();
+    const seen = [...new Set(made.paid.map((one) => one.pot))].sort((a, b) => a - b);
+    expect(seen[0]).toBe(0);
+    for (const [at, pot] of seen.entries()) {
+      expect(pot).toBe(at);
+    }
+  });
+
+  it("pays out exactly what was in the middle, however it was split", () => {
+    // The rule underneath all of it: the pots add up to the pot.
+    const made = table([300, 5_000, 5_000]);
+    const before = chips(made);
+    made.deal();
+    for (let guard = 0; guard < 40 && made.street !== "showdown"; guard += 1) {
+      const seatId = made.toAct;
+      if (seatId === null) {
+        break;
+      }
+      const seat = made.seats.find((one) => one.id === seatId);
+      made.act(seatId, made.owed(seat as never) > 0 ? "call" : "check");
+    }
+    expect(chips(made)).toBe(before);
+  });
+});

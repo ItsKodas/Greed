@@ -73,6 +73,7 @@ export function blackjackAdapter(
        * played here before put in. Without one it waits, as it always has.
        */
       table.housed = bank !== null;
+      table.turnMs = turnMs;
       if (options.bettingMs !== undefined) {
         table.bettingMs = options.bettingMs;
         table.deadline = Date.now() + options.bettingMs;
@@ -320,7 +321,13 @@ export function blackjackAdapter(
       if (table.phase !== "playing" || seat === null) {
         return null;
       }
-      return { seatId: seat.id, endsAt: Date.now() + turnMs };
+      /*
+       * The table's own deadline, stamped when the turn began. Worked out here
+       * instead it moved every time it was asked for — and the room asks on
+       * every broadcast, so the turn it was meant to end never ended.
+       */
+      const endsAt = table.turnEndsAt;
+      return endsAt === null ? null : { seatId: seat.id, endsAt };
     },
 
     timeout(table, seatId) {

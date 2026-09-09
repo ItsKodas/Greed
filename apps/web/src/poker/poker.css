@@ -38,6 +38,9 @@
 .pk {
   container-type: inline-size;
   margin-inline: auto;
+  /* Named once: the face and the clock drawn round it have to agree, and two
+     copies of the same clamp is two things to keep in step. */
+  --face: clamp(18px, 2.4cqw, 40px);
 }
 
 /*
@@ -77,6 +80,8 @@
  * find somebody by, and a colour is read before a word is.
  */
 .pk__wholine {
+  /* The clock is positioned against this, around the face inside it. */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -86,8 +91,8 @@
 
 .pk__face {
   overflow: hidden;
-  width: clamp(18px, 2.4cqw, 40px);
-  height: clamp(18px, 2.4cqw, 40px);
+  width: var(--face);
+  height: var(--face);
   flex: none;
   border-radius: 50%;
   display: grid;
@@ -284,6 +289,16 @@
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.95);
   white-space: nowrap;
+  animation: pk-bet-out 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__bet {
+    animation: none;
+    /* Without the keyframes the transform has to be stated, or the marker
+       loses the centring the animation was carrying. */
+    transform: translate(calc(-50% + var(--dodge, 0px)), -50%);
+  }
 }
 
 /*
@@ -308,29 +323,18 @@
 }
 
 /*
- * The clock on the seat being waited for.
- *
- * A number rather than a ring: at a ten-handed table there is not room for a
- * ring that reads at a glance, and what the player actually needs to know is
- * how many seconds they have — which a ring only tells you by how empty it is.
- * Sits on the opposite corner from the button so the two never collide.
+ * The clock on the seat being waited for is drawn by `TurnRing`, which both
+ * card tables share — its styles live in game.css beside it. All this felt
+ * says is where it goes: round the face, which is the round thing on a seat
+ * and the one that means "who".
  */
-.pk__clock {
+.pk__wholine .turn-ring {
   position: absolute;
-  top: -6px;
-  left: 14px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 4px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: var(--gr-color-accent, #3f9d6a);
-  color: #0d120f;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+  left: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(var(--face) + 6px);
+  height: calc(var(--face) + 6px);
 }
 
 /*
@@ -526,6 +530,50 @@
   color: var(--gr-color-good);
 }
 
+/*
+ * The seat whose moment it is, right now.
+ *
+ * Not the same as the seat that won: a hand with side pots has several winners
+ * and they are announced one after another, so each gets the felt to itself for
+ * a couple of seconds. Lifted and enlarged rather than merely lit, because at a
+ * table of ten a glow is something you notice and a seat growing is something
+ * you look at.
+ *
+ * Its own stacking context, so it comes up over the seats either side of it
+ * rather than growing underneath them.
+ */
+.pk__seat--spotlit {
+  z-index: 7;
+  animation: pk-spotlit 2.4s cubic-bezier(0.16, 1.06, 0.28, 1) both;
+}
+
+@keyframes pk-spotlit {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  14% {
+    transform: translate(-50%, -50%) scale(1.16);
+  }
+  86% {
+    transform: translate(-50%, -50%) scale(1.16);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * No swell, but it still has to be findable — this is the one thing on the
+   * felt saying whose moment it is. So it holds the larger size rather than
+   * growing into it.
+   */
+  .pk__seat--spotlit {
+    animation: none;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+}
+
 .pk__seat--won::before {
   content: "";
   position: absolute;
@@ -533,6 +581,247 @@
   border-radius: 50%;
   background: radial-gradient(50% 50% at 50% 50%, rgb(224 176 72 / 0.38), transparent 70%);
   z-index: -1;
+  /*
+   * Lit twice and then held. It swells as the chips arrive rather than the
+   * moment the hand ends, which is why the delay is roughly the sweep: the
+   * glow is the pot landing, so it should happen when the pot lands.
+   */
+  animation: pk-won-glow 900ms ease-out 380ms both;
+}
+
+@keyframes pk-won-glow {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__seat--won::before {
+    animation: none;
+  }
+}
+
+/* ----------------------------------------------- chips going in and out */
+
+/*
+ * A stake arriving from the seat that put it up.
+ *
+ * Chips do not appear on a table, somebody pushes them out — so the marker
+ * starts where its owner is sitting and travels in to the ring. Both ends are
+ * the same `--cos`/`--sin` the seat and the ring are placed with, so the
+ * distance is right for every seat without any of them being special.
+ *
+ * The element is keyed on its amount, so a stake that grows is a new element
+ * that slides out again rather than a number changing in place.
+ */
+@keyframes pk-bet-out {
+  0% {
+    transform: translate(
+        calc(-50% + var(--dodge, 0px) + var(--cos) * (var(--across) - var(--bet-across))),
+        calc(-50% + var(--sin) * (var(--down) - var(--bet-down)))
+      )
+      scale(0.86);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dodge, 0px)), -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/*
+ * The street's stakes going into the middle.
+ *
+ * The other direction, and the reason the pot grows: at the end of a betting
+ * round every stake on the ring is swept in. It is drawn from where each stake
+ * was rather than from one place, because a pot is made of what everybody put
+ * in and that is worth seeing once a street.
+ */
+.pk__gather {
+  position: absolute;
+  left: calc(50% + var(--cos) * var(--bet-across));
+  top: calc(50% + var(--sin) * var(--bet-down));
+  z-index: 5;
+  pointer-events: none;
+  animation: pk-gather 620ms cubic-bezier(0.4, 0, 0.3, 1) forwards;
+}
+
+@keyframes pk-gather {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(
+        calc(-50% - var(--cos) * var(--bet-across)),
+        calc(-50% - var(--sin) * var(--bet-down))
+      )
+      scale(0.7);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The chips are simply where they end up, which every figure already says. */
+  .pk__gather {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------- the pot being pushed */
+
+/*
+ * The pot going across to whoever won it.
+ *
+ * Starts in the middle, where the pot has been sitting all hand, and travels
+ * out to the seat — the same `--cos`/`--sin` the seat is placed with, so it
+ * arrives on them rather than near them. That is the whole point: a number
+ * changing in two places says the same thing, and says it to nobody who was
+ * not already looking at both.
+ *
+ * It ends by fading into the winner's own stack rather than stopping dead,
+ * because that is where the chips have actually gone.
+ */
+.pk__sweep {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  pointer-events: none;
+  animation: pk-sweep 900ms cubic-bezier(0.32, 0.9, 0.32, 1) forwards;
+}
+
+@keyframes pk-sweep {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 0;
+  }
+  /* A beat in the middle first: the pot is gathered before it is pushed. */
+  18% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(
+        calc(-50% + var(--cos) * var(--across)),
+        calc(-50% + var(--sin) * var(--down))
+      )
+      scale(0.85);
+    opacity: 0;
+  }
+}
+
+/*
+ * Who took it, in the middle where the pot was.
+ *
+ * Over the board rather than beside it: for the few seconds a hand is being
+ * read, what the board says is settled and who won is the only new thing on
+ * the table.
+ */
+.pk__won {
+  /*
+   * Under the table, in the slot that announces the hand you are holding.
+   *
+   * It was on the felt three times and covered something every time: the five
+   * cards the hand was won with, then the top of the board, then your own
+   * hand. Every part of the cloth is spoken for at a showdown and that is the
+   * moment people are looking hardest, so it belongs off it — in the one place
+   * already reserved for the headline about this hand, which by then is not
+   * what you hold but who took it.
+   */
+  width: fit-content;
+  max-width: 100%;
+  margin: calc(var(--gr-space-3) * -1) auto 0;
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px 10px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--gr-color-chip) 55%, transparent);
+  background: rgb(8 12 17 / 0.93);
+  box-shadow:
+    0 8px 26px rgb(0 0 0 / 0.6),
+    0 0 26px color-mix(in srgb, var(--gr-color-chip) 22%, transparent);
+  text-align: center;
+  animation: pk-won-lands 420ms cubic-bezier(0.16, 1.06, 0.28, 1);
+}
+
+.pk__won-one {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pk__won-one strong {
+  font-size: clamp(13px, 1.5cqw, 22px);
+  color: var(--gr-color-ink-lit);
+}
+
+.pk__won-chips {
+  font-size: clamp(12px, 1.35cqw, 20px);
+  font-variant-numeric: tabular-nums;
+  color: var(--gr-color-chip);
+}
+
+.pk__won-with {
+  font-size: clamp(10px, 1.1cqw, 16px);
+  color: var(--gr-color-ink-dim);
+}
+
+/* Split pots read as one sentence rather than two lines. */
+.pk__won-and {
+  font-size: clamp(10px, 1.1cqw, 16px);
+  color: var(--gr-color-ink-faint);
+}
+
+@keyframes pk-won-lands {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * The chips arrive rather than travel, and the line appears rather than
+   * lands. Everything either still says is still said.
+   */
+  .pk__sweep {
+    animation: none;
+    display: none;
+  }
+
+  .pk__won {
+    animation: none;
+  }
 }
 
 /* ---------------------------------------------------------- what you do */
@@ -782,7 +1071,16 @@
   color: var(--gr-color-ink-dim);
 }
 
-.pk__act--raise {
+/*
+ * The lit button, for a control that is the only thing to do.
+ *
+ * Never on one of several moves. A raise drawn brighter than the call beside
+ * it is the table lobbying: the eye lands on the lit control and the press
+ * follows, and the difference is somebody's money. Calling and raising are
+ * the player's decision, so they look identical and the felt keeps its
+ * opinion to itself. Buying in has nothing to be pressed instead of.
+ */
+.pk__act--go {
   border-color: var(--gr-color-neon);
   color: var(--gr-color-ink-lit);
   /* Mixed from the token rather than written out, so it follows the room's
@@ -790,8 +1088,55 @@
   background: color-mix(in srgb, var(--gr-color-neon) 14%, transparent);
 }
 
-.pk__act--raise .pk__act-name {
+.pk__act--go .pk__act-name {
   color: var(--gr-color-ink-dim);
+}
+
+/*
+ * The controls arriving when the turn reaches you.
+ *
+ * A table deals itself and somebody looking away misses their own turn — the
+ * ring on the felt says whose it is, and this says it again where their hands
+ * are. Once, on arrival: a flash that repeated while you were thinking would
+ * be a nag rather than a signal.
+ */
+.pk__controls--yours {
+  animation: pk-your-go 620ms ease-out;
+}
+
+@keyframes pk-your-go {
+  0% {
+    transform: translateY(4px);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pk__controls--yours .pk__act {
+  animation: pk-act-lit 900ms ease-out;
+}
+
+@keyframes pk-act-lit {
+  0% {
+    border-color: var(--gr-color-neon);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 16px 2px color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__controls--yours,
+  .pk__controls--yours .pk__act {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------ deciding in advance */
