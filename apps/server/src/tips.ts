@@ -2,7 +2,16 @@ import { randomUUID } from "node:crypto";
 import type { JarRecord, Store } from "@backroom/economy";
 import { emptyJarRecord } from "@backroom/economy";
 import type { Jar } from "@backroom/game-tips";
-import { NIGHT_MS, TIPS, buy, emptyJar, levelAt, numbersFor, tap } from "@backroom/game-tips";
+import {
+  NIGHT_MS,
+  REFUSALS,
+  TIPS,
+  buy,
+  emptyJar,
+  levelAt,
+  numbersFor,
+  tap,
+} from "@backroom/game-tips";
 import type { ClientToServer, JarView, ServerToClient, TapResult } from "@backroom/shared";
 import { buySchema, tapSchema } from "@backroom/shared/schemas";
 import type { DefaultEventsMap, Socket } from "socket.io";
@@ -27,14 +36,23 @@ export interface TipsDeps {
 /**
  * `JarRecord` (packages/economy) and `Jar` (games/tips) are declared apart on
  * purpose — no package under packages/ may depend on a game — but nothing
- * stops the two drifting field by field once they are. apps/server is the
- * only place both types are visible, so this is where they are held to
- * agreeing: the body below only compiles while the shapes are mutually
- * assignable, so a change that breaks that fails the build here rather than
- * surfacing later as a jar read back with a field silently missing.
+ * stops the two drifting field by field once they exist. apps/server is the
+ * only place both types are visible, so this is where the two are held to
+ * agreeing with each other: `asJar` proves `JarRecord` is assignable to
+ * `Jar`, `asRecord` proves the reverse, and both are genuinely called on real
+ * jars below (at `tips:open`/`tips:tap`/`tips:buy` and the `applyJar` sites)
+ * rather than sitting unused. Between the pair, a *required* field added to
+ * either type alone fails the build here instead of surfacing later as a jar
+ * read back with a field silently missing. An *optional* field added to
+ * either side is caught by neither direction — it stays assignable both ways
+ * and would slip through silently.
  */
 function asJar(record: JarRecord): Jar {
   return record;
+}
+
+function asRecord(jar: Jar): JarRecord {
+  return jar;
 }
 
 /** Every tap and buy read this jar's numbers off the same clock. */
@@ -66,6 +84,26 @@ export function viewOf(jar: Jar, now: number, level: number): JarView {
 }
 
 const mint = () => randomUUID();
+
+/**
+ * The buy path's own lost-swap wording.
+ *
+ * `REFUSALS.stale` (games/tips) is written for the tap path — the common
+ * case there is exactly a lost race — and it says so with the word "tap".
+ * The buy handler loses the same kind of race at its own `applyJar` swap, so
+ * it needs its own noun rather than borrowing that literal; spelling it out
+ * once here keeps the two from drifting apart the way a copy-pasted string
+ * would.
+ */
+const LOST_BUY_SWAP = "That buy was out of step. Try again.";
+
+/**
+ * `store.jar()` returning null means the signed-in identity does not resolve
+ * to any account — a different failure from a malformed payload, which is
+ * what `tapSchema`/`buySchema` already refuse in their own words just above.
+ * Reusing "that is not a tap/buy" here would describe the wrong problem.
+ */
+const NO_SUCH_ACCOUNT = "That account doesn't exist.";
 
 /**
  * Mints this jar's first real token if it has never been touched.
@@ -129,7 +167,7 @@ export function wireTips(socket: TipsSocket, deps: TipsDeps): void {
       const held = await store.jar(userId);
       if (held === null) {
         const now = Date.now();
-        ack({ ok: false, error: "That is not a tap.", jar: view(emptyJar(now, ""), now) });
+        ack({ ok: false, error: NO_SUCH_ACCOUNT, jar: view(emptyJar(now, ""), now) });
         return;
       }
       const now = Date.now();
@@ -138,7 +176,7 @@ export function wireTips(socket: TipsSocket, deps: TipsDeps): void {
       const swapped = await store.applyJar(
         userId,
         current.jar.token,
-        outcome.jar,
+        asRecord(outcome.jar),
         outcome.ok ? outcome.paid : 0,
       );
       if (!swapped.ok) {
@@ -148,7 +186,7 @@ export function wireTips(socket: TipsSocket, deps: TipsDeps): void {
         // than retrying.
         ack({
           ok: false,
-          error: "That tap was out of step. Try again.",
+          error: REFUSALS.stale,
           jar: view(asJar(swapped.jar), now),
         });
         return;
@@ -189,7 +227,7 @@ export function wireTips(socket: TipsSocket, deps: TipsDeps): void {
       const held = await store.jar(userId);
       if (held === null) {
         const now = Date.now();
-        ack({ ok: false, error: "That is not a buy.", jar: view(emptyJar(now, ""), now) });
+        ack({ ok: false, error: NO_SUCH_ACCOUNT, jar: view(emptyJar(now, ""), now) });
         return;
       }
       const now = Date.now();
@@ -198,11 +236,11 @@ export function wireTips(socket: TipsSocket, deps: TipsDeps): void {
       // A buy never moves chips either way, so the delta is always zero —
       // unlike a tap, there is nothing here for `tellChips` or stats to hear
       // about.
-      const swapped = await store.applyJar(userId, current.jar.token, outcome.jar, 0);
+      const swapped = await store.applyJar(userId, current.jar.token, asRecord(outcome.jar), 0);
       if (!swapped.ok) {
         ack({
           ok: false,
-          error: "That tap was out of step. Try again.",
+          error: LOST_BUY_SWAP,
           jar: view(asJar(swapped.jar), now),
         });
         return;

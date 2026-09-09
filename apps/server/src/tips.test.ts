@@ -159,11 +159,21 @@ describe("the jar over a socket", () => {
     await fillJar(store, userId, BASE.brim);
     const before = (await store.get(userId))?.chips ?? 0;
     let token = jar.token;
+    const start = Date.now();
     for (let i = 0; i < 400; i++) {
       const result = await tapWith(socket, token);
       token = result.jar.token;
     }
+    const elapsed = Date.now() - start;
     const after = (await store.get(userId))?.chips ?? 0;
-    expect(after - before).toBeLessThanOrEqual(BASE.brim);
+    // BASE.brim alone is not the true ceiling: 400 round trips take real
+    // wall-clock time (draining the brim needs ~60 accepted taps at
+    // TAP_FLOOR_MS=50 apiece, already a couple of seconds, more on a loaded
+    // runner), and the jar keeps trickling the whole time this loop runs. The
+    // bound has to grow with that elapsed time the same way the jar does, or
+    // this assertion flakes under load instead of actually proving the cap —
+    // do not replace it with a tidy constant.
+    const ceiling = BASE.brim + (BASE.trickle * elapsed) / 60_000;
+    expect(after - before).toBeLessThanOrEqual(ceiling);
   });
 });
