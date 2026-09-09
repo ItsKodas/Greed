@@ -30,6 +30,7 @@ import {
   SLOTS,
 } from "@backroom/game-slots";
 import type { Die } from "@backroom/rules";
+import { TIPS } from "@backroom/game-tips";
 
 import type {
   Ack,
@@ -69,6 +70,7 @@ import { mountAuth, readAuthConfig } from "./auth.js";
 import { friendlyRedirect } from "./domains.js";
 import { EMOTE_UPLOAD_PATH, emoteUrls, mountEmotes } from "./emotes.js";
 import { mountTransfers } from "./transfers.js";
+import { wireTips } from "./tips.js";
 import { inject, pageFor } from "./meta.js";
 import type { CardSpec } from "./og.js";
 import { Avatars, Cards } from "./og.js";
@@ -87,7 +89,7 @@ import { Avatars, Cards } from "./og.js";
  */
 const CATALOGUE = COMING.reduce(
   (catalogue, game) => catalogue.add(game),
-  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER),
+  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER).add(TIPS),
 );
 
 
@@ -169,7 +171,12 @@ export interface BackRoomServerOptions {
  * What we hang off a socket: the display name its account owns, resolved once
  * at connection. Null for a guest, who has no account to be checked against.
  */
-interface SocketIdentity {
+/*
+ * Exported so tips.ts — the only other module that reads a socket's
+ * identity — can type its handlers against the real thing rather than a
+ * second copy of this shape that could drift from it.
+ */
+export interface SocketIdentity {
   /** Null for a guest, who has no account to be checked against. */
   identity: SeatIdentity | null;
   name: string | null;
@@ -1658,6 +1665,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   }
 
   io.on("connection", (socket) => {
+    wireTips(socket, { store, tellChips });
+
     socket.on("lobby:create", (payload, ack) => {
       const parsed = createSchema.safeParse(payload);
       if (!parsed.success) {
