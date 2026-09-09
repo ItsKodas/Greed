@@ -1,4 +1,5 @@
 import { POCKETS, WHEEL, colourOf } from "@backroom/game-roulette";
+import type { CSSProperties } from "react";
 
 /**
  * The wheel.
@@ -44,6 +45,20 @@ function wedge(at: number, inner: number, outer: number): string {
   ].join(" ");
 }
 
+/**
+ * How far the rim turns while the ball is in the air.
+ *
+ * A whole number of turns, so the rim finishes exactly where it started and a
+ * pocket at rest is where {@link angleOf} says it is. That is what lets the
+ * ball's landing angle be the pocket's own angle and nothing more — the two
+ * would otherwise have to be reconciled every spin, which is the sort of
+ * arithmetic that is right until somebody changes one of the numbers.
+ */
+const RIM_TURNS = 3;
+
+/** How many times the ball goes round before it drops. Opposite way to the rim. */
+const BALL_TURNS = 6;
+
 export function Wheel({
   /** Where the ball is sitting, or null while it is still in the air. */
   pocket,
@@ -51,23 +66,51 @@ export function Wheel({
   spinning = false,
   /** Marks the pockets a bet covers, so a player can see what they are on. */
   covered,
+  /**
+   * How long the ball is in the air.
+   *
+   * Handed in rather than chosen here, because the table is waiting exactly
+   * this long before it settles the cloth. If the two disagree the felt either
+   * announces a number the ball has not reached or sits on a finished spin.
+   */
+  spinMs = 6_000,
 }: {
   pocket: number | null;
   spinning?: boolean;
   covered?: ReadonlySet<number>;
+  spinMs?: number;
 }) {
-  const ball = pocket === null ? null : point(angleOf(pocket), 41);
+  const home = pocket === null ? 0 : angleOf(pocket);
+  const ball = pocket === null ? null : point(home, 41);
+
+  /*
+   * Where each thing ends, handed to CSS as angles it can animate towards.
+   *
+   * The rim goes one way and the ball the other, which is not decoration: it
+   * is the one thing that makes a spinning disc read as a roulette wheel
+   * rather than as a loading spinner.
+   */
+  const turning = spinning && pocket !== null;
+  const style = {
+    "--rim-from": `${RIM_TURNS * 360}deg`,
+    "--ball-from": `${home - BALL_TURNS * 360}deg`,
+    "--ball-to": `${home}deg`,
+    "--spin-ms": `${spinMs}ms`,
+  } as CSSProperties;
 
   return (
     <div
-      className={`rl__wheel${spinning ? " rl__wheel--spinning" : ""}`}
+      className={`rl__wheel${turning ? " rl__wheel--spinning" : ""}`}
+      style={style}
       role="img"
       aria-label={
         pocket === null
           ? spinning
             ? "The wheel is turning."
             : "The wheel, at rest."
-          : `The ball is in ${pocket}.`
+          : turning
+            ? "The wheel is turning."
+            : `The ball is in ${pocket}.`
       }
     >
       <svg viewBox="0 0 100 100" className="rl__wheel-face">
@@ -141,7 +184,38 @@ export function Wheel({
         <circle cx="50" cy="50" r="14" className="rl__wheel-cone" />
         <circle cx="50" cy="50" r="6" className="rl__wheel-turret" />
 
-        {ball === null ? null : <circle cx={ball.x} cy={ball.y} r="3.1" className="rl__ball" />}
+        {/*
+          The ball, on an arm that swings round the middle.
+
+          An arm rather than a moving point, because two things happen to a
+          ball at once and they have different clocks: it goes round, fast then
+          slowing, and it falls from the outer track into a pocket, late and
+          all at once. Rotating a group and sliding the ball along it keeps
+          those two motions separate and lets each have its own easing.
+        */}
+        {ball === null && !turning ? null : (
+          <g className="rl__ball-arm">
+            <circle cx="50" cy="50" r="3.1" className="rl__ball" />
+          </g>
+        )}
+
+        {/*
+          The number, in the middle, once the ball is in.
+
+          Where a player is already looking: the ball is the thing they were
+          watching and it has just stopped in the middle distance, so the
+          answer arrives under their eyes rather than somewhere they have to go
+          and find. In its own colour, because "red" is half of what most bets
+          on this table were about.
+        */}
+        {pocket === null || turning ? null : (
+          <g className={`rl__called rl__called--${colourOf(pocket) ?? "zero"}`}>
+            <circle cx="50" cy="50" r="13" className="rl__called-ground" />
+            <text x="50" y="50" textAnchor="middle" dominantBaseline="central">
+              {pocket}
+            </text>
+          </g>
+        )}
       </svg>
     </div>
   );

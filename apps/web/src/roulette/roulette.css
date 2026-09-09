@@ -95,34 +95,158 @@
   stroke-width: 0.5;
 }
 
+/*
+ * The ball, and the arm it rides on.
+ *
+ * Two motions with different clocks. The arm carries it round — fast, then
+ * dragging to a stop — while the ball itself only moves along that arm, and
+ * only at the end, when it comes off the outer track and drops into a pocket.
+ * Keeping them apart is what lets the fall have a bounce without the orbit
+ * inheriting one.
+ *
+ * At rest both are simply set: the arm points at the pocket and the ball sits
+ * at pocket depth. Everything below only describes getting there.
+ */
+.rl__ball-arm {
+  transform-box: view-box;
+  transform-origin: 50px 50px;
+  transform: rotate(var(--ball-to, 0deg));
+}
+
 .rl__ball {
+  transform-box: view-box;
+  transform-origin: 50px 50px;
+  transform: translateY(-41px);
   fill: var(--rl-ivory);
   stroke: rgb(0 0 0 / 0.35);
   stroke-width: 0.4;
-  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.6));
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
 }
 
 /*
- * The wheel turning.
+ * The spin.
  *
- * The rim turns and the numbers turn with it, because a wheel whose numbers
- * stayed upright while it span would be a texture sliding under a stencil. It
- * is the only thing in this room that loops, and it loops only while something
- * is genuinely still happening.
+ * The rim turns one way and the ball the other. That opposition is the whole
+ * illusion: a disc and a dot going the same way is a loading spinner, and the
+ * same two going opposite ways is unmistakably a roulette wheel. Both are
+ * driven from the pocket the server already chose, so the ball lands in the
+ * true pocket rather than near it — there is no second source of truth here to
+ * drift out of step with the result.
+ *
+ * The rim's turns are whole, so it finishes where it started and a pocket at
+ * rest is exactly where the geometry says. The ball's are not: it ends at its
+ * pocket's own angle, having come the long way round.
  */
 .rl__wheel--spinning .rl__wheel-rim {
-  animation: rl-turn 2.4s linear infinite;
-  transform-origin: 50% 50%;
+  animation: rl-rim var(--spin-ms, 6000ms) cubic-bezier(0.2, 0.62, 0.28, 1) forwards;
+  transform-box: view-box;
+  transform-origin: 50px 50px;
 }
 
-@keyframes rl-turn {
+.rl__wheel--spinning .rl__ball-arm {
+  animation: rl-ball-round var(--spin-ms, 6000ms) cubic-bezier(0.12, 0.72, 0.18, 1) forwards;
+}
+
+.rl__wheel--spinning .rl__ball {
+  animation: rl-ball-fall var(--spin-ms, 6000ms) ease-in-out forwards;
+}
+
+@keyframes rl-rim {
+  from {
+    transform: rotate(var(--rim-from, 1080deg));
+  }
   to {
-    transform: rotate(-360deg);
+    transform: rotate(0deg);
   }
 }
 
+@keyframes rl-ball-round {
+  from {
+    transform: rotate(var(--ball-from, 0deg));
+  }
+  to {
+    transform: rotate(var(--ball-to, 0deg));
+  }
+}
+
+/*
+ * The drop.
+ *
+ * Held out on the track while there is speed in it, then thrown inward past
+ * the pocket and settling back — a ball does not glide into a fret, it clatters
+ * into one and stops. Late in the spin, because the fall is what tells you it
+ * is over.
+ */
+@keyframes rl-ball-fall {
+  0%,
+  58% {
+    transform: translateY(-45.5px);
+  }
+  76% {
+    transform: translateY(-37.5px);
+  }
+  88% {
+    transform: translateY(-42.5px);
+  }
+  100% {
+    transform: translateY(-41px);
+  }
+}
+
+/*
+ * The number, once the ball is in.
+ *
+ * Arrives where the player is already looking rather than somewhere they have
+ * to go and find, and wearing the pocket's own colour, because red or black is
+ * half of what most bets on this table were about.
+ */
+.rl__called {
+  animation: rl-called 420ms cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  transform-box: view-box;
+  transform-origin: 50px 50px;
+}
+
+.rl__called text {
+  font-size: 13px;
+  font-weight: 800;
+  fill: var(--rl-ivory);
+}
+
+.rl__called-ground {
+  stroke: var(--rl-brass-lit);
+  stroke-width: 1;
+}
+.rl__called--red .rl__called-ground {
+  fill: var(--rl-red);
+}
+.rl__called--black .rl__called-ground {
+  fill: var(--rl-black);
+}
+.rl__called--zero .rl__called-ground {
+  fill: var(--rl-green);
+}
+
+@keyframes rl-called {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/*
+ * Every one of these has an off switch, and the page still says what happened
+ * without them: the ball is in its pocket and the number is in the middle,
+ * they simply arrive rather than travel.
+ */
 @media (prefers-reduced-motion: reduce) {
-  .rl__wheel--spinning .rl__wheel-rim {
+  .rl__wheel--spinning .rl__wheel-rim,
+  .rl__wheel--spinning .rl__ball-arm,
+  .rl__wheel--spinning .rl__ball,
+  .rl__called {
     animation: none;
   }
 }
@@ -432,6 +556,23 @@
 
 .rl__chip:disabled {
   opacity: 0.2;
+  cursor: default;
+}
+
+/* The mockup's own control, for setting a spin going with nothing behind it. */
+.rl__spin {
+  padding: var(--gr-space-2) var(--gr-space-4);
+  border-radius: var(--gr-radius-sm);
+  border: 1px solid var(--rl-brass);
+  background: color-mix(in srgb, var(--rl-brass) 16%, transparent);
+  color: var(--gr-color-ink-lit);
+  font-size: var(--gr-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rl__spin:disabled {
+  opacity: 0.45;
   cursor: default;
 }
 

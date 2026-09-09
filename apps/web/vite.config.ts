@@ -24,5 +24,27 @@ export default defineConfig({
       "/socket.io": { target: "http://localhost:3001", ws: true },
     },
   },
-  optimizeDeps: { exclude: ["@backroom/ui", "@backroom/rules", "@backroom/shared"] },
+  /*
+   * Workspace packages are source, not dependencies.
+   *
+   * Pre-bundling them caches a copy that goes stale the moment one of their
+   * barrels changes — and the failure is a blank page reporting that an export
+   * "is not defined" while typecheck and build are both clean, which sends you
+   * looking in exactly the wrong place. The games were missing from this list
+   * and cost two rounds of that.
+   */
+  optimizeDeps: {
+    exclude: [
+      "@backroom/ui",
+      "@backroom/rules",
+      "@backroom/shared",
+      "@backroom/core",
+      "@backroom/economy",
+      "@backroom/game-blackjack",
+      "@backroom/game-greed",
+      "@backroom/game-poker",
+      "@backroom/game-roulette",
+      "@backroom/game-slots",
+    ],
+  },
 });

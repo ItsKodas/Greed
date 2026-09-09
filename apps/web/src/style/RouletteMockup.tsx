@@ -1,5 +1,5 @@
-import { CHIPS, colourOf } from "@backroom/game-roulette";
-import { useState } from "react";
+import { CHIPS, WHEEL, colourOf } from "@backroom/game-roulette";
+import { useEffect, useRef, useState } from "react";
 import { Chip } from "../chips/Chip.js";
 import { Cloth } from "../roulette/Cloth.js";
 import { Wheel } from "../roulette/Wheel.js";
@@ -22,7 +22,13 @@ import "../roulette/roulette.css";
 
 const HISTORY = [17, 0, 32, 5, 21, 34, 2, 26, 14];
 
+/** Shorter than a real table's six seconds, so a spin can be watched twice. */
+const MOCK_SPIN_MS = 4_200;
+
 export function RouletteMockup() {
+  const [history, setHistory] = useState<number[]>(HISTORY);
+  const [spinning, setSpinning] = useState(false);
+  const [pocket, setPocket] = useState<number | null>(14);
   const [placed, setPlaced] = useState<{ seatId: string; spotId: string; chips: number }[]>([
     { seatId: "you", spotId: "straight:17", chips: 100 },
     { seatId: "you", spotId: "corner:1-2-4-5", chips: 250 },
@@ -31,6 +37,31 @@ export function RouletteMockup() {
     { seatId: "you", spotId: "dozen:13-14-15-16-17-18-19-20-21-22-23-24", chips: 100 },
   ]);
   const [chip, setChip] = useState<number>(100);
+
+  /*
+   * A spin, for the mockup only. The real table is told where the ball went by
+   * the server the moment betting closes; this picks its own so the animation
+   * can be watched without one.
+   */
+  const timer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (timer.current !== null) {
+      window.clearTimeout(timer.current);
+    }
+  }, []);
+
+  const spin = () => {
+    if (spinning) {
+      return;
+    }
+    const landed = WHEEL[Math.floor(Math.random() * WHEEL.length)] as number;
+    setPocket(landed);
+    setSpinning(true);
+    timer.current = window.setTimeout(() => {
+      setSpinning(false);
+      setHistory((was) => [...was, landed].slice(-12));
+    }, MOCK_SPIN_MS);
+  };
 
   return (
     <section className="gallery__section rl" data-game="roulette">
@@ -44,11 +75,11 @@ export function RouletteMockup() {
       </p>
 
       <div className="rl__history">
-        {HISTORY.map((n, at) => (
+        {history.map((n, at) => (
           <span
             key={`${n}-${at}`}
             className={`rl__past rl__past--${colourOf(n) ?? "zero"}${
-              at === HISTORY.length - 1 ? " rl__past--latest" : ""
+              at === history.length - 1 ? " rl__past--latest" : ""
             }`}
           >
             {n}
@@ -58,12 +89,18 @@ export function RouletteMockup() {
 
       <div className="rl__table">
         <div className="rl__wheel-holds">
-          <Wheel pocket={14} covered={new Set([17, 1, 2, 4, 5])} />
+          <Wheel
+            pocket={pocket}
+            spinning={spinning}
+            spinMs={MOCK_SPIN_MS}
+            covered={new Set([17, 1, 2, 4, 5])}
+          />
         </div>
         <Cloth
           placed={placed}
           mine="you"
-          pocket={14}
+          pocket={spinning ? null : pocket}
+          disabled={spinning}
           onPlace={(spotId: string) =>
             setPlaced((was) => {
               const already = was.find((one) => one.seatId === "you" && one.spotId === spotId);
@@ -103,6 +140,9 @@ export function RouletteMockup() {
         ))}
         <button type="button" className="rl__chip" onClick={() => setPlaced([])}>
           <span style={{ fontSize: 12, lineHeight: 1.6, padding: "0 8px" }}>Clear</span>
+        </button>
+        <button type="button" className="rl__spin" onClick={spin} disabled={spinning}>
+          {spinning ? "No more bets" : "Spin"}
         </button>
       </div>
     </section>
