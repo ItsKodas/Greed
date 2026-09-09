@@ -7,3 +7,5 @@ export type { Jar, Numbers } from "./jar.js";
 
 export { BASE, FAVOUR_PER_CHIPS, MAX, UPGRADES, favoursFor, numbersFor } from "./ladder.js";
 export type { Upgrade } from "./ladder.js";
+
+export { guardCeiling, withinGuard } from "./guard.js";
