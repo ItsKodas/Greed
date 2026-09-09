@@ -189,13 +189,34 @@
 }
 
 .rl__outside {
-  background: rgb(0 0 0 / 0.18);
+  background: rgb(0 0 0 / 0.22);
   font-size: clamp(6px, 1.7cqw, 12px);
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--gr-color-ink);
+  color: var(--gr-color-ink-lit);
   text-align: center;
   line-height: 1.15;
+}
+
+/*
+ * The even-money boxes that name a colour are painted that colour.
+ *
+ * On a printed cloth "Red" is a red box and "Black" is a black one — you bet
+ * the colour by putting a chip on the colour, without reading anything. Left
+ * as plain boxes with words in them, as these were, the two quickest bets on
+ * the table became the two that needed reading.
+ *
+ * Below the rule they override, not above it: at equal specificity the last
+ * one wins, and this stylesheet's ancestors have lost that argument twice.
+ */
+.rl__outside--red {
+  background: var(--rl-red);
+  color: var(--rl-ivory);
+}
+
+.rl__outside--black {
+  background: var(--rl-black);
+  color: var(--rl-ivory);
 }
 
 /* The number the ball landed in. */
@@ -279,7 +300,13 @@
   transform: translate(-50%, -50%) translateX(-2.4em);
 }
 
-.rl__outside {
+/*
+ * Room for the chip, on the boxes wide enough to give it.
+ *
+ * Not the 2-to-1 boxes: those are one square across, and the same padding
+ * pushed their label straight out of them.
+ */
+.rl__outside:not(.rl__outside--column) {
   padding-left: 3.4em;
 }
 
@@ -287,9 +314,50 @@
   transform: translate(-50%, -50%) translateY(-2.4em);
 }
 
-.rl__cloth--portrait .rl__outside {
+.rl__cloth--portrait .rl__outside:not(.rl__outside--column) {
   padding-left: 0;
   padding-top: 3.4em;
+}
+
+/*
+ * The keyboard's way onto the cloth.
+ *
+ * Off screen rather than hidden: `display: none` and `visibility: hidden` both
+ * take an element out of the tab order, which would make this list decorative
+ * and the table unplayable without a mouse. Kept one pixel wide in the corner
+ * instead, so it is reachable by tab and readable by a screen reader while
+ * costing the felt nothing. A focused one comes back into view, because a
+ * control you cannot see is a control you cannot use even once you are on it.
+ */
+.rl__reach button {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rl__reach button:focus-visible {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: var(--gr-space-2) var(--gr-space-3);
+  clip-path: none;
+  z-index: 8;
+  border-radius: var(--gr-radius-sm);
+  background: var(--gr-color-shadow);
+  border: 2px solid var(--gr-color-neon);
+  color: var(--gr-color-ink-lit);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------- the furniture */

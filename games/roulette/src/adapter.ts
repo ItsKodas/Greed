@@ -200,6 +200,16 @@ export function rouletteAdapter(
          * movement as a win and has to be, or a player could fill the bank by
          * placing and unplacing all evening.
          */
+        case "take": {
+          const spot = spotAt(move.spotId ?? "");
+          if (spot === null) {
+            throw new TableError("There is no such bet on this table.");
+          }
+          const off = table.take(seatId, spot.id, move.chips ?? 0);
+          await pay(table, seat, off, deps);
+          return;
+        }
+
         case "undo":
         case "clear": {
           const before = table.staked(seatId);

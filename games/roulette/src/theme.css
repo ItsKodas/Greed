@@ -20,13 +20,17 @@
   --gr-color-smoke-lit: #30232b;
 
   /*
-   * A shade deeper and bluer than blackjack's, because a roulette cloth is
-   * printed rather than dealt on: it carries thirty-seven numbers and six
-   * outside boxes, and every one of them needs a line round it that reads.
+   * Brighter and greener than the card room's, and than this started out.
+   *
+   * A blackjack felt is a surface you read two cards off, so it can be dark.
+   * A roulette cloth is printed: thirty-seven numbers, six outside boxes and
+   * every line between them, all of which have to carry against it. Taken
+   * deeper it stopped being a cloth and started being a shadow with numbers
+   * on it, which is what the first attempt looked like.
    */
-  --gr-color-felt: #12402c;
-  --gr-color-felt-lit: #1a5539;
-  --gr-color-felt-deep: #0b2a1d;
+  --gr-color-felt: #0d7a3d;
+  --gr-color-felt-lit: #149450;
+  --gr-color-felt-deep: #085c2d;
 
   /*
    * The air over the table, warmed towards the wheel's mahogany rather than

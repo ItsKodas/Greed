@@ -38,7 +38,8 @@ export function RouletteMockup() {
       <p className="gallery__note">
         The wheel is drawn from the rim order the rules use, so the picture and the decision are one
         list. The cloth takes a chip wherever you aim it — on a number, on the line between two, or
-        on the point where four meet — and names the bet before it costs anything. On a narrow
+        on the point where four meet — and names the bet before it costs anything. Right-click, or
+        press and hold, to take one back off. On a narrow
         screen the cloth turns on its side, so its squares stay big enough to hit.
       </p>
 
@@ -72,6 +73,17 @@ export function RouletteMockup() {
                     one === already ? { ...one, chips: one.chips + chip } : one,
                   );
             })
+          }
+          onTake={(spotId: string) =>
+            setPlaced((was) =>
+              was.flatMap((one) => {
+                if (one.seatId !== "you" || one.spotId !== spotId) {
+                  return [one];
+                }
+                const left = one.chips - Math.min(one.chips, chip);
+                return left === 0 ? [] : [{ ...one, chips: left }];
+              }),
+            )
           }
         />
       </div>

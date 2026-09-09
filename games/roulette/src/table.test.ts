@@ -72,6 +72,53 @@ describe("a roulette table", () => {
     expect(one.placed).toEqual([{ seatId: "s1", spotId: "straight:17", chips: 100 }]);
   });
 
+  it("takes a chip back off one spot", () => {
+    const { one } = table();
+    one.place("s1", "straight:17", 150);
+    expect(one.take("s1", "straight:17", 50)).toBe(50);
+    expect(one.onSpot("s1", "straight:17")).toBe(100);
+  });
+
+  it("clears the pile when the last chip comes off it", () => {
+    const { one } = table();
+    one.place("s1", "straight:17", 100);
+    expect(one.take("s1", "straight:17", 100)).toBe(100);
+    expect(one.placed).toHaveLength(0);
+  });
+
+  it("takes back only what is actually there", () => {
+    // Asking for more than the pile holds takes the pile, not a debt.
+    const { one } = table();
+    one.place("s1", "straight:17", 50);
+    expect(one.take("s1", "straight:17", 500)).toBe(50);
+    expect(one.placed).toHaveLength(0);
+  });
+
+  it("never takes a chip that is not yours", () => {
+    /*
+     * The whole reason this is per seat rather than per spot. Two people bet
+     * red every spin; one of them reaching for the pile and taking the other's
+     * chips back would be theft with a right-click.
+     */
+    const { one } = table();
+    one.join("s2", "Bram", who("u2"));
+    one.place("s2", RED, 500);
+    expect(one.take("s1", RED, 500)).toBe(0);
+    expect(one.onSpot("s2", RED)).toBe(500);
+  });
+
+  it("gives nothing back off a spot with nothing on it", () => {
+    const { one } = table();
+    expect(one.take("s1", "straight:17", 100)).toBe(0);
+  });
+
+  it("refuses to take a chip back once the wheel is turning", () => {
+    const { one } = table();
+    one.place("s1", RED, 50);
+    one.closeBetting();
+    expect(() => one.take("s1", RED, 50)).toThrow(TableError);
+  });
+
   it("sweeps one seat's chips off without touching anybody else's", () => {
     const { one } = table();
     one.join("s2", "Bram", who("u2"));

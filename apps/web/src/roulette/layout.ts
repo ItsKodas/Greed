@@ -94,11 +94,14 @@ function outsideBoxes(): Box[] {
   });
 
   /*
-   * The even-money row, in the order a cloth prints them: low, red, black,
-   * odd, even, high — reading outward from the middle rather than in whatever
-   * order they happen to be built.
+   * The even-money row, in the order a cloth actually prints it.
+   *
+   * The two colours sit together in the middle with odd and even flanking
+   * them, and low and high on the outside. Not an arbitrary order: it pairs
+   * each bet with its opposite across the centre line, so the six boxes read
+   * as three choices rather than as a list of six things.
    */
-  const order = ["1-18", "Red", "Black", "Odd", "Even", "19-36"];
+  const order = ["1-18", "Even", "Red", "Black", "Odd", "19-36"];
   const evens = [...SPOTS.values()].filter((one) => one.kind === "even");
   order.forEach((label, at) => {
     const spot = evens.find((one) => one.label === label);

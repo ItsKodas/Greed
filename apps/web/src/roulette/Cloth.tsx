@@ -1,10 +1,5 @@
-import { colourOf, spotAt } from "@backroom/game-roulette";
-import {
-  type PointerEvent as ReactPointerEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { colourOf, pays, spotAt } from "@backroom/game-roulette";
+import { useEffect, useRef, useState } from "react";
 import { ChipStack } from "../chips/ChipStack.js";
 import { ANCHORS, BOXES, HEIGHT, SQUARES, WIDTH, boxOf, nearest } from "./layout.js";
 
@@ -43,6 +38,7 @@ export function Cloth({
   placed,
   mine,
   onPlace,
+  onTake,
   disabled = false,
   /** The pocket the ball is in, so the winning numbers can be lit. */
   pocket,
@@ -52,6 +48,16 @@ export function Cloth({
   /** Which seat is yours, so your chips can be told from everybody else's. */
   mine: string | null;
   onPlace?: (spotId: string) => void;
+  /**
+   * Takes chips back off a spot.
+   *
+   * Right-click, which is the other half of placing by aiming: the pointer is
+   * already over the chip you mean, so reaching for a button to undo it is a
+   * journey away from the thing you are looking at. A long press does the same
+   * thing, because a phone has no second button — browsers raise the same
+   * context-menu event for both, which is why one handler covers it.
+   */
+  onTake?: (spotId: string) => void;
   disabled?: boolean;
   pocket?: number | null;
   /** Forces the orientation. Left off, the cloth works it out for itself. */
@@ -87,8 +93,14 @@ export function Cloth({
 
   const sideways = portrait ?? narrow;
 
-  /** Turns a pointer somewhere on the cloth into the spot it is aimed at. */
-  const spotUnder = (event: ReactPointerEvent<HTMLDivElement>): string | null => {
+  /**
+   * Turns a pointer somewhere on the cloth into the spot it is aimed at.
+   *
+   * Takes the two numbers it actually needs rather than a particular kind of
+   * event, because the same question is asked of a pointer press and of a
+   * context menu, and those arrive as different event types.
+   */
+  const spotUnder = (event: { clientX: number; clientY: number }): string | null => {
     const cloth = box.current;
     if (cloth === null) {
       return null;
@@ -148,17 +160,44 @@ export function Cloth({
       className={`rl__cloth${sideways ? " rl__cloth--portrait" : ""}${
         disabled ? " rl__cloth--shut" : ""
       }`}
+      /*
+       * A group rather than a plain box, because it is one control with many
+       * targets: the lines and the four-way points a chip can sit on are not
+       * elements and cannot be, so the surface answers for all of them.
+       *
+       * Aiming is a pointer's talent and nothing else's, which is why the real
+       * keyboard route is the list of buttons at the end of this component
+       * rather than anything bolted onto this div. Placing a bet is not
+       * something a person should need a mouse for.
+       */
+      role="group"
+      aria-label="The betting cloth"
       ref={box}
       style={{ aspectRatio: sideways ? `${HEIGHT} / ${WIDTH}` : `${WIDTH} / ${HEIGHT}` }}
       onPointerMove={(event) => setAiming(spotUnder(event))}
       onPointerLeave={() => setAiming(null)}
       onPointerDown={(event) => {
-        if (disabled) {
+        /*
+         * Only the primary button places. Without this a right-click puts a
+         * chip down on the way to taking one off, and the pile never shrinks.
+         */
+        if (disabled || event.button !== 0) {
           return;
         }
         const spot = spotUnder(event);
         if (spot !== null) {
           onPlace?.(spot);
+        }
+      }}
+      onContextMenu={(event) => {
+        // The browser's own menu is never what somebody wants over a chip.
+        event.preventDefault();
+        if (disabled) {
+          return;
+        }
+        const spot = spotUnder(event);
+        if (spot !== null) {
+          onTake?.(spot);
         }
       }}
     >
@@ -181,7 +220,7 @@ export function Cloth({
       {BOXES.map((one) => (
         <div
           key={one.spotId}
-          className={`rl__outside${one.label === "2 to 1" ? " rl__outside--column" : ""}`}
+          className={`rl__outside${dressOf(one.label)}`}
           style={spanAt(one.x, one.y, one.width, one.height)}
         >
           <span>{one.label}</span>
@@ -213,8 +252,68 @@ export function Cloth({
           <ChipStack amount={pile.chips} width={22} most={3} tallest={3} />
         </div>
       ))}
+
+      {/*
+        Every bet on the cloth, as a real control.
+
+        Aiming a chip at the point where four squares meet is something a
+        pointer can do and a keyboard cannot, so the cloth on its own is a
+        table only some people can play at. This is the same 157 bets as
+        buttons: off screen, in the tab order, each one saying what it is and
+        what is already on it. The felt above is the quick way to reach them,
+        not the only way.
+      */}
+      <div className="rl__reach">
+        {ANCHORS.map((anchor) => {
+          const spot = spotAt(anchor.spotId);
+          if (spot === null) {
+            return null;
+          }
+          const on = piles.get(spot.id)?.chips ?? 0;
+          return (
+            <button
+              key={spot.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => onPlace?.(spot.id)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                onTake?.(spot.id);
+              }}
+            >
+              {`${spot.label}, pays ${pays(spot)} to 1${on > 0 ? `, ${on} on it` : ""}`}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
+}
+
+/**
+ * How an outside box is painted, from what it says.
+ *
+ * The two colour bets wear their own colour, because that is what a printed
+ * cloth does — you back red by putting a chip on the red box, without reading
+ * a word. The column boxes get their own class because one square is not
+ * enough room for anything but the shorthand.
+ *
+ * Keyed off the label deliberately: the label is what the box shows, and a
+ * check against anything else can go stale without the box changing. One
+ * already did — this tested for "2 to 1" for a while after the cloth had
+ * started saying "2:1", and quietly styled nothing.
+ */
+function dressOf(label: string): string {
+  switch (label) {
+    case "Red":
+      return " rl__outside--red";
+    case "Black":
+      return " rl__outside--black";
+    case "2:1":
+      return " rl__outside--column";
+    default:
+      return "";
+  }
 }
 
 /** Built once: every spot's anchor, by id, for drawing chips on. */

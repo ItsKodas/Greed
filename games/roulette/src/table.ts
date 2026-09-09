@@ -306,6 +306,36 @@ export class Table {
     }
   }
 
+  /**
+   * Chips off one spot, back to the seat that put them there.
+   *
+   * Per seat and not per spot, which is the whole reason this takes a seat id
+   * at all: two people back red every spin, and a control that took "the chips
+   * on red" would let either of them pocket the other's.
+   *
+   * Returns what actually came off, because that is the number the adapter has
+   * to pay back — asking for more than the pile holds takes the pile rather
+   * than opening a debt.
+   */
+  take(seatId: string, spotId: string, chips: number): number {
+    if (this.phase !== "betting") {
+      throw new TableError("The wheel is already turning.");
+    }
+    const pile = this.placed.find((one) => one.seatId === seatId && one.spotId === spotId);
+    if (pile === undefined) {
+      return 0;
+    }
+    const off = Math.min(pile.chips, Math.max(0, Math.floor(chips)));
+    if (off === 0) {
+      return 0;
+    }
+    this.placed =
+      pile.chips === off
+        ? this.placed.filter((one) => one !== pile)
+        : this.placed.map((one) => (one === pile ? { ...one, chips: one.chips - off } : one));
+    return off;
+  }
+
   /** The last chip this seat put down, taken back. */
   undo(seatId: string): void {
     if (this.phase !== "betting") {

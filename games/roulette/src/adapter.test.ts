@@ -174,6 +174,40 @@ describe("a roulette table's money", () => {
     expect(gave).toHaveBeenCalledWith("u1", 200);
   });
 
+  it("gives a chip back out of the bank when it is taken off one spot", async () => {
+    /*
+     * The same movement as a win, and it has to be: chips go into the bank as
+     * they land, so a right-click that took a chip off the cloth without
+     * taking it out of the bank would let a player fatten the bank all evening
+     * and then bet against a cap their own unplaced chips had inflated.
+     */
+    const { bank, held } = purse(1_000_000);
+    const game = rouletteAdapter({ bank, pick: () => 0 });
+    const table = game.create("ABCDE") as Table;
+    table.join("s1", "Ada", who("u1"));
+    const { deps, gave } = spy();
+
+    await game.act(table, "s1", { type: "place", spotId: RED, chips: 200 }, deps);
+    await game.act(table, "s1", { type: "take", spotId: RED, chips: 50 }, deps);
+
+    expect(held()).toBe(1_000_150);
+    expect(gave).toHaveBeenCalledWith("u1", 50);
+    expect(table.onSpot("s1", RED)).toBe(150);
+  });
+
+  it("pays nothing back for a spot the seat has no chips on", async () => {
+    const { bank, held } = purse(1_000_000);
+    const game = rouletteAdapter({ bank, pick: () => 0 });
+    const table = game.create("ABCDE") as Table;
+    table.join("s1", "Ada", who("u1"));
+    const { deps, gave } = spy();
+
+    await game.act(table, "s1", { type: "take", spotId: RED, chips: 500 }, deps);
+
+    expect(held()).toBe(1_000_000);
+    expect(gave).not.toHaveBeenCalled();
+  });
+
   it("pays a winner out of the bank once the ball lands", async () => {
     const { bank, held } = purse(1_000_000);
     const game = rouletteAdapter({ bank, pick: () => 1 });
