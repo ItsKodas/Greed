@@ -1,4 +1,4 @@
-import { CHIPS, WHEEL, colourOf } from "@backroom/game-roulette";
+import { CHIPS, SPIN_MS, WHEEL, colourOf } from "@backroom/game-roulette";
 import { useEffect, useRef, useState } from "react";
 import { Chip } from "../chips/Chip.js";
 import { Cloth } from "../roulette/Cloth.js";
@@ -22,8 +22,14 @@ import "../roulette/roulette.css";
 
 const HISTORY = [17, 0, 32, 5, 21, 34, 2, 26, 14];
 
-/** Shorter than a real table's six seconds, so a spin can be watched twice. */
-const MOCK_SPIN_MS = 4_200;
+/*
+ * The real table's own figure, not a shortened one.
+ *
+ * The mockup exists to answer whether this feels right, and the length of the
+ * spin is most of that feeling — showing it at half speed would be testing
+ * something nobody will ever play.
+ */
+const MOCK_SPIN_MS = SPIN_MS;
 
 export function RouletteMockup() {
   const [history, setHistory] = useState<number[]>(HISTORY);

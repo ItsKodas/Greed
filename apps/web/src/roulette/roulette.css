@@ -137,18 +137,83 @@
  * rest is exactly where the geometry says. The ball's are not: it ends at its
  * pocket's own angle, having come the long way round.
  */
+/*
+ * How the speed comes off, which is the whole feel of the thing.
+ *
+ * A bezier was tried first and read as heavy friction, for a reason that is
+ * measurable rather than a matter of taste: cubic-bezier(0.12, 0.72, 0.18, 1)
+ * puts 94% of the rotation into the first half of the spin, so the entire
+ * second half is a ball crawling the last few degrees. No amount of extra
+ * duration fixes that — it just lengthens the crawl.
+ *
+ * These curves are sampled from exponential decay of velocity instead, which
+ * is what actually slows a ball: v = v0·e^(-kt), integrated and normalised.
+ * A small k is a long coast. At k=1.6 the halfway point is 69% of the way
+ * round rather than 94%, so the ball is still visibly travelling deep into the
+ * spin and only settles at the end. The rim is given a touch more drag than
+ * the ball, because a wheel is heavy and a ball is not.
+ *
+ * The bezier stays as a first declaration for anything that cannot parse
+ * `linear()`; browsers that can take the second and ignore nothing.
+ */
 .rl__wheel--spinning .rl__wheel-rim {
-  animation: rl-rim var(--spin-ms, 6000ms) cubic-bezier(0.2, 0.62, 0.28, 1) forwards;
+  animation: rl-rim var(--spin-ms, 11000ms) cubic-bezier(0.25, 0.55, 0.3, 1) forwards;
+  animation-timing-function: linear(
+    0,
+    0.1066 5%,
+    0.2035 10%,
+    0.2916 15%,
+    0.3717 20%,
+    0.4446 25%,
+    0.5109 30%,
+    0.5712 35%,
+    0.626 40%,
+    0.6758 45%,
+    0.7211 50%,
+    0.7623 55%,
+    0.7998 60%,
+    0.8339 65%,
+    0.8649 70%,
+    0.8931 75%,
+    0.9187 80%,
+    0.942 85%,
+    0.9632 90%,
+    0.9825 95%,
+    1
+  );
   transform-box: view-box;
   transform-origin: 50px 50px;
 }
 
 .rl__wheel--spinning .rl__ball-arm {
-  animation: rl-ball-round var(--spin-ms, 6000ms) cubic-bezier(0.12, 0.72, 0.18, 1) forwards;
+  animation: rl-ball-round var(--spin-ms, 11000ms) cubic-bezier(0.22, 0.52, 0.3, 1) forwards;
+  animation-timing-function: linear(
+    0,
+    0.0963 5%,
+    0.1853 10%,
+    0.2673 15%,
+    0.3431 20%,
+    0.4131 25%,
+    0.4777 30%,
+    0.5373 35%,
+    0.5923 40%,
+    0.6431 45%,
+    0.69 50%,
+    0.7333 55%,
+    0.7732 60%,
+    0.8101 65%,
+    0.8442 70%,
+    0.8756 75%,
+    0.9046 80%,
+    0.9314 85%,
+    0.9561 90%,
+    0.9789 95%,
+    1
+  );
 }
 
 .rl__wheel--spinning .rl__ball {
-  animation: rl-ball-fall var(--spin-ms, 6000ms) ease-in-out forwards;
+  animation: rl-ball-fall var(--spin-ms, 11000ms) ease-in-out forwards;
 }
 
 @keyframes rl-rim {
@@ -179,13 +244,13 @@
  */
 @keyframes rl-ball-fall {
   0%,
-  58% {
+  74% {
     transform: translateY(-45.5px);
   }
-  76% {
+  86% {
     transform: translateY(-37.5px);
   }
-  88% {
+  93% {
     transform: translateY(-42.5px);
   }
   100% {

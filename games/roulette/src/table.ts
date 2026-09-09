@@ -29,8 +29,16 @@ export const WINDOWS = [15_000, 30_000, 60_000] as const;
  */
 export const LAST_CALL_MS = 5_000;
 
-/** How long the ball is in the air. Long enough to watch, short enough to sit through. */
-export const SPIN_MS = 6_000;
+/**
+ * How long the ball is in the air.
+ *
+ * Long, deliberately. A roulette spin is the one moment at this table where
+ * nothing is being decided by anybody and everyone is watching the same thing,
+ * and cutting it short to get back to the betting window trades away the only
+ * part of the game that is pure anticipation. Six seconds read as a ball
+ * fighting its way to a stop; this is a ball coasting.
+ */
+export const SPIN_MS = 11_000;
 
 /** How long a finished spin stays up to be read. */
 export const SETTLE_MS = 6_000;
