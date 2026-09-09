@@ -9,3 +9,13 @@ export { BASE, FAVOUR_PER_CHIPS, MAX, UPGRADES, favoursFor, numbersFor } from ".
 export type { Upgrade } from "./ladder.js";
 
 export { guardCeiling, withinGuard } from "./guard.js";
+
+export {
+  RHYTHM_KEEP,
+  RHYTHM_MEDIAN_MS,
+  RHYTHM_MIN_SAMPLES,
+  RHYTHM_SPREAD_MS,
+  TAP_FLOOR_MS,
+  remember,
+  tooEven,
+} from "./rhythm.js";
