@@ -36,10 +36,16 @@ describe("where the ball ends up", () => {
 
   it("turns the rim a whole number of times", () => {
     /*
-     * What makes the line above true. The rim carries the pockets, so it has to
-     * finish exactly where it started or a pocket at rest is no longer where
-     * the geometry says it is — and the ball would need the rim's final
-     * rotation added to its own, every spin.
+     * What makes the line above true, and it is now load-bearing twice over.
+     *
+     * The rim carries the pockets, so it has to finish exactly where it started
+     * or a pocket at rest is no longer where the geometry says it is — and the
+     * ball would need the rim's final rotation added to its own, every spin.
+     *
+     * The rim also stops before the ball does, and its animation is dropped
+     * when the wheel leaves the spinning state. A whole number of turns is why
+     * that costs nothing: the held final frame and the untransformed rim are
+     * the same picture, so the wheel does not jump at the moment it settles.
      */
     const { container } = render(<Wheel pocket={17} spinning />);
     const from = Number.parseFloat(styleOf(container).getPropertyValue("--rim-from"));

@@ -167,8 +167,23 @@
  * is still to come when it leaves the track, so the end is quick without being
  * over.
  *
- * The rim keeps more of its speed for longer still, because a wheel head is
- * heavy and turns on a spindle; the ball only has the track.
+ * The wheel is a different machine and gets a different curve. It is heavy and
+ * it turns on a bearing, so it barely slows at first and then gives its speed
+ * up over most of the spin rather than in a hurry at the end.
+ *
+ * Constant deceleration was tried here too and read as stopping too fast, for
+ * a reason worth keeping: shedding speed at a fixed rate means the last of it
+ * goes as quickly as the first, and against a wheel that is nearly stopped
+ * that is a hand being laid on it. This sheds less and less as it slows — 122
+ * degrees per second per second at the start of the wind-down, then 114, 104,
+ * 91, 76, 59 — which is the difference between coming to rest and being
+ * brought to rest.
+ *
+ * And it stops first, at 82% of the spin, a good second and a quarter before
+ * the ball. Not what a real table does — a real rotor is still turning when
+ * the ball settles — but a result read off a moving rim is a result nobody can
+ * read, and a still wheel gives the ball its last seconds alone. Which is the
+ * moment everyone at the table is actually waiting for.
  *
  * Sampled to six decimals and densely over the last stretch: at four decimals
  * the tail collapses into a couple of visible steps, because near 1.0 there is
@@ -178,34 +193,34 @@
  * `linear()`.
  */
 .rl__wheel--spinning .rl__wheel-rim {
-  animation: rl-rim var(--spin-ms, 7000ms) cubic-bezier(0.25, 0.55, 0.3, 1) forwards;
+  animation: rl-rim calc(var(--spin-ms, 7000ms) * 0.82) cubic-bezier(0.25, 0.55, 0.3, 1) forwards;
   animation-timing-function: linear(
     0,
-    0.069583 5%,
-    0.138603 10%,
-    0.207059 15%,
-    0.274952 20%,
-    0.342282 25%,
-    0.409048 30%,
-    0.475251 35%,
-    0.540890 40%,
-    0.605966 45%,
-    0.670478 50%,
-    0.734427 55%,
-    0.797812 60%,
-    0.858251 65%,
-    0.906510 70%,
-    0.942856 75%,
-    0.968716 80%,
-    0.985613 85%,
-    0.995186 90%,
-    0.997364 92%,
-    0.998788 94%,
-    0.999594 96%,
-    0.999813 97%,
-    0.999938 98%,
-    0.999990 99%,
-    0.999999 99.5%,
+    0.099079 5%,
+    0.197494 10%,
+    0.295247 15%,
+    0.388828 20%,
+    0.474834 25%,
+    0.553437 30%,
+    0.624812 35%,
+    0.689145 40%,
+    0.746630 45%,
+    0.797474 50%,
+    0.841893 55%,
+    0.880121 60%,
+    0.912408 65%,
+    0.939027 70%,
+    0.960275 75%,
+    0.976486 80%,
+    0.988040 85%,
+    0.995388 90%,
+    0.997270 92%,
+    0.998611 94%,
+    0.999465 96%,
+    0.999728 97%,
+    0.999895 98%,
+    0.999979 99%,
+    0.999996 99.5%,
     1
   );
   transform-box: view-box;
