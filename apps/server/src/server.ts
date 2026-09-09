@@ -721,15 +721,25 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * on the table's clock, a jar tapped in another tab — and only the first
    * of those is something the browser asked for. Pushing the number is what
    * keeps the figure in the corner honest without it polling for one.
+   *
+   * `knownChips` lets a caller that just did the mutation — and so already
+   * has the resulting balance in hand, e.g. from `applyJar`'s own return —
+   * skip the `store.get` this would otherwise do to find out what it already
+   * knows. Every other caller omits it and gets exactly the lookup this
+   * always did.
    */
-  async function tellChips(userId: string): Promise<void> {
-    const profile = await store.get(userId);
-    if (profile === undefined || profile === null) {
-      return;
+  async function tellChips(userId: string, knownChips?: number): Promise<void> {
+    let chips = knownChips;
+    if (chips === undefined) {
+      const profile = await store.get(userId);
+      if (profile === undefined || profile === null) {
+        return;
+      }
+      chips = profile.chips;
     }
     for (const socket of io.sockets.sockets.values()) {
       if (socket.data.identity?.userId === userId) {
-        socket.emit("me:chips", profile.chips);
+        socket.emit("me:chips", chips);
       }
     }
   }

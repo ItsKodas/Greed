@@ -29,8 +29,16 @@ export type TipsSocket = Socket<ClientToServer, ServerToClient, DefaultEventsMap
 
 export interface TipsDeps {
   store: Store;
-  /** Pushes a balance to every socket signed in as this account. */
-  tellChips: (userId: string) => Promise<void>;
+  /**
+   * Pushes a balance to every socket signed in as this account.
+   *
+   * The second argument is the balance already known from `applyJar`'s own
+   * return, for a caller that has one — it saves the extra `store.get` that
+   * `tellChips` would otherwise do to find out what it already knows. Tapping
+   * is the one screen in the building meant to be pressed over and over, so
+   * that round trip is not free to repeat on every accepted tap.
+   */
+  tellChips: (userId: string, knownChips?: number) => Promise<void>;
 }
 
 /**
@@ -66,8 +74,11 @@ function view(jar: Jar, now: number): JarView {
  * caller — which has already worked it out via `levelAt` for whatever jar it
  * is showing — hands over a single answer instead of two computations that
  * could disagree.
+ *
+ * Module-private: every caller is inside this file, and a function used
+ * nowhere else has no business on the module's public surface.
  */
-export function viewOf(jar: Jar, now: number, level: number): JarView {
+function viewOf(jar: Jar, now: number, level: number): JarView {
   const numbers = numbersFor(jar.bought);
   return {
     level,
@@ -193,7 +204,10 @@ export function wireTips(socket: TipsSocket, deps: TipsDeps): void {
       }
       const jar = asJar(swapped.jar);
       if (outcome.ok && outcome.paid > 0) {
-        await tellChips(userId);
+        // swapped.chips is the balance applyJar already returned — reading
+        // it back from the store here would be a second round trip for a
+        // number this handler is already holding.
+        await tellChips(userId, swapped.chips);
         // No `shared` bump: games/wins/chipsWon are about playing against
         // other people, and counting time at the jar would inflate every
         // profile in the building for a game nobody else was in.
