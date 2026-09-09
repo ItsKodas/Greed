@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import mongoose from "mongoose";
 import { MongoStore } from "./mongo-store.js";
-import { DAILY_GRANT, STARTING_CHIPS } from "./store.js";
+import { DAILY_GRANT, STARTING_CHIPS, emptyJarRecord } from "./store.js";
+import type { JarRecord } from "./store.js";
 import { DAILY_SEND_CAP } from "./transfers.js";
 
 /**
@@ -186,6 +187,31 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
 
     expect([first, second].filter(Boolean)).toHaveLength(1);
     expect(await store.bank("slots")).toBe(0);
+  });
+
+  /**
+   * The jar's token as a compare-and-swap key, against a real database.
+   *
+   * MemoryStore keeps this promise by accident, being single-threaded — the
+   * atomicity argument there is "no await between the read and the write".
+   * Mongo's is a different argument, a conditional `findOneAndUpdate`, and
+   * only a real database run concurrently can show it actually holds.
+   */
+  describe("a jar on the profile", () => {
+    it("pays exactly one of a hundred concurrent swaps carrying the same token", async () => {
+      const player = await newPlayer();
+      const before = (await store.get(player.id))?.chips ?? 0;
+      const held = await store.jar(player.id);
+      const token = held?.jar.token ?? "";
+      const next: JarRecord = { ...emptyJarRecord(), level: 1, token: "after-swap" };
+
+      const results = await Promise.all(
+        Array.from({ length: 100 }, () => store.applyJar(player.id, token, next, 25)),
+      );
+
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      expect((await store.get(player.id))?.chips).toBe(before + 25);
+    });
   });
 
   /**

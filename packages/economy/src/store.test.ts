@@ -4,6 +4,7 @@ import {
   DAILY_GRANT,
   MemoryStore,
   STARTING_CHIPS,
+  emptyJarRecord,
   emptyStats,
   judgeDaily,
 } from "./store.js";
@@ -20,6 +21,7 @@ function profile(overrides: Partial<Profile> = {}): Profile {
     lastDailyClaim: null,
     stats: emptyStats(),
     byGame: {},
+    jar: emptyJarRecord(),
     ...overrides,
   };
 }

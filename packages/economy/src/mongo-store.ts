@@ -19,11 +19,13 @@ import {
   DAILY_GRANT,
   DAILY_INTERVAL_MS,
   STARTING_CHIPS,
+  emptyJarRecord,
   emptyStats,
 } from "./store.js";
 import type {
   DailyResult,
   GameRecord,
+  JarRecord,
   Profile,
   ProfileStats,
   StatBump,
@@ -40,6 +42,7 @@ interface UserDoc {
   lastDailyClaim: Date | null;
   stats: ProfileStats;
   byGame: Record<string, Record<string, number>>;
+  jar: JarRecord;
 }
 
 const statsSchema = new mongoose.Schema<ProfileStats>(
@@ -63,6 +66,21 @@ const userSchema = new mongoose.Schema<UserDoc>(
     // Free-form on purpose: each game names its own figures and the store has
     // no business knowing what they are called.
     byGame: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
+    jar: {
+      type: {
+        level: { type: Number, default: 0 },
+        levelAt: { type: Number, default: 0 },
+        favours: { type: Number, default: 0 },
+        bought: { type: [String], default: () => [] },
+        nightStartedAt: { type: Number, default: 0 },
+        paidThisNight: { type: Number, default: 0 },
+        token: { type: String, default: "" },
+        rhythm: { type: [Number], default: () => [] },
+        lastTapAt: { type: Number, default: null },
+      },
+      default: () => emptyJarRecord(),
+      _id: false,
+    },
   },
   { timestamps: true },
 );
@@ -312,6 +330,20 @@ function toProfile(doc: UserDoc): Profile {
       chipsWon: doc.stats?.chipsWon ?? 0,
     },
     byGame: structuredClone(doc.byGame ?? {}),
+    // Copied field by field, for the same reason stats is: a live Mongoose
+    // subdocument compares unequal to a plain object and lets a caller write
+    // back through it by accident.
+    jar: {
+      level: doc.jar?.level ?? 0,
+      levelAt: doc.jar?.levelAt ?? 0,
+      favours: doc.jar?.favours ?? 0,
+      bought: [...(doc.jar?.bought ?? [])],
+      nightStartedAt: doc.jar?.nightStartedAt ?? 0,
+      paidThisNight: doc.jar?.paidThisNight ?? 0,
+      token: doc.jar?.token ?? "",
+      rhythm: [...(doc.jar?.rhythm ?? [])],
+      lastTapAt: doc.jar?.lastTapAt ?? null,
+    },
   };
 }
 
@@ -396,6 +428,7 @@ export class MongoStore implements Store {
           lastDailyClaim: null,
           stats: emptyStats(),
           byGame: {},
+          jar: emptyJarRecord(),
         },
       },
       { upsert: true, returnDocument: "after" },
@@ -458,6 +491,43 @@ export class MongoStore implements Store {
       chips: current.chips,
       nextAt: (current.lastDailyClaim?.getTime() ?? 0) + DAILY_INTERVAL_MS,
     };
+  }
+
+  async jar(id: string): Promise<{ jar: JarRecord; chips: number } | null> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    const doc = await this.users.findById(id);
+    return doc === null ? null : { jar: toProfile(doc).jar, chips: doc.chips };
+  }
+
+  /*
+   * One conditional update rather than a read then a write, in the same
+   * shape claimDaily already uses: the whole compare-and-swap is the filter,
+   * so two swaps racing on the same token cannot both land.
+   */
+  async applyJar(
+    id: string,
+    expectedToken: string,
+    next: JarRecord,
+    chipDelta: number,
+  ): Promise<{ ok: boolean; chips: number; jar: JarRecord }> {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return { ok: false, chips: 0, jar: emptyJarRecord() };
+    }
+    const doc = await this.users.findOneAndUpdate(
+      { _id: id, "jar.token": expectedToken },
+      { $set: { jar: next }, ...(chipDelta !== 0 ? { $inc: { chips: chipDelta } } : {}) },
+      { returnDocument: "after" },
+    );
+    if (doc !== null) {
+      return { ok: true, chips: doc.chips, jar: toProfile(doc).jar };
+    }
+    // Somebody else's swap moved the token between the read and this write.
+    const current = await this.users.findById(id);
+    return current === null
+      ? { ok: false, chips: 0, jar: emptyJarRecord() }
+      : { ok: false, chips: current.chips, jar: toProfile(current).jar };
   }
 
   async bumpStats(id: string, bump: StatBump): Promise<void> {

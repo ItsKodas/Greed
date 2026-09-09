@@ -12,6 +12,7 @@ export {
   DAILY_INTERVAL_MS,
   MemoryStore,
   STARTING_CHIPS,
+  emptyJarRecord,
   emptyStats,
   judgeDaily,
 } from "./store.js";
@@ -19,6 +20,7 @@ export type {
   BankName,
   DailyResult,
   GameRecord,
+  JarRecord,
   Profile,
   ProfileStats,
   PublicPlayer,
