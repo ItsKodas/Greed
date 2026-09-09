@@ -1071,7 +1071,16 @@
   color: var(--gr-color-ink-dim);
 }
 
-.pk__act--raise {
+/*
+ * The lit button, for a control that is the only thing to do.
+ *
+ * Never on one of several moves. A raise drawn brighter than the call beside
+ * it is the table lobbying: the eye lands on the lit control and the press
+ * follows, and the difference is somebody's money. Calling and raising are
+ * the player's decision, so they look identical and the felt keeps its
+ * opinion to itself. Buying in has nothing to be pressed instead of.
+ */
+.pk__act--go {
   border-color: var(--gr-color-neon);
   color: var(--gr-color-ink-lit);
   /* Mixed from the token rather than written out, so it follows the room's
@@ -1079,7 +1088,7 @@
   background: color-mix(in srgb, var(--gr-color-neon) 14%, transparent);
 }
 
-.pk__act--raise .pk__act-name {
+.pk__act--go .pk__act-name {
   color: var(--gr-color-ink-dim);
 }
 

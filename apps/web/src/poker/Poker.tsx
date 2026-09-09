@@ -859,7 +859,7 @@ export function Actions({
         <div className="pk__acts">
           <button
             type="button"
-            className="pk__act pk__act--raise"
+            className="pk__act pk__act--go"
             disabled={table.busy}
             aria-label={`Sit down with ${compact(state.entry)}`}
             onClick={() => table.act({ type: "buyIn" })}
@@ -1148,7 +1148,7 @@ function OnTurn({
         {you.canRaise ? (
           <button
             type="button"
-            className="pk__act pk__act--raise"
+            className="pk__act"
             disabled={busy}
             aria-label={`${all ? "All in" : opening ? "Bet" : "Raise to"} ${fmt(
               all ? me.committed + me.stack : at,

@@ -256,6 +256,19 @@ describe("what you are offered", () => {
     expect(screen.getByRole("button", { name: "Raise to 200" })).toBeTruthy();
   });
 
+  it("does not dress the raise up as the button to press", () => {
+    /*
+     * A lit raise beside a plain call is the felt lobbying. The eye goes to
+     * the bright control and the press follows it, which is a table talking
+     * somebody into more money than they came to put in. Both are the
+     * player's decision and both look like one.
+     */
+    acting({ toCall: 80, minRaiseTo: 200, maxRaiseTo: 2_000, canRaise: true }, { committed: 20 });
+    const call = screen.getByRole("button", { name: "Call 80" });
+    const raise = screen.getByRole("button", { name: "Raise to 200" });
+    expect(raise.className).toBe(call.className);
+  });
+
   it("gives somebody watching no controls at all", () => {
     const table = stub();
     render(
