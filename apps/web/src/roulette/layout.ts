@@ -117,7 +117,12 @@ function outsideBoxes(): Box[] {
       y: ROWS - 1 - at,
       width: 1,
       height: 1,
-      label: "2 to 1",
+      /*
+       * The cloth's own shorthand. "2 to 1" was tried in full and then
+       * sideways, and neither survives a box one square wide — the words are
+       * simply longer than the space, whichever way up they are.
+       */
+      label: "2:1",
     });
   });
   return out;

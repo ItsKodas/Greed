@@ -1,0 +1,406 @@
+/*
+ * The roulette table.
+ *
+ * Shared by the felt and by the mockup in /style, so the table that was
+ * approved and the table that spins are the same table. Sized in container
+ * units throughout: the cloth and the wheel both scale to whatever the table
+ * is given rather than to the viewport, which is what lets one layout serve a
+ * phone and a wide desk without a breakpoint for every element on it.
+ */
+
+.rl {
+  container-type: inline-size;
+  display: grid;
+  gap: var(--gr-space-3);
+  width: 100%;
+}
+
+/* ---------------------------------------------------------------- the wheel */
+
+.rl__wheel {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.rl__wheel-face {
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* The pool of light a wheel is lit by, which is the room's only warm source. */
+  filter: drop-shadow(0 6px 18px rgb(0 0 0 / 0.55));
+}
+
+.rl__wheel-bowl {
+  fill: var(--rl-mahogany);
+  stroke: var(--rl-brass);
+  stroke-width: 0.6;
+}
+
+.rl__pocket {
+  stroke: var(--rl-brass);
+  stroke-width: 0.25;
+}
+.rl__pocket--red {
+  fill: var(--rl-red);
+}
+.rl__pocket--black {
+  fill: var(--rl-black);
+}
+.rl__pocket--zero {
+  fill: var(--rl-green);
+}
+
+/* A pocket one of your bets covers, so you can see what you are on. */
+.rl__pocket--covered {
+  stroke: var(--rl-brass-lit);
+  stroke-width: 0.7;
+}
+
+/* Where the ball actually is, which outranks merely being covered. */
+.rl__pocket--home {
+  stroke: var(--gr-color-neon);
+  stroke-width: 1.1;
+}
+
+.rl__pocket-number {
+  fill: var(--rl-ivory);
+  font-size: 4.4px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.rl__wheel-hub {
+  fill: var(--rl-mahogany);
+  stroke: var(--rl-brass);
+  stroke-width: 0.4;
+}
+
+/* The cross-pieces under the cone, which is what a wheel's middle actually is. */
+.rl__wheel-spokes line {
+  stroke: var(--rl-mahogany-lit);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+.rl__wheel-cone {
+  fill: var(--rl-mahogany-lit);
+  stroke: var(--rl-brass);
+  stroke-width: 0.5;
+}
+
+.rl__wheel-turret {
+  fill: var(--rl-brass);
+  stroke: var(--rl-brass-lit);
+  stroke-width: 0.5;
+}
+
+.rl__ball {
+  fill: var(--rl-ivory);
+  stroke: rgb(0 0 0 / 0.35);
+  stroke-width: 0.4;
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 0.6));
+}
+
+/*
+ * The wheel turning.
+ *
+ * The rim turns and the numbers turn with it, because a wheel whose numbers
+ * stayed upright while it span would be a texture sliding under a stencil. It
+ * is the only thing in this room that loops, and it loops only while something
+ * is genuinely still happening.
+ */
+.rl__wheel--spinning .rl__wheel-rim {
+  animation: rl-turn 2.4s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes rl-turn {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl__wheel--spinning .rl__wheel-rim {
+    animation: none;
+  }
+}
+
+/* ---------------------------------------------------------------- the cloth */
+
+.rl__cloth {
+  position: relative;
+  width: 100%;
+  background: var(--gr-color-felt);
+  border: 2px solid var(--rl-brass);
+  border-radius: var(--gr-radius-sm);
+  box-shadow: inset 0 0 40px rgb(0 0 0 / 0.4);
+  touch-action: manipulation;
+  cursor: crosshair;
+  user-select: none;
+}
+
+/*
+ * A turned cloth is sized by height rather than width.
+ *
+ * Fourteen squares tall against a phone's full width comes out over a thousand
+ * pixels, and a cloth you have to scroll is a cloth where your own chips are
+ * off screen while the ball is dropping. Bounded by the viewport instead, so
+ * the whole table is in front of you and the width falls out of that — which
+ * also leaves room beside it for the wheel.
+ */
+.rl__cloth--portrait {
+  height: min(78dvh, 680px);
+  width: auto;
+  max-width: 100%;
+}
+
+.rl__cloth--shut {
+  cursor: default;
+  filter: saturate(0.6) brightness(0.8);
+}
+
+.rl__square,
+.rl__outside {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  font-weight: 700;
+  color: var(--rl-ivory);
+  /*
+   * The cloth is one target: a tap is resolved by where it landed, not by
+   * which box caught it, so nothing inside may swallow the event.
+   */
+  pointer-events: none;
+  /* Scales with the cloth rather than the page, so one rule serves every size. */
+  font-size: clamp(7px, 2.4cqw, 15px);
+}
+
+.rl__square--red {
+  background: var(--rl-red);
+}
+.rl__square--black {
+  background: var(--rl-black);
+}
+.rl__square--zero {
+  background: var(--rl-green);
+}
+
+.rl__outside {
+  background: rgb(0 0 0 / 0.18);
+  font-size: clamp(6px, 1.7cqw, 12px);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gr-color-ink);
+  text-align: center;
+  line-height: 1.15;
+}
+
+/* The number the ball landed in. */
+.rl__square--won {
+  box-shadow:
+    inset 0 0 0 2px var(--gr-color-neon),
+    0 0 14px var(--gr-color-neon);
+  z-index: 3;
+}
+
+/*
+ * What the current aim would buy.
+ *
+ * The whole answer to the one risk in placing chips by aiming: the bet is
+ * named before it costs anything. Follows the pointer, so it is never a label
+ * you have to go and find.
+ */
+.rl__aim {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 6;
+  width: 0;
+  height: 0;
+}
+
+.rl__aim::before {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px dashed var(--rl-brass-lit);
+  background: rgb(255 255 255 / 0.12);
+}
+
+.rl__aim-name {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: var(--gr-radius-sm);
+  background: var(--gr-color-shadow);
+  border: 1px solid var(--rl-brass);
+  color: var(--gr-color-ink-lit);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* A pile of chips sitting on a spot. */
+.rl__pile {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 5;
+  /* Chips are drawn at a fixed small size on the cloth; the pile scales. */
+  font-size: clamp(8px, 2cqw, 13px);
+}
+
+.rl__pile--yours {
+  filter: drop-shadow(0 0 4px var(--gr-color-chip));
+}
+
+/*
+ * A chip on an outside bet, and the word it would otherwise sit on.
+ *
+ * On a real cloth a chip lands on the words and nobody minds, because the
+ * player already knows what they backed. Here the words are also how somebody
+ * learns the table, so the chip goes to one end of the box and the label is
+ * pushed clear of it — nudging the chip alone only moved it from the middle of
+ * the word to the start of it.
+ *
+ * The inside bets are left alone: a chip on a line is pointing at the line,
+ * and moving it would be moving the bet.
+ */
+.rl__pile--outside {
+  transform: translate(-50%, -50%) translateX(-2.4em);
+}
+
+.rl__outside {
+  padding-left: 3.4em;
+}
+
+.rl__cloth--portrait .rl__pile--outside {
+  transform: translate(-50%, -50%) translateY(-2.4em);
+}
+
+.rl__cloth--portrait .rl__outside {
+  padding-left: 0;
+  padding-top: 3.4em;
+}
+
+/* ------------------------------------------------------------- the furniture */
+
+/*
+ * The board of recent numbers.
+ *
+ * Every roulette table has one, and it is not decoration: it is the only
+ * record of what the wheel has done, and players read it whether or not it
+ * means anything. Newest last, the way it is printed.
+ */
+.rl__history {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.rl__past {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--rl-ivory);
+}
+.rl__past--red {
+  background: var(--rl-red);
+}
+.rl__past--black {
+  background: var(--rl-black);
+}
+.rl__past--zero {
+  background: var(--rl-green);
+}
+
+/* The newest result, which is the one being talked about. */
+.rl__past--latest {
+  box-shadow: 0 0 0 2px var(--rl-brass-lit);
+}
+
+/* The tray of chips you are betting with. */
+.rl__tray {
+  display: flex;
+  gap: var(--gr-space-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.rl__chip {
+  background: none;
+  border: none;
+  padding: 2px;
+  border-radius: 50%;
+  cursor: pointer;
+  line-height: 0;
+  opacity: 0.55;
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.rl__chip:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.rl__chip--picked {
+  opacity: 1;
+  transform: translateY(-3px);
+  box-shadow: 0 0 0 2px var(--rl-brass-lit);
+}
+
+.rl__chip:disabled {
+  opacity: 0.2;
+  cursor: default;
+}
+
+/* ------------------------------------------------------------- the layout */
+
+/*
+ * Phone first: the wheel over the cloth, and the cloth on its side so its
+ * squares are big enough to read and aim at. See the note in Cloth.tsx.
+ */
+.rl__table {
+  display: grid;
+  gap: var(--gr-space-3);
+  justify-items: center;
+}
+
+.rl__wheel-holds {
+  width: min(58cqw, 260px);
+}
+
+/*
+ * Wide enough for a real table: the wheel beside the cloth, which is how one
+ * is actually built — you stand at the cloth and the wheel is at the end of it.
+ *
+ * Nine hundred rather than the seven-twenty this was first written at, and the
+ * number is not free. Standing the wheel beside the cloth leaves the cloth
+ * about seven tenths of the room, so a container of 720 handed it barely 520 —
+ * under the width at which the cloth decides to lie down (see TURNS_AT in
+ * Cloth.tsx). The two thresholds disagreed and a desktop got a portrait cloth
+ * with a squashed wheel next to it. This one is derived from that one.
+ */
+@container (min-width: 900px) {
+  .rl__table {
+    grid-template-columns: minmax(200px, 1fr) 2.4fr;
+    align-items: center;
+    justify-items: stretch;
+  }
+  .rl__wheel-holds {
+    width: 100%;
+  }
+}

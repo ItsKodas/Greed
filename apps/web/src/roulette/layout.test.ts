@@ -1,6 +1,6 @@
 import { SPOTS, spotAt } from "@backroom/game-roulette";
 import { describe, expect, it } from "vitest";
-import { ANCHORS, HEIGHT, ROWS, WIDTH, boxOf, nearest } from "./cloth.js";
+import { ANCHORS, HEIGHT, ROWS, WIDTH, boxOf, nearest } from "./layout.js";
 
 const at = (spotId: string) => {
   const anchor = ANCHORS.find((one) => one.spotId === spotId);

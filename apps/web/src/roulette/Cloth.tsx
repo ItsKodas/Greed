@@ -1,0 +1,227 @@
+import { colourOf, spotAt } from "@backroom/game-roulette";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { ChipStack } from "../chips/ChipStack.js";
+import { ANCHORS, BOXES, HEIGHT, SQUARES, WIDTH, boxOf, nearest } from "./layout.js";
+
+/**
+ * The betting cloth.
+ *
+ * A tap lands on the nearest thing that can be bet on — a square, the line
+ * between two, or the point where four meet — so a chip sits where it would on
+ * a real table rather than in a menu of bet names. All of that arithmetic
+ * lives in cloth.ts; this draws it and turns a pointer into a spot.
+ *
+ * The one thing that is decided here is which way round it goes. Laid out as a
+ * casino prints it, the cloth is fourteen squares wide and five tall, which on
+ * a phone leaves squares about twenty-six pixels across — too small to read,
+ * never mind aim at. Turned on its side it is five across, which is
+ * seventy-five. So a narrow screen gets a portrait cloth, and because the
+ * geometry is in grid units rather than pixels, that is one swap here and no
+ * second set of figures anywhere.
+ */
+
+/**
+ * The width at which the cloth lies down.
+ *
+ * Fourteen squares need about this much before a square is worth aiming at;
+ * below it the cloth is turned and five squares have the width instead.
+ */
+export const TURNS_AT = 560;
+
+export interface Placed {
+  seatId: string;
+  spotId: string;
+  chips: number;
+}
+
+export function Cloth({
+  placed,
+  mine,
+  onPlace,
+  disabled = false,
+  /** The pocket the ball is in, so the winning numbers can be lit. */
+  pocket,
+  portrait,
+}: {
+  placed: readonly Placed[];
+  /** Which seat is yours, so your chips can be told from everybody else's. */
+  mine: string | null;
+  onPlace?: (spotId: string) => void;
+  disabled?: boolean;
+  pocket?: number | null;
+  /** Forces the orientation. Left off, the cloth works it out for itself. */
+  portrait?: boolean;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const [aiming, setAiming] = useState<string | null>(null);
+
+  /*
+   * Which way round the cloth goes, decided by the cloth from its own width.
+   *
+   * Its own width rather than the viewport's, because this is a question about
+   * the room it was given and not about the device: the same cloth is narrow
+   * beside a wheel on a desk and wide on a tablet held sideways. Below the
+   * threshold a landscape cloth gives squares around twenty-four pixels, which
+   * is under a thumb and under legibility both.
+   */
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const cloth = box.current;
+    if (cloth === null || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const watch = new ResizeObserver(([entry]) => {
+      const width = entry?.contentRect.width ?? 0;
+      if (width > 0) {
+        setNarrow(width < TURNS_AT);
+      }
+    });
+    watch.observe(cloth);
+    return () => watch.disconnect();
+  }, []);
+
+  const sideways = portrait ?? narrow;
+
+  /** Turns a pointer somewhere on the cloth into the spot it is aimed at. */
+  const spotUnder = (event: ReactPointerEvent<HTMLDivElement>): string | null => {
+    const cloth = box.current;
+    if (cloth === null) {
+      return null;
+    }
+    const rect = cloth.getBoundingClientRect();
+    const across = (event.clientX - rect.left) / rect.width;
+    const down = (event.clientY - rect.top) / rect.height;
+    /*
+     * Back into grid units, undoing the rotation if there is one.
+     *
+     * The cloth is turned a quarter clockwise, so its left edge — the zero —
+     * ends up at the top. That direction rather than the other because the
+     * zero is where a cloth starts, and a player scrolling down should be
+     * reading 1, 2, 3 away from it rather than arriving at 36 first.
+     */
+    return sideways
+      ? nearest(down * WIDTH, (1 - across) * HEIGHT)
+      : nearest(across * WIDTH, down * HEIGHT);
+  };
+
+  /** Where a spot's chips are drawn, as a percentage of the cloth. */
+  const placeAt = (x: number, y: number) =>
+    sideways
+      ? { left: `${(1 - y / HEIGHT) * 100}%`, top: `${(x / WIDTH) * 100}%` }
+      : { left: `${(x / WIDTH) * 100}%`, top: `${(y / HEIGHT) * 100}%` };
+
+  /** A rectangle on the cloth, drawn the right way round. */
+  const spanAt = (x: number, y: number, width: number, height: number) =>
+    sideways
+      ? {
+          left: `${(1 - (y + height) / HEIGHT) * 100}%`,
+          top: `${(x / WIDTH) * 100}%`,
+          width: `${(height / HEIGHT) * 100}%`,
+          height: `${(width / WIDTH) * 100}%`,
+        }
+      : {
+          left: `${(x / WIDTH) * 100}%`,
+          top: `${(y / HEIGHT) * 100}%`,
+          width: `${(width / WIDTH) * 100}%`,
+          height: `${(height / HEIGHT) * 100}%`,
+        };
+
+  /* Everybody's chips, gathered per spot so one pile stands for one bet. */
+  const piles = new Map<string, { chips: number; yours: number }>();
+  for (const one of placed) {
+    const already = piles.get(one.spotId) ?? { chips: 0, yours: 0 };
+    piles.set(one.spotId, {
+      chips: already.chips + one.chips,
+      yours: already.yours + (one.seatId === mine ? one.chips : 0),
+    });
+  }
+
+  const aimed = aiming === null ? null : spotAt(aiming);
+
+  return (
+    <div
+      className={`rl__cloth${sideways ? " rl__cloth--portrait" : ""}${
+        disabled ? " rl__cloth--shut" : ""
+      }`}
+      ref={box}
+      style={{ aspectRatio: sideways ? `${HEIGHT} / ${WIDTH}` : `${WIDTH} / ${HEIGHT}` }}
+      onPointerMove={(event) => setAiming(spotUnder(event))}
+      onPointerLeave={() => setAiming(null)}
+      onPointerDown={(event) => {
+        if (disabled) {
+          return;
+        }
+        const spot = spotUnder(event);
+        if (spot !== null) {
+          onPlace?.(spot);
+        }
+      }}
+    >
+      {/* The numbers. */}
+      {SQUARES.map((square) => {
+        const colour = colourOf(square.n);
+        const won = pocket === square.n;
+        return (
+          <div
+            key={square.n}
+            className={`rl__square rl__square--${colour ?? "zero"}${won ? " rl__square--won" : ""}`}
+            style={spanAt(square.x, square.y, 1, square.n === 0 ? 3 : 1)}
+          >
+            <span>{square.n}</span>
+          </div>
+        );
+      })}
+
+      {/* The outside bets, which are areas rather than lines. */}
+      {BOXES.map((one) => (
+        <div
+          key={one.spotId}
+          className={`rl__outside${one.label === "2 to 1" ? " rl__outside--column" : ""}`}
+          style={spanAt(one.x, one.y, one.width, one.height)}
+        >
+          <span>{one.label}</span>
+        </div>
+      ))}
+
+      {/*
+       * What the current aim would buy, drawn before it costs anything. The
+       * whole answer to the one risk in this way of placing chips: you always
+       * see the bet you are about to make, named, before you make it.
+       */}
+      {aimed === null || disabled ? null : (
+        <div className="rl__aim" style={placeAt(...aimAt(aimed.id))}>
+          <span className="rl__aim-name">{aimed.label}</span>
+        </div>
+      )}
+
+      {/* The chips. */}
+      {[...piles.entries()].map(([spotId, pile]) => (
+        <div
+          key={spotId}
+          className={`rl__pile${pile.yours > 0 ? " rl__pile--yours" : ""}${
+            boxOf(spotId) === null ? "" : " rl__pile--outside"
+          }`}
+          style={placeAt(...aimAt(spotId))}
+        >
+          {/* Small: a chip on a cloth sits on a printed label, and a pile
+              drawn at tray size buries the word it is standing on. */}
+          <ChipStack amount={pile.chips} width={22} most={3} tallest={3} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Built once: every spot's anchor, by id, for drawing chips on. */
+const ANCHOR_BY_ID = new Map(ANCHORS.map((one) => [one.spotId, one]));
+
+/** Where a spot's chips sit, in grid units. */
+function aimAt(spotId: string): [number, number] {
+  const anchor = ANCHOR_BY_ID.get(spotId);
+  return anchor === undefined ? [0, 0] : [anchor.x, anchor.y];
+}

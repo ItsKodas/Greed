@@ -1,0 +1,59 @@
+/*
+ * The roulette room.
+ *
+ * Same rule as every other room's: a game owns its materials, the building
+ * owns its interface. So this repaints the surfaces and touches nothing that
+ * carries meaning — neon stays the building's, chip stays gold, good and bad
+ * stay what they are everywhere else.
+ *
+ * What makes this room its own is that it is the only one with a machine in
+ * the middle of it. Blackjack is a floor of felt; this is a felt table with a
+ * lacquered mahogany wheel on it, so the room is darker and warmer than the
+ * card room and the light is the low pool a wheel is lit by.
+ */
+:root[data-game="roulette"],
+[data-game="roulette"] {
+  --gr-color-night: #120d11;
+  --gr-color-slate: #1c1419;
+  --gr-color-shadow: #070406;
+  --gr-color-smoke: #241a20;
+  --gr-color-smoke-lit: #30232b;
+
+  /*
+   * A shade deeper and bluer than blackjack's, because a roulette cloth is
+   * printed rather than dealt on: it carries thirty-seven numbers and six
+   * outside boxes, and every one of them needs a line round it that reads.
+   */
+  --gr-color-felt: #12402c;
+  --gr-color-felt-lit: #1a5539;
+  --gr-color-felt-deep: #0b2a1d;
+
+  /*
+   * The air over the table, warmed towards the wheel's mahogany rather than
+   * the felt's green. A wheel is the lit thing in this room and the air should
+   * agree with it.
+   */
+  --gr-color-air: #4a2119;
+  --gr-color-air-hi: #8d3d2c;
+
+  --gr-color-ink: #ecdfd8;
+  --gr-color-ink-lit: #fff6f1;
+  --gr-color-ink-dim: #a08d85;
+  --gr-color-ink-faint: #6b5a55;
+
+  /*
+   * The wheel's own materials, which nothing else in the building has.
+   *
+   * Here rather than in roulette.css because they are what this room is made
+   * of, the same way the felt is — and because the mockup and the table both
+   * need them and neither should own them.
+   */
+  --rl-mahogany: #4a2418;
+  --rl-mahogany-lit: #6b3625;
+  --rl-brass: #c9a227;
+  --rl-brass-lit: #f0cf68;
+  --rl-red: #b3312c;
+  --rl-black: #1a1614;
+  --rl-green: #17663f;
+  --rl-ivory: #f4ece2;
+}
