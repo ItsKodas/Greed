@@ -297,7 +297,12 @@ export default function Tips() {
     // chip leaves and the clink sounds on the press, the same instant the
     // level itself drops, rather than waiting on a round trip that would
     // only ever confirm what was already certain.
-    play("payout");
+    //
+    // Not "payout" — that cue is a counted stack, the loudest chip sound in
+    // the building, meant to land once at the end of a hand. A full jar is
+    // dozens of scoops, so what has to survive a fast run of taps is the
+    // smallest single-object clink there is, not the one built for a total.
+    play("coin");
     const target = tonightRef.current?.getBoundingClientRect();
     if (!reducedMotion && target !== undefined) {
       flightIdRef.current += 1;

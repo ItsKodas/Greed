@@ -61,6 +61,10 @@ export function Jar({ level, brim, onTap, tapped }: JarProps) {
       className="jar"
       aria-label="Tap the jar"
       onClick={handleClick}
+      // A chip already clinks out of the glass on this press — the
+      // building-wide tap click underneath it would be a second sound for
+      // the same one event, same as the felt's own chip buttons.
+      data-quiet
     >
       {/* Reset every accepted tap, and only then — a jar sitting untapped
           must not wobble on its own. */}

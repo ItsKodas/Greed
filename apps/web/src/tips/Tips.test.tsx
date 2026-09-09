@@ -244,7 +244,22 @@ describe("the jar you tap", () => {
     show();
     await tapTheJar();
 
-    expect(played.calls).toEqual(["payout"]);
+    expect(played.calls).toEqual(["coin"]);
+  });
+
+  /*
+   * The jar plays its own clink, so the building-wide tap click must not
+   * double up on it. `useButtonSound` fences that off on `[data-quiet]` —
+   * this only checks the jar still carries the attribute, since nothing
+   * else here mounts that listener to catch a missing fence directly.
+   */
+  it("carries the opt-out that keeps the building's own click off its clink", async () => {
+    account.current = signedIn();
+
+    show();
+    const button = await screen.findByRole("button", { name: /tap the jar/i });
+
+    expect(button.hasAttribute("data-quiet")).toBe(true);
   });
 
   /*
@@ -287,7 +302,7 @@ describe("the jar you tap", () => {
       await tapTheJar();
 
       expect(screen.queryByTestId("chip-flight")).toBeNull();
-      expect(played.calls).toEqual(["payout"]);
+      expect(played.calls).toEqual(["coin"]);
     } finally {
       window.matchMedia = original;
     }
