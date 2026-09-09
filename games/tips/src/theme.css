@@ -1,13 +1,58 @@
 /*
- * The bar: warm, low, amber. A lamp over a counter rather than a lit cabinet.
+ * The bar's corner.
  *
- * These four values also live in listing.ts, because the link cards are drawn
- * on the server where there is no stylesheet to read. Change one, change both;
- * listing.test.ts fails if they drift.
+ * Lamplight over dark wood: warm and low, where slots is magenta over deep
+ * violet and Greed burns brass. The counter should sit beside them without
+ * competing for the eye.
+ *
+ * Left alone deliberately: chip, because gold has to mean money at every
+ * table and nowhere else; good and bad, because up is up wherever it
+ * happened.
  */
+/*
+ * Two selectors, one block.
+ *
+ * The plain attribute selector matches the same element the building's own
+ * `:root` tokens do, so on specificity alone it only ties with them — and a
+ * tie is settled by load order, not by which room you're standing in. Naming
+ * `:root` too is what actually wins the room its own colours.
+ *
+ * The second selector covers a tile that merely marks itself as this room,
+ * such as a card on the front page, where nothing on `<html>` is competing.
+ */
+:root[data-game="tips"],
 [data-game="tips"] {
-  --wall: #1a1410;
-  --felt: #2b2018;
-  --accent: #d99a3f;
-  --accent-hi: #ffcf7a;
+  --gr-color-night: #1a1410;
+  --gr-color-slate: #2a1e14;
+  --gr-color-shadow: #0f0b08;
+  --gr-color-smoke: #3d2e1e;
+  --gr-color-smoke-lit: #4f3c27;
+
+  --gr-color-felt: #2b2018;
+  --gr-color-felt-lit: #392a1c;
+  --gr-color-felt-deep: #1d150f;
+
+  --gr-color-neon-core: #fff2d6;
+  --gr-color-neon-hi: #ffcf7a;
+  --gr-color-neon: #d99a3f;
+  --gr-color-neon-dim: #855e28;
+  --gr-color-neon-deep: #a8691d;
+
+  /*
+   * The bar lights itself rather than borrowing the building's sign — a lamp
+   * over the counter, not the tube on the wall. A reference and not a copy,
+   * so a repaint of the lamp moves its own glow with it.
+   */
+  --gr-color-air: var(--gr-color-neon);
+  --gr-color-air-hi: var(--gr-color-neon-hi);
+
+  /*
+   * Warm parchment, not gold. Gold is spoken for by the chip tokens, and a
+   * balance has to keep standing out from the words next to it in this room
+   * too.
+   */
+  --gr-color-ink: #e8dcc6;
+  --gr-color-ink-lit: #f7f0de;
+  --gr-color-ink-dim: #a89880;
+  --gr-color-ink-faint: #766a56;
 }
