@@ -140,56 +140,72 @@
 /*
  * How the speed comes off, which is the whole feel of the thing.
  *
- * Two wrong answers preceded this one, and both were measurable rather than a
- * matter of taste.
+ * Four wrong answers came first. Each was measurable rather than a matter of
+ * taste, and each was wrong somewhere different.
  *
  * A bezier read as heavy friction: cubic-bezier(0.12, 0.72, 0.18, 1) puts 94%
- * of the rotation into the first half of the spin, so the whole second half
- * was a ball crawling the last few degrees.
+ * of the rotation into the first half, so the second half was a crawl.
  *
- * Exponential decay of velocity fixed the coast and broke the ending. It is
- * the right shape for a slowing ball but it never reaches zero — at k=1.6 the
- * ball is still travelling at 40% of its average speed when the animation
- * ends, so it does not stop, it is switched off.
+ * Exponential decay fixed the coast and broke the ending — it never reaches
+ * zero, so the ball still had 40% of its average speed when the animation
+ * ended. It was not stopping, it was being switched off.
  *
- * These come to rest. Progress is 1-(1-t)^n, whose speed is n(1-t)^(n-1) and
- * genuinely reaches zero at the end. n=1.7 keeps the same long coast as the
- * curve before it — 69% of the way round at the halfway point rather than 94%
- * — and rolls to a stop instead of hitting a wall. The rim takes n=2, a little
- * more drag, because a wheel is heavy and a ball is not.
+ * A power law reached zero but got there wrongly: below n=2 the deceleration
+ * *increases* without limit as it settles, so the last moment was the ball
+ * being yanked to a halt.
  *
- * Sampled densely over the last 10%, which is exactly where the settling
- * happens and where evenly spaced stops would put a visible corner.
+ * Constant deceleration stopped gracefully and still looked wrong, and the
+ * reason is the useful one — it sheds speed at the same rate the whole way
+ * down, which is what rolling on cloth looks like. A ball on a polished track
+ * barely slows at all while it is up there.
+ *
+ * So the speed is described as what the ball is actually doing. It holds 86%
+ * of its speed through the first 55% of the spin, losing almost nothing to a
+ * hard rim, and only then comes off the track and dies among the frets — where
+ * it sheds hard at first and eases into its pocket. As a share of average:
+ * 1.52, 1.46, 1.38, 1.32, then 0.84, 0.46, 0.18, 0.05. A fifth of the rotation
+ * is still to come when it leaves the track, so the end is quick without being
+ * over.
+ *
+ * The rim keeps more of its speed for longer still, because a wheel head is
+ * heavy and turns on a spindle; the ball only has the track.
+ *
+ * Sampled to six decimals and densely over the last stretch: at four decimals
+ * the tail collapses into a couple of visible steps, because near 1.0 there is
+ * no resolution left to describe a creep.
  *
  * The bezier stays as a first declaration for anything that cannot parse
- * `linear()`; browsers that can take the second.
+ * `linear()`.
  */
 .rl__wheel--spinning .rl__wheel-rim {
   animation: rl-rim var(--spin-ms, 7000ms) cubic-bezier(0.25, 0.55, 0.3, 1) forwards;
   animation-timing-function: linear(
     0,
-    0.0975 5%,
-    0.1900 10%,
-    0.2775 15%,
-    0.3600 20%,
-    0.4375 25%,
-    0.5100 30%,
-    0.5775 35%,
-    0.6400 40%,
-    0.6975 45%,
-    0.7500 50%,
-    0.7975 55%,
-    0.8400 60%,
-    0.8775 65%,
-    0.9100 70%,
-    0.9375 75%,
-    0.9600 80%,
-    0.9775 85%,
-    0.9900 90%,
-    0.9975 95%,
-    0.9988 96.5%,
-    0.9996 98%,
-    0.9999 99%,
+    0.069583 5%,
+    0.138603 10%,
+    0.207059 15%,
+    0.274952 20%,
+    0.342282 25%,
+    0.409048 30%,
+    0.475251 35%,
+    0.540890 40%,
+    0.605966 45%,
+    0.670478 50%,
+    0.734427 55%,
+    0.797812 60%,
+    0.858251 65%,
+    0.906510 70%,
+    0.942856 75%,
+    0.968716 80%,
+    0.985613 85%,
+    0.995186 90%,
+    0.997364 92%,
+    0.998788 94%,
+    0.999594 96%,
+    0.999813 97%,
+    0.999938 98%,
+    0.999990 99%,
+    0.999999 99.5%,
     1
   );
   transform-box: view-box;
@@ -200,28 +216,31 @@
   animation: rl-ball-round var(--spin-ms, 7000ms) cubic-bezier(0.22, 0.52, 0.3, 1) forwards;
   animation-timing-function: linear(
     0,
-    0.0835 5%,
-    0.1640 10%,
-    0.2414 15%,
-    0.3157 20%,
-    0.3868 25%,
-    0.4547 30%,
-    0.5192 35%,
-    0.5804 40%,
-    0.6381 45%,
-    0.6922 50%,
-    0.7427 55%,
-    0.7894 60%,
-    0.8322 65%,
-    0.8708 70%,
-    0.9053 75%,
-    0.9352 80%,
-    0.9602 85%,
-    0.9800 90%,
-    0.9939 95%,
-    0.9967 96.5%,
-    0.9987 98%,
-    0.9996 99%,
+    0.076467 5%,
+    0.151955 10%,
+    0.226463 15%,
+    0.299992 20%,
+    0.372541 25%,
+    0.444111 30%,
+    0.514702 35%,
+    0.584313 40%,
+    0.652944 45%,
+    0.720596 50%,
+    0.787269 55%,
+    0.847031 60%,
+    0.894749 65%,
+    0.931644 70%,
+    0.958973 75%,
+    0.978036 80%,
+    0.990185 85%,
+    0.996846 90%,
+    0.998312 92%,
+    0.999246 94%,
+    0.999758 96%,
+    0.999892 97%,
+    0.999965 98%,
+    0.999995 99%,
+    0.999999 99.5%,
     1
   );
 }
@@ -263,13 +282,13 @@
  */
 @keyframes rl-ball-fall {
   0%,
-  50% {
+  55% {
     transform: translateY(-45.5px);
   }
-  68% {
+  71% {
     transform: translateY(-37.5px);
   }
-  82% {
+  84% {
     transform: translateY(-42.5px);
   }
   100% {
