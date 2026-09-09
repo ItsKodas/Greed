@@ -96,13 +96,37 @@ describe("an hour at the jar", () => {
     }
   });
 
-  it("rewards an order that is not simply cheapest-first", () => {
-    // The point of the ladder. If a retune makes buying up the rungs in order
-    // strictly optimal, the decision has been flattened and this fails.
+  /*
+   * The figures below are pinned by hand rather than derived from `best` or
+   * `cheapestFirst` at run time. A test that recomputes the expected value
+   * from the same search it is checking cannot fail under a retune — it
+   * would simply recompute a new "best" and pass again, which is exactly the
+   * tautology this replaces (`best.paid >= cheapestFirst` was always true
+   * because `cheapestFirst` is itself one of the plans `best` is the maximum
+   * over). Pinning the actual numbers is what makes a retune that flattens
+   * the ladder's decision fail loudly instead of quietly re-agreeing with
+   * itself.
+   */
+  it("pays 6,960 played optimally, strictly more than cheapest-first", () => {
     const cheapestFirst = play(
       [...UPGRADES].sort((a, b) => a.favours - b.favours).map((u) => u.id),
       MINUTES,
     );
-    expect(best.paid).toBeGreaterThanOrEqual(cheapestFirst);
+    expect(best.paid).toBe(6_960);
+    expect(cheapestFirst).toBe(6_483);
+    expect(cheapestFirst).toBeLessThan(best.paid);
+  });
+
+  it("is not won by the cheapest-first order — every plan that reaches the top skips straight to the trickle upgrade", () => {
+    // There are ties at the top (several plans reach 6,960), so pinning a
+    // single `best.order` picked arbitrarily by `reduce` would be asserting
+    // on which tie `reduce` happens to keep rather than on the finding. What
+    // is actually true of every plan that reaches the maximum is checked
+    // instead: none of them starts with the cheapest upgrade.
+    const top = searched.filter((plan) => plan.paid === best.paid);
+    expect(top.length).toBeGreaterThan(0);
+    for (const plan of top) {
+      expect(plan.order.slice(0, 2), plan.order.join(">")).toEqual(["spot", "name"]);
+    }
   });
 });
