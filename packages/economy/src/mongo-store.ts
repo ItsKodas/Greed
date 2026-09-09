@@ -14,16 +14,8 @@ import { judgeSend, leftToSend, SEND_WINDOW_MS } from "./transfers.js";
 import type { SendResult, Transfer } from "./transfers.js";
 import type { BankName, PublicPlayer } from "./store.js";
 import type { Model } from "mongoose";
-import {
-  DAILY_FLOOR,
-  DAILY_GRANT,
-  DAILY_INTERVAL_MS,
-  STARTING_CHIPS,
-  emptyJarRecord,
-  emptyStats,
-} from "./store.js";
+import { STARTING_CHIPS, emptyJarRecord, emptyStats } from "./store.js";
 import type {
-  DailyResult,
   GameRecord,
   JarRecord,
   Profile,
@@ -459,40 +451,6 @@ export class MongoStore implements Store {
     return result.modifiedCount === 1;
   }
 
-  async claimDaily(id: string): Promise<DailyResult> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return { ok: false, reason: "unknown-player", granted: 0, chips: 0 };
-    }
-    const cutoff = new Date(Date.now() - DAILY_INTERVAL_MS);
-    // The whole rule expressed as the filter, so two clicks cannot both pay.
-    const doc = await this.users.findOneAndUpdate(
-      {
-        _id: id,
-        chips: { $lt: DAILY_FLOOR },
-        $or: [{ lastDailyClaim: null }, { lastDailyClaim: { $lte: cutoff } }],
-      },
-      { $inc: { chips: DAILY_GRANT }, $set: { lastDailyClaim: new Date() } },
-      { returnDocument: "after" },
-    );
-    if (doc !== null) {
-      return { ok: true, granted: DAILY_GRANT, chips: doc.chips };
-    }
-    const current = await this.users.findById(id);
-    if (current === null) {
-      return { ok: false, reason: "unknown-player", granted: 0, chips: 0 };
-    }
-    if (current.chips >= DAILY_FLOOR) {
-      return { ok: false, reason: "not-needed", granted: 0, chips: current.chips };
-    }
-    return {
-      ok: false,
-      reason: "too-soon",
-      granted: 0,
-      chips: current.chips,
-      nextAt: (current.lastDailyClaim?.getTime() ?? 0) + DAILY_INTERVAL_MS,
-    };
-  }
-
   async jar(id: string): Promise<{ jar: JarRecord; chips: number } | null> {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;
@@ -502,9 +460,9 @@ export class MongoStore implements Store {
   }
 
   /*
-   * One conditional update rather than a read then a write, in the same
-   * shape claimDaily already uses: the whole compare-and-swap is the filter,
-   * so two swaps racing on the same token cannot both land.
+   * One conditional update rather than a read then a write: the whole
+   * compare-and-swap is the filter, so two swaps racing on the same token
+   * cannot both land.
    *
    * The filter runs as a raw query, which mongoose does not hydrate — a
    * profile written before the jar existed has no `jar` field at all, and

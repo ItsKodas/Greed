@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
 import { Catalogue, COMING, Taunts } from "@backroom/core";
 import type { BankName, Store } from "@backroom/economy";
-import { judgeDaily, MemoryStore } from "@backroom/economy";
+import { MemoryStore } from "@backroom/economy";
 import {
   BLACKJACK,
   blackjackAdapter,
@@ -448,35 +448,13 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       response.json(
         profile === null
           ? { signedIn: false, signinAvailable: auth !== null }
-          : {
-              signedIn: true,
-              signinAvailable: auth !== null,
-              profile,
-              /*
-               * Whether the top-up would actually do anything. Answered here
-               * rather than worked out in the browser, so the rule for who is
-               * owed chips lives in exactly one place — offering a button that
-               * can only say "you have plenty already" is not an offer.
-               */
-              dailyDue: judgeDaily(profile, Date.now()).ok,
-            },
+          : { signedIn: true, signinAvailable: auth !== null, profile },
       );
     })();
   });
 
   app.post("/auth/logout", (request, response) => {
     request.session.destroy(() => response.json({ ok: true }));
-  });
-
-  app.post("/api/daily", (request, response) => {
-    void (async () => {
-      const id = userIdOfRequest(request);
-      if (id === undefined) {
-        response.status(401).json({ error: "Sign in first." });
-        return;
-      }
-      response.json(await store.claimDaily(id));
-    })();
   });
 
   /**
@@ -740,7 +718,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * Tells every screen this account is signed in on what it is now worth.
    *
    * Chips move from three directions — a stake taken here, a hand paying out
-   * on the table's clock, a daily claimed in another tab — and only the first
+   * on the table's clock, a jar tapped in another tab — and only the first
    * of those is something the browser asked for. Pushing the number is what
    * keeps the figure in the corner honest without it polling for one.
    */

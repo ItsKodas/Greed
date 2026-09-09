@@ -163,9 +163,9 @@ function Who({ account }: { account: Account }) {
         </span>
       </Link>
       {low ? (
-        <button type="button" className="btn btn--ghost btn--small" onClick={account.claimDaily}>
-          Top up
-        </button>
+        <Link className="btn btn--ghost btn--small" to="/tips">
+          Tip jar
+        </Link>
       ) : null}
     </>
   );

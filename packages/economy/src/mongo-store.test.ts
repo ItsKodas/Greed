@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import mongoose from "mongoose";
 import { MongoStore } from "./mongo-store.js";
-import { DAILY_GRANT, STARTING_CHIPS, emptyJarRecord } from "./store.js";
+import { STARTING_CHIPS, emptyJarRecord } from "./store.js";
 import type { JarRecord } from "./store.js";
 import { DAILY_SEND_CAP } from "./transfers.js";
 
@@ -69,23 +69,6 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     );
     expect(results.filter(Boolean)).toHaveLength(STARTING_CHIPS / 1000);
     expect((await store.get(player.id))?.chips).toBe(0);
-  });
-
-  it("pays the daily top-up once even when claimed concurrently", async () => {
-    const player = await newPlayer();
-    await store.adjustChips(player.id, -(STARTING_CHIPS - 50));
-
-    const claims = await Promise.all(
-      Array.from({ length: 5 }, () => store.claimDaily(player.id)),
-    );
-    expect(claims.filter((claim) => claim.ok)).toHaveLength(1);
-    expect((await store.get(player.id))?.chips).toBe(50 + DAILY_GRANT);
-  });
-
-  it("refuses the top-up to someone who is not short", async () => {
-    const player = await newPlayer();
-    const claim = await store.claimDaily(player.id);
-    expect(claim.ok).toBe(false);
   });
 
   it("holds the best turn as a high-water mark under racing writes", async () => {

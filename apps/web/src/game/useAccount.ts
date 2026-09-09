@@ -33,17 +33,12 @@ export interface Account {
    */
   setChips: (chips: number) => void;
   signOut: () => void;
-  claimDaily: () => void;
-  dailyMessage: string | null;
-  /** Whether claiming would actually grant anything. */
-  dailyDue: boolean;
 }
 
 interface MeResponse {
   signedIn: boolean;
   signinAvailable: boolean;
   profile?: AccountProfile;
-  dailyDue?: boolean;
 }
 
 /** The signed-in profile, or nothing at all — guests play without one. */
@@ -51,8 +46,6 @@ export function useAccount(): Account {
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [available, setAvailable] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [dailyMessage, setDailyMessage] = useState<string | null>(null);
-  const [dailyDue, setDailyDue] = useState(false);
 
   const refresh = useCallback(() => {
     void (async () => {
@@ -65,7 +58,6 @@ export function useAccount(): Account {
         const body = (await response.json()) as MeResponse;
         setAvailable(body.signinAvailable);
         setProfile(body.signedIn ? (body.profile ?? null) : null);
-        setDailyDue(body.dailyDue === true);
       } catch {
         setProfile(null);
       } finally {
@@ -87,27 +79,6 @@ export function useAccount(): Account {
     })();
   }, []);
 
-  const claimDaily = useCallback(() => {
-    void (async () => {
-      const response = await fetch("/api/daily", { method: "POST", credentials: "include" });
-      const body = (await response.json()) as {
-        ok: boolean;
-        reason?: string;
-        granted: number;
-        chips: number;
-      };
-      if (body.ok) {
-        setDailyMessage(`Topped up by ${body.granted.toLocaleString("en-US")}.`);
-        setProfile((current) => (current === null ? current : { ...current, chips: body.chips }));
-      } else if (body.reason === "not-needed") {
-        setDailyMessage("You have plenty already.");
-      } else {
-        setDailyMessage("Already claimed today.");
-      }
-      setTimeout(() => setDailyMessage(null), 4000);
-    })();
-  }, []);
-
   return {
     profile,
     available,
@@ -115,8 +86,5 @@ export function useAccount(): Account {
     refresh,
     setChips,
     signOut,
-    claimDaily,
-    dailyMessage,
-    dailyDue,
   };
 }

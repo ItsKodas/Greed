@@ -102,16 +102,6 @@ export interface GameRecord {
   endedAt: number;
 }
 
-export interface DailyResult {
-  ok: boolean;
-  /** Why not, when ok is false. */
-  reason?: "not-needed" | "too-soon" | "unknown-player";
-  granted: number;
-  chips: number;
-  /** When they may next claim, in epoch ms. */
-  nextAt?: number;
-}
-
 /**
  * The banks this building keeps, by the game that fills them.
  *
@@ -176,7 +166,6 @@ export interface Store {
    * update rather than a read followed by a write.
    */
   adjustChips(id: string, delta: number): Promise<boolean>;
-  claimDaily(id: string): Promise<DailyResult>;
 
   /** This account's jar and balance, for somebody who has just walked up to it. */
   jar(id: string): Promise<{ jar: JarRecord; chips: number } | null>;
@@ -307,34 +296,9 @@ export interface Store {
 
 /** What a new profile starts with. */
 export const STARTING_CHIPS = 10_000;
-/** Below this, a player may claim the top-up. */
-export const DAILY_FLOOR = 2_000;
-export const DAILY_GRANT = 5_000;
-export const DAILY_INTERVAL_MS = 20 * 60 * 60 * 1000;
 
 export function emptyStats(): ProfileStats {
   return { games: 0, wins: 0, chipsWon: 0 };
-}
-
-/**
- * Decides a daily claim. Shared by both stores so the rule cannot drift
- * between "running with a database" and "running without one".
- */
-export function judgeDaily(profile: Profile, now: number): DailyResult {
-  if (profile.chips >= DAILY_FLOOR) {
-    return { ok: false, reason: "not-needed", granted: 0, chips: profile.chips };
-  }
-  const last = profile.lastDailyClaim;
-  if (last !== null && now - last < DAILY_INTERVAL_MS) {
-    return {
-      ok: false,
-      reason: "too-soon",
-      granted: 0,
-      chips: profile.chips,
-      nextAt: last + DAILY_INTERVAL_MS,
-    };
-  }
-  return { ok: true, granted: DAILY_GRANT, chips: profile.chips + DAILY_GRANT };
 }
 
 export class MemoryStore implements Store {
@@ -423,19 +387,6 @@ export class MemoryStore implements Store {
     }
     profile.chips += delta;
     return true;
-  }
-
-  async claimDaily(id: string): Promise<DailyResult> {
-    const profile = this.people.get(id);
-    if (profile === undefined) {
-      return { ok: false, reason: "unknown-player", granted: 0, chips: 0 };
-    }
-    const verdict = judgeDaily(profile, Date.now());
-    if (verdict.ok) {
-      profile.chips += verdict.granted;
-      profile.lastDailyClaim = Date.now();
-    }
-    return verdict;
   }
 
   async jar(id: string): Promise<{ jar: JarRecord; chips: number } | null> {
