@@ -38,6 +38,9 @@
 .pk {
   container-type: inline-size;
   margin-inline: auto;
+  /* Named once: the face and the clock drawn round it have to agree, and two
+     copies of the same clamp is two things to keep in step. */
+  --face: clamp(18px, 2.4cqw, 40px);
 }
 
 /*
@@ -77,6 +80,8 @@
  * find somebody by, and a colour is read before a word is.
  */
 .pk__wholine {
+  /* The clock is positioned against this, around the face inside it. */
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -86,8 +91,8 @@
 
 .pk__face {
   overflow: hidden;
-  width: clamp(18px, 2.4cqw, 40px);
-  height: clamp(18px, 2.4cqw, 40px);
+  width: var(--face);
+  height: var(--face);
   flex: none;
   border-radius: 50%;
   display: grid;
@@ -284,6 +289,16 @@
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.95);
   white-space: nowrap;
+  animation: pk-bet-out 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__bet {
+    animation: none;
+    /* Without the keyframes the transform has to be stated, or the marker
+       loses the centring the animation was carrying. */
+    transform: translate(calc(-50% + var(--dodge, 0px)), -50%);
+  }
 }
 
 /*
@@ -308,29 +323,18 @@
 }
 
 /*
- * The clock on the seat being waited for.
- *
- * A number rather than a ring: at a ten-handed table there is not room for a
- * ring that reads at a glance, and what the player actually needs to know is
- * how many seconds they have — which a ring only tells you by how empty it is.
- * Sits on the opposite corner from the button so the two never collide.
+ * The clock on the seat being waited for is drawn by `TurnRing`, which both
+ * card tables share — its styles live in game.css beside it. All this felt
+ * says is where it goes: round the face, which is the round thing on a seat
+ * and the one that means "who".
  */
-.pk__clock {
+.pk__wholine .turn-ring {
   position: absolute;
-  top: -6px;
-  left: 14px;
-  min-width: 20px;
-  height: 20px;
-  padding: 0 4px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  font-size: 10px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: var(--gr-color-accent, #3f9d6a);
-  color: #0d120f;
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.6);
+  left: -3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(var(--face) + 6px);
+  height: calc(var(--face) + 6px);
 }
 
 /*
@@ -559,6 +563,79 @@
 @media (prefers-reduced-motion: reduce) {
   .pk__seat--won::before {
     animation: none;
+  }
+}
+
+/* ----------------------------------------------- chips going in and out */
+
+/*
+ * A stake arriving from the seat that put it up.
+ *
+ * Chips do not appear on a table, somebody pushes them out — so the marker
+ * starts where its owner is sitting and travels in to the ring. Both ends are
+ * the same `--cos`/`--sin` the seat and the ring are placed with, so the
+ * distance is right for every seat without any of them being special.
+ *
+ * The element is keyed on its amount, so a stake that grows is a new element
+ * that slides out again rather than a number changing in place.
+ */
+@keyframes pk-bet-out {
+  0% {
+    transform: translate(
+        calc(-50% + var(--dodge, 0px) + var(--cos) * (var(--across) - var(--bet-across))),
+        calc(-50% + var(--sin) * (var(--down) - var(--bet-down)))
+      )
+      scale(0.86);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dodge, 0px)), -50%) scale(1);
+    opacity: 1;
+  }
+}
+
+/*
+ * The street's stakes going into the middle.
+ *
+ * The other direction, and the reason the pot grows: at the end of a betting
+ * round every stake on the ring is swept in. It is drawn from where each stake
+ * was rather than from one place, because a pot is made of what everybody put
+ * in and that is worth seeing once a street.
+ */
+.pk__gather {
+  position: absolute;
+  left: calc(50% + var(--cos) * var(--bet-across));
+  top: calc(50% + var(--sin) * var(--bet-down));
+  z-index: 5;
+  pointer-events: none;
+  animation: pk-gather 620ms cubic-bezier(0.4, 0, 0.3, 1) forwards;
+}
+
+@keyframes pk-gather {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(
+        calc(-50% - var(--cos) * var(--bet-across)),
+        calc(-50% - var(--sin) * var(--bet-down))
+      )
+      scale(0.7);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The chips are simply where they end up, which every figure already says. */
+  .pk__gather {
+    display: none;
   }
 }
 
@@ -960,6 +1037,53 @@
 
 .pk__act--raise .pk__act-name {
   color: var(--gr-color-ink-dim);
+}
+
+/*
+ * The controls arriving when the turn reaches you.
+ *
+ * A table deals itself and somebody looking away misses their own turn — the
+ * ring on the felt says whose it is, and this says it again where their hands
+ * are. Once, on arrival: a flash that repeated while you were thinking would
+ * be a nag rather than a signal.
+ */
+.pk__controls--yours {
+  animation: pk-your-go 620ms ease-out;
+}
+
+@keyframes pk-your-go {
+  0% {
+    transform: translateY(4px);
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.pk__controls--yours .pk__act {
+  animation: pk-act-lit 900ms ease-out;
+}
+
+@keyframes pk-act-lit {
+  0% {
+    border-color: var(--gr-color-neon);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--gr-color-neon) 55%, transparent);
+  }
+  35% {
+    box-shadow: 0 0 16px 2px color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk__controls--yours,
+  .pk__controls--yours .pk__act {
+    animation: none;
+  }
 }
 
 /* ------------------------------------------------ deciding in advance */

@@ -1050,3 +1050,20 @@
   color: var(--gr-color-ink-lit);
 }
 
+/*
+ * The avatar and the clock drawn round it.
+ *
+ * A wrapper so the ring has something the size of the face to be positioned
+ * against — the header is a row of name, stake and purse, and a ring stretched
+ * to that would be an ellipse across all three.
+ */
+.bj__face {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.bj__face .turn-ring {
+  position: absolute;
+  inset: -3px;
+}

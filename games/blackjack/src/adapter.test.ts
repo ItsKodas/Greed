@@ -311,3 +311,46 @@ describe("what blackjack does with chips", () => {
     await expect(game.act(table, "a", { type: "roll" }, deps)).rejects.toThrow(/not something/i);
   });
 });
+
+/*
+ * The clock on somebody's turn.
+ *
+ * The server re-arms it on every broadcast, which is the point of the bug: a
+ * deadline worked out fresh each time is a deadline that keeps moving, so the
+ * turn it is supposed to end never ends and the felt has nothing steady enough
+ * to count down.
+ */
+describe("how long a turn has left", () => {
+  function playing() {
+    const adapter = blackjackAdapter({ forFun: true } as never);
+    const table = adapter.create("CLK01", { forFun: true }) as never as {
+      join: (id: string, name: string, who: unknown) => unknown;
+      bet: (id: string, amount: number) => void;
+      deal: () => void;
+      phase: string;
+    };
+    table.join("a", "Ada", identity("u1"));
+    seatCompany(table as never);
+    table.bet("a", 100);
+    table.deal();
+    return { adapter, table };
+  }
+
+  it("keeps the same deadline while the same seat is still to act", async () => {
+    const { adapter, table } = playing();
+    if (table.phase !== "playing") {
+      // A natural blackjack settles inside `deal`; nothing to time.
+      return;
+    }
+
+    const first = adapter.clock?.(table as never)?.endsAt ?? null;
+    expect(first).not.toBeNull();
+
+    // The room asks again on the very next broadcast, which is any change at
+    // the table at all — a chat message, somebody sitting down.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const second = adapter.clock?.(table as never)?.endsAt ?? null;
+
+    expect(second).toBe(first);
+  });
+});

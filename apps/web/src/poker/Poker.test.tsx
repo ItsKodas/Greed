@@ -39,6 +39,7 @@ const view = (over: Partial<TableView> = {}): TableView => ({
   pot: 30,
   toAct: null,
   turnEndsAt: null,
+  turnMs: 30_000,
   button: null,
   smallBlindId: null,
   bigBlindId: null,
@@ -46,6 +47,8 @@ const view = (over: Partial<TableView> = {}): TableView => ({
   bigBlind: 20,
   paid: [],
   paidAt: null,
+  swept: [],
+  sweptAt: null,
   lastEvent: null,
   watching: 0,
   seats: [],
@@ -495,5 +498,150 @@ describe("when the pot is won", () => {
     expect(container.querySelectorAll(".pk__sweep")).toHaveLength(0);
     // Still said out loud, though — somebody won it.
     expect(screen.getByText("wins 400")).toBeTruthy();
+  });
+});
+
+/*
+ * Chips moving, which is most of what a table does.
+ *
+ * A stake is pushed out from the person who put it up and the street's stakes
+ * are swept into the middle — both are things that happen, and a number
+ * appearing where there was not one before says neither of them.
+ */
+describe("chips going in and out", () => {
+  it("draws a stake for each seat that has one out", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({
+          street: "flop",
+          seats: [
+            seat({ id: "s1", name: "Ada", committed: 100 }),
+            seat({ id: "s2", name: "Bram", committed: 250 }),
+            seat({ id: "s3", name: "Cass" }),
+          ],
+        })}
+      />,
+    );
+    // Two out, one with nothing in front of them.
+    expect(container.querySelectorAll(".pk__bet")).toHaveLength(2);
+  });
+
+  it("makes a stake that grows a new element, so it is pushed out again", () => {
+    /*
+     * Keyed on the amount as well as the seat. Without that a raise is a number
+     * changing in place, which is the one thing this is here to stop.
+     */
+    const table = stub();
+    const at = (chips: number) =>
+      view({ street: "flop", seats: [seat({ id: "s1", name: "Ada", committed: chips })] });
+
+    const shown = render(<Felt table={table} seatId="s1" state={at(100)} />);
+    const first = shown.container.querySelector(".pk__bet");
+    shown.rerender(<Felt table={table} seatId="s1" state={at(300)} />);
+    const second = shown.container.querySelector(".pk__bet");
+
+    expect(second).not.toBe(first);
+    expect(second?.textContent).toContain("300");
+  });
+
+  it("draws the street's stakes going in, one from each seat that had one", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({
+          street: "turn",
+          sweptAt: 1_700_000_000_000,
+          swept: [
+            { seatId: "s1", chips: 100 },
+            { seatId: "s2", chips: 100 },
+          ],
+          seats: [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
+        })}
+      />,
+    );
+    expect(container.querySelectorAll(".pk__gather")).toHaveLength(2);
+  });
+
+  it("gathers nothing from a seat that has since left", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({
+          street: "turn",
+          sweptAt: 1_700_000_000_000,
+          swept: [{ seatId: "gone", chips: 100 }],
+          seats: [seat({ id: "s1", name: "Ada" })],
+        })}
+      />,
+    );
+    expect(container.querySelectorAll(".pk__gather")).toHaveLength(0);
+  });
+});
+
+describe("whose turn it is", () => {
+  it("rings the seat being waited on, and only that one", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({
+          street: "flop",
+          toAct: "s2",
+          turnEndsAt: Date.now() + 20_000,
+          seats: [seat({ id: "s1", name: "Ada" }), seat({ id: "s2", name: "Bram" })],
+        })}
+      />,
+    );
+    const rings = container.querySelectorAll(".turn-ring");
+    expect(rings).toHaveLength(1);
+    expect(rings[0]?.closest(".pk__seat")?.querySelector(".pk__name")?.textContent).toBe("Bram");
+  });
+
+  it("starts the ring part drained for somebody who arrived mid-turn", () => {
+    /*
+     * The turn's length is in the view for exactly this: a ring that always
+     * began full would tell a player who just refreshed that they have a whole
+     * turn left when they have five seconds.
+     */
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({
+          street: "flop",
+          toAct: "s1",
+          turnEndsAt: Date.now() + 6_000,
+          turnMs: 30_000,
+          seats: [seat({ id: "s1", name: "Ada" })],
+        })}
+      />,
+    );
+    const ring = container.querySelector(".turn-ring") as HTMLElement;
+    const whole = Number(ring.style.getPropertyValue("--ring"));
+    const from = Number(ring.style.getPropertyValue("--ring-from"));
+    // A fifth of the turn left means four fifths of the ring already gone.
+    expect(from / whole).toBeGreaterThan(0.7);
+    expect(from / whole).toBeLessThan(0.9);
+  });
+
+  it("says nothing when nobody is being waited on", () => {
+    const table = stub();
+    const { container } = render(
+      <Felt
+        table={table}
+        seatId="s1"
+        state={view({ street: "waiting", toAct: null, seats: [seat({ id: "s1", name: "Ada" })] })}
+      />,
+    );
+    expect(container.querySelectorAll(".turn-ring")).toHaveLength(0);
   });
 });

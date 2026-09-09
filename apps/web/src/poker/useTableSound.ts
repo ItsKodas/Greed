@@ -99,6 +99,17 @@ export function useTableSound(view: TableView | null, seatId: string | null): vo
     }
 
     /*
+     * Your turn arriving, said once.
+     *
+     * A table deals itself, and somebody who looked away misses their own go
+     * entirely. Only when it becomes yours — a bell for every seat's turn at a
+     * ten-handed table would ring nine times for every time it meant anything.
+     */
+    if (view.toAct !== before.toAct && view.toAct !== null && view.toAct === seatId) {
+      play("yourTurn");
+    }
+
+    /*
      * The pot being pushed, once per hand and for everybody at the table.
      *
      * Keyed on the moment rather than on `paid` being non-empty, which stays

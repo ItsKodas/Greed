@@ -2491,3 +2491,100 @@
   height: 28px;
   flex: none;
 }
+
+/* ------------------------------------------------- whose turn it is */
+
+/*
+ * The clock on the seat being waited for, as a ring that empties.
+ *
+ * It was a number in a badge, and a small "1" beside a seat is a thing you have
+ * to read and then work out. At a table of ten what you want is to see whose
+ * turn it is without looking for it, and a ring that is visibly draining says
+ * both things at once — whose, and how much is left — from across the felt.
+ *
+ * Drawn around the seat rather than beside it, because the answer to "whose
+ * turn" is a person, and a ring around them says that without a label.
+ */
+.turn-ring {
+  /*
+   * Where it sits is each table's business — poker puts it round a seat's
+   * face, blackjack round the one in its header. What is here is everything
+   * that is the same either way.
+   */
+  pointer-events: none;
+  z-index: 3;
+}
+
+.turn-ring svg {
+  width: 100%;
+  height: 100%;
+  /* Start at twelve o'clock and run clockwise, the way a clock does. */
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.turn-ring circle {
+  fill: none;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.turn-ring__track {
+  stroke: rgb(255 255 255 / 0.12);
+}
+
+.turn-ring__left {
+  stroke: var(--gr-color-neon);
+  stroke-linecap: round;
+  stroke-dasharray: var(--ring);
+  /*
+   * One animation for the whole turn rather than a number React re-renders.
+   * It starts part drained for anybody who arrived mid-turn, which is what the
+   * turn's length in the view is for.
+   */
+  animation: pk-drain var(--ring-ms) linear forwards;
+}
+
+@keyframes pk-drain {
+  from {
+    stroke-dashoffset: var(--ring-from);
+  }
+  to {
+    stroke-dashoffset: var(--ring);
+  }
+}
+
+/* The last few seconds stop being calm about it. */
+.turn-ring--running-out .turn-ring__left {
+  stroke: var(--gr-color-bad, #d9534f);
+}
+
+.turn-ring--running-out {
+  animation: pk-ring-urgent 700ms ease-in-out infinite;
+}
+
+@keyframes pk-ring-urgent {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * No drain and no pulse — but the ring stays, because it is the only thing
+   * saying whose turn it is. It simply shows how much is left at the moment it
+   * appeared rather than counting it down.
+   */
+  .turn-ring__left {
+    animation: none;
+    stroke-dashoffset: var(--ring-from);
+  }
+
+  .turn-ring--running-out {
+    animation: none;
+  }
+}

@@ -10,7 +10,7 @@ import { Chat } from "../game/Chat.js";
 import { compact } from "../game/money.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
-import { useCountdown } from "../game/useCountdown.js";
+import { TurnRing } from "../game/TurnRing.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
 import { SeatCount } from "../table/SeatCount.js";
@@ -285,6 +285,40 @@ export function Felt({
         ))}
 
         {/*
+          * The street's stakes going into the middle.
+          *
+          * A betting round ends by sweeping every stake in, which is a thing
+          * that happens rather than a state anything is left in — a moment
+          * later every seat reads zero. So the table records what it swept and
+          * the felt draws it going, from each seat's own place on the chip ring
+          * to the pot, which is the way the chips actually travel.
+          */}
+        {state.sweptAt != null
+          ? state.swept.map((one) => {
+              const at = seats.findIndex((seat) => seat.id === one.seatId);
+              if (at < 0) {
+                return null;
+              }
+              return (
+                <span
+                  className="pk__gather"
+                  key={`${state.sweptAt}:${one.seatId}`}
+                  style={seatAt(at, seats.length)}
+                  aria-hidden="true"
+                >
+                  <ChipStack
+                    amount={one.chips}
+                    width={16}
+                    ladder={TABLE_CHIPS}
+                    most={12}
+                    tallest={4}
+                  />
+                </span>
+              );
+            })
+          : null}
+
+        {/*
           * The pot going where it went.
           *
           * One heap per winner, starting in the middle and travelling out to
@@ -333,7 +367,13 @@ export function Felt({
                * this ring passes through.
                */
               className={`pk__bet${seat.id === seatId ? " pk__bet--yours" : ""}`}
-              key={`bet-${seat.id}`}
+              /*
+               * Keyed on the amount as well as the seat, so a stake that grows
+               * is a new element that slides out again rather than a number
+               * quietly changing in place. Putting chips in is the commonest
+               * thing that happens at a table; it should look like something.
+               */
+              key={`bet-${seat.id}:${chips}`}
               style={{ ...seatAt(at, seats.length), ...dodge(at, seats.length) }}
             >
               {/*
@@ -544,6 +584,13 @@ function Seat({
             accentColor={seat.accentColor}
             className="pk__face"
           />
+          {/*
+            * The clock goes round the face, which is the round thing on a seat
+            * and the one that means "who". Around the whole seat it was an
+            * ellipse stretched over a column of cards, drawn straight across
+            * the hand it was waiting on.
+            */}
+          {acting ? <TurnRing endsAt={state.turnEndsAt} turnMs={state.turnMs} /> : null}
           <span className="pk__name">
             {seat.name}
             {seat.isBot ? <span className="pk__bot-mark">bot</span> : null}
@@ -583,18 +630,9 @@ function Seat({
       {said === null && won !== null ? (
         <span className="pk__says">won {fmt(won)}</span>
       ) : null}
-      {acting ? <Clock endsAt={state.turnEndsAt} /> : null}
+
     </div>
   );
-}
-
-/** How long the seat now to act has left, counted down out here. */
-function Clock({ endsAt }: { endsAt: number | null }) {
-  const left = useCountdown(endsAt);
-  if (left === null) {
-    return null;
-  }
-  return <span className="pk__clock">{Math.ceil(left / 1000)}</span>;
 }
 
 /* ----------------------------------------------------------- the controls */
@@ -906,7 +944,12 @@ function OnTurn({
   const span = Math.max(1, you.maxRaiseTo - you.minRaiseTo);
 
   return (
-    <div className="pk__controls">
+    /*
+     * Keyed on the decision by its caller, so arriving here is arriving at a
+     * new turn — which is what makes the flash below run once rather than on
+     * every broadcast while you sit thinking.
+     */
+    <div className="pk__controls pk__controls--yours">
       {you.canRaise ? (
         <div className="pk__amount">
           <div className="pk__dial">

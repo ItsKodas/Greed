@@ -12,6 +12,7 @@ import { compact } from "../game/money.js";
 import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
+import { TurnRing } from "../game/TurnRing.js";
 import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
 import { PublicTables } from "../table/PublicTables.js";
@@ -222,12 +223,23 @@ function Felt({
             }`}
           >
             <header className="bj__who">
-              <Avatar
-                name={seat.name}
-                avatar={seat.avatar}
-                accentColor={seat.accentColor}
-                className="seat__avatar"
-              />
+              {/*
+                * The same ring poker draws, round the same thing: how long this
+                * seat has before the table plays the hand for them. It was a
+                * clock the server kept and the player could not see, which is a
+                * clock that stands them up without warning.
+                */}
+              <span className="bj__face">
+                <Avatar
+                  name={seat.name}
+                  avatar={seat.avatar}
+                  accentColor={seat.accentColor}
+                  className="seat__avatar"
+                />
+                {state.turnSeatId === seat.id ? (
+                  <TurnRing endsAt={state.turnEndsAt} turnMs={state.turnMs} />
+                ) : null}
+              </span>
               <span className="seat__name">
                 {seat.name}
                 {seat.id === seatId ? " (you)" : ""}
