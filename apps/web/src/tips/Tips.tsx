@@ -77,26 +77,35 @@ export default function Tips() {
     };
   }, []);
 
-  const [jar, setJar] = useState<JarView | null>(null);
-  const jarRef = useRef<JarView | null>(null);
-  jarRef.current = jar;
+  /**
+   * The server's jar — replaced wholesale by every ack, refusals included.
+   * Never touched optimistically: that is the whole fix for the flicker
+   * below, because a value only ever written by an ack cannot be stomped by
+   * one.
+   */
+  const [serverJar, setServerJar] = useState<JarView | null>(null);
+  const serverJarRef = useRef<JarView | null>(null);
+  serverJarRef.current = serverJar;
 
   const [connected, setConnected] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   /** Bumped once per accepted tap, so the jar wobbles exactly once each. */
   const [tapped, setTapped] = useState(0);
   const [displayLevel, setDisplayLevel] = useState(0);
+  /**
+   * Taps applied to the display but not yet answered.
+   *
+   * Taps are chained — the client cannot send tap two until tap one's ack
+   * hands back the next token — so tap two is already on the glass,
+   * optimistically, while tap one is still in flight. Overlaying this count
+   * on top of the server's jar, rather than folding each tap into one
+   * mutable "current" jar, is what lets tap one's ack land without erasing
+   * tap two's still-unconfirmed scoop.
+   */
+  const [pendingTaps, setPendingTaps] = useState(0);
+  const pendingTapsRef = useRef(0);
 
   const socketRef = useRef<TipsSocket | null>(null);
-  /**
-   * The last jar an ack actually confirmed.
-   *
-   * What an answer that never comes is given up back to: taps sent and not
-   * yet heard from are only ever a guess about what the server will say, so
-   * abandoning the queue has to land somewhere the server has actually said
-   * was true.
-   */
-  const confirmedRef = useRef<JarView | null>(null);
   /**
    * Taps and buys, sent one at a time.
    *
@@ -120,9 +129,8 @@ export default function Tips() {
   /** An answer landed, refusal or not: the jar it carries is now the truth. */
   const applyResult = (result: TapResult) => {
     clearPatience();
-    confirmedRef.current = result.jar;
-    jarRef.current = result.jar;
-    setJar(result.jar);
+    serverJarRef.current = result.jar;
+    setServerJar(result.jar);
     if (result.ok) {
       setMessage(null);
       account.setChips(result.balance);
@@ -148,9 +156,11 @@ export default function Tips() {
       queueRef.current = [];
       sendingRef.current = false;
       patienceRef.current = null;
-      const confirmed = confirmedRef.current;
-      jarRef.current = confirmed;
-      setJar(confirmed);
+      // Every queued tap is abandoned with the stuck one, so none of their
+      // optimism belongs on the glass any more — the server's own jar is
+      // untouched and already the truth to fall back to.
+      pendingTapsRef.current = 0;
+      setPendingTaps(0);
       setMessage("The jar did not answer. Nothing was taken.");
     }, PATIENCE_MS);
     next();
@@ -167,9 +177,8 @@ export default function Tips() {
     socket.on("connect", () => {
       setConnected(true);
       socket.emit("tips:open", {}, (view) => {
-        confirmedRef.current = view;
-        jarRef.current = view;
-        setJar(view);
+        serverJarRef.current = view;
+        setServerJar(view);
       });
     });
     socket.on("disconnect", () => setConnected(false));
@@ -198,32 +207,44 @@ export default function Tips() {
    */
   const [reducedMotion] = useState(prefersReducedMotion);
   useEffect(() => {
-    if (jar === null) {
+    if (serverJar === null) {
       return;
     }
+    // The overlay: pending taps' scoops taken off the top of the server's
+    // own creeping level, floored so a run of optimistic taps never shows
+    // the glass going negative. Read from the state rather than the ref, so
+    // a change in pending taps is itself a reason for this effect to redraw
+    // — needed for the reduced-motion branch below, which only ever draws
+    // once per run rather than on every frame.
+    const withOverlay = (source: JarView, now: number) =>
+      Math.max(0, levelNow(source, now) - pendingTaps * source.scoop);
     if (reducedMotion) {
-      setDisplayLevel(levelNow(jar, Date.now()));
+      setDisplayLevel(withOverlay(serverJar, Date.now()));
       return;
     }
     let frame = 0;
     const tick = () => {
-      const current = jarRef.current ?? jar;
-      setDisplayLevel(levelNow(current, Date.now()));
+      const current = serverJarRef.current ?? serverJar;
+      setDisplayLevel(withOverlay(current, Date.now()));
       frame = window.requestAnimationFrame(tick);
     };
     frame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frame);
-  }, [jar, reducedMotion]);
+  }, [serverJar, reducedMotion, pendingTaps]);
 
   const doTap = () => {
     const socket = socketRef.current;
-    const current = jarRef.current;
-    if (socket === null || current === null) {
+    const server = serverJarRef.current;
+    if (socket === null || server === null) {
       return;
     }
     const now = Date.now();
-    const level = levelNow(current, now);
-    const pay = Math.floor(Math.min(current.scoop, level));
+    // What the glass is actually showing right now — the server's own creep
+    // minus every scoop already claimed by a tap still waiting on an ack —
+    // is what a new tap has to be checked and paid against, not the raw
+    // server figure alone.
+    const available = Math.max(0, levelNow(server, now) - pendingTapsRef.current * server.scoop);
+    const pay = Math.floor(Math.min(server.scoop, available));
     if (pay < 1) {
       // The client can already tell the jar is dry from the same numbers the
       // server would use — not a guess, the same arithmetic — so this is said
@@ -233,21 +254,22 @@ export default function Tips() {
     }
     setMessage(null);
     setTapped((n) => n + 1);
-    // The press, shown before the table can possibly have answered it.
-    const optimistic: JarView = {
-      ...current,
-      level: level - pay,
-      at: now,
-      chipsTonight: current.chipsTonight + pay,
-    };
-    jarRef.current = optimistic;
-    setJar(optimistic);
+    // The press, shown before the table can possibly have answered it: one
+    // more pending tap, overlaid on the server's jar rather than folded into
+    // a mutable copy of it.
+    pendingTapsRef.current += 1;
+    setPendingTaps(pendingTapsRef.current);
 
     enqueue(() => {
       // Read fresh rather than closed over: by the time this actually sends,
       // an earlier queued action may have already moved the token on.
-      const token = jarRef.current?.token ?? current.token;
+      const token = serverJarRef.current?.token ?? server.token;
       socket.emit("tips:tap", { token }, (result) => {
+        // This tap's guess is answered either way — refusal or not, its
+        // contribution to the overlay is spent, whatever applyResult does
+        // with the server's jar underneath it.
+        pendingTapsRef.current = Math.max(0, pendingTapsRef.current - 1);
+        setPendingTaps(pendingTapsRef.current);
         applyResult(result);
         sendingRef.current = false;
         pump();
@@ -257,11 +279,11 @@ export default function Tips() {
 
   const doBuy = (id: string) => {
     const socket = socketRef.current;
-    if (socket === null || jarRef.current === null) {
+    if (socket === null || serverJarRef.current === null) {
       return;
     }
     enqueue(() => {
-      const token = jarRef.current?.token ?? "";
+      const token = serverJarRef.current?.token ?? "";
       socket.emit("tips:buy", { upgrade: id, token }, (result) => {
         applyResult(result);
         sendingRef.current = false;
@@ -284,11 +306,17 @@ export default function Tips() {
 
       {account.loading ? null : account.profile === null ? (
         <SignInToTap available={account.available} />
-      ) : jar === null ? (
+      ) : serverJar === null ? (
         <p className="tips__loading">Walking over to the bar&hellip;</p>
       ) : (
         <div className="tips__floor">
-          <Jar level={displayLevel} brim={jar.brim} onTap={doTap} tapped={tapped} disabled={false} />
+          <Jar
+            level={displayLevel}
+            brim={serverJar.brim}
+            onTap={doTap}
+            tapped={tapped}
+            disabled={false}
+          />
 
           {/* Said, not proven — a message here is a courtesy, never the rule
               the server just applied. */}
@@ -300,18 +328,20 @@ export default function Tips() {
             <p className="tips__figure">
               <span className="tips__figure-label">Tonight</span>
               <b className="tips__figure-value" data-testid="tonight">
-                {exact(jar.chipsTonight)}
+                {/* The server's own figure plus what every still-pending tap
+                    would pay — the same overlay the glass itself wears. */}
+                {exact(serverJar.chipsTonight + pendingTaps * serverJar.scoop)}
               </b>
             </p>
             <p className="tips__figure">
               <span className="tips__figure-label">Favours</span>
               <b className="tips__figure-value" data-testid="favours">
-                {exact(jar.favours)}
+                {exact(serverJar.favours)}
               </b>
             </p>
           </div>
 
-          <Upgrades bought={jar.bought} favours={jar.favours} onBuy={doBuy} />
+          <Upgrades bought={serverJar.bought} favours={serverJar.favours} onBuy={doBuy} />
         </div>
       )}
     </main>

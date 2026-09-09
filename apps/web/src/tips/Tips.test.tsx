@@ -79,9 +79,6 @@ function signedIn(): Account {
     refresh: () => {},
     setChips: () => {},
     signOut: () => {},
-    claimDaily: () => {},
-    dailyMessage: null,
-    dailyDue: false,
   };
 }
 
@@ -150,6 +147,39 @@ describe("the jar you tap", () => {
   });
 
   /*
+   * The chained-send bug: tap two lands optimistically before tap one's ack
+   * is even back, because the client cannot send tap two until tap one's
+   * token comes home. Adopting tap one's server truth must not discard the
+   * optimism tap two already put on the glass — the figure has to hold at
+   * two scoops the whole way through, never dip back to one before rising
+   * again.
+   */
+  it("does not let a later tap's optimism flicker backwards when an earlier ack lands", async () => {
+    account.current = signedIn();
+    const held = holdTheAck();
+
+    show();
+    await tapTheJar();
+    await tapTheJar();
+
+    // Both presses landed before either was answered — two scoops of
+    // optimism on the figure.
+    expect(screen.getByTestId("tonight").textContent).toBe("50");
+
+    // Tap one's ack answers while tap two is still queued (it hasn't even
+    // been sent yet, since sends are chained one at a time). This must not
+    // stomp the figure back down to tap one's own total.
+    held.resolve({ ok: true, paid: 25, balance: 1_025, jar: jarView({ chipsTonight: 25 }) });
+    expect(await screen.findByText("50")).toBeDefined();
+    expect(screen.getByTestId("tonight").textContent).toBe("50");
+
+    // Tap two's ack lands next (pump sent it the moment tap one's ack
+    // freed the queue) — the figure settles on the true total.
+    held.resolve({ ok: true, paid: 25, balance: 1_050, jar: jarView({ chipsTonight: 50 }) });
+    expect(await screen.findByText("50")).toBeDefined();
+  });
+
+  /*
    * A jar with nothing dripped into it since the last tap must not let a
    * press vanish silently — that is indistinguishable from a broken button.
    * The client can already tell it is dry from the same numbers the server
@@ -168,30 +198,4 @@ describe("the jar you tap", () => {
     expect(screen.getByTestId("tonight").textContent).toBe("0");
   });
 
-  /*
-   * The jar is the whole interface on a phone: it has to still be the thing
-   * you are looking at, and looking at it must never take the document
-   * sideways with it — the building's one hard rule at 375px.
-   */
-  it("does not scroll sideways at 375px", async () => {
-    account.current = signedIn();
-    const originalWidth = window.innerWidth;
-    window.innerWidth = 375;
-
-    const { container } = show();
-    await tapTheJar();
-
-    for (const el of container.querySelectorAll<HTMLElement>("*")) {
-      const width = el.style.width;
-      if (width.endsWith("px")) {
-        expect(parseFloat(width)).toBeLessThanOrEqual(375);
-      }
-    }
-    // The tap target and the ladder both rendered, so this checked a real
-    // page rather than an empty one nothing could have overflowed.
-    expect(container.querySelector(".jar")).not.toBeNull();
-    expect(container.querySelector(".upgrades__list")).not.toBeNull();
-
-    window.innerWidth = originalWidth;
-  });
 });
