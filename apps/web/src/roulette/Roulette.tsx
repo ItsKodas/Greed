@@ -145,16 +145,36 @@ export function Felt({
   /* Which pockets your own chips cover, so the wheel can mark them. */
   const covered = useMemo(() => coveredBy(state, seatId), [state, seatId]);
 
+  /*
+   * Why the last press did nothing.
+   *
+   * The cap is the server's and it refuses in words, but the felt does not
+   * send a chip it already knows is too big — which left a press that did
+   * nothing at all and said nothing either. An empty bank looked exactly like
+   * a broken table: every chip silently ignored, everything else normal.
+   */
+  const [refused, setRefused] = useState<string | null>(null);
+
   const place = (spotId: string) => {
-    if (!canBet || chip > room(spotId)) {
+    if (!canBet) {
       return;
     }
+    const most = room(spotId);
+    if (chip > most) {
+      setRefused(
+        most === 0
+          ? "The bank cannot cover a bet there yet."
+          : `The bank covers ${fmt(most)} on that at the moment.`,
+      );
+      return;
+    }
+    setRefused(null);
     table.act({ type: "place", spotId, chips: chip });
   };
 
   return (
     <section className="rl" data-game="roulette">
-      <Standing state={state} />
+      <Standing state={state} refused={refused} />
 
       <div className="rl__table">
         <div className="rl__wheel-holds">
@@ -212,8 +232,32 @@ function coveredBy(state: TableView, seatId: string | null): Set<number> {
  * The one line everybody at the table reads. A betting window with no clock on
  * it is a window that shuts while somebody is still deciding.
  */
-function Standing({ state }: { state: TableView }) {
+function Standing({ state, refused }: { state: TableView; refused?: string | null }) {
   const left = useCountdown(state.deadline);
+
+  /*
+   * A bank with nothing in it is said before anybody presses anything.
+   *
+   * This table pays from chips other players staked, and a new one has none
+   * until an admin floats it — so "nothing can be bet here" is a fact about
+   * the table, not a refusal of your press, and it belongs on screen while
+   * you are still deciding rather than after you have tried.
+   */
+  if (state.phase === "betting" && state.bank <= 0) {
+    return (
+      <p className="rl__standing rl__standing--last" role="status">
+        The bank is empty — nothing to play for yet.
+      </p>
+    );
+  }
+
+  if (refused != null && state.phase === "betting") {
+    return (
+      <p className="rl__standing rl__standing--last" role="status">
+        {refused}
+      </p>
+    );
+  }
 
   if (state.phase === "spinning") {
     return <p className="rl__standing rl__standing--shut">No more bets.</p>;

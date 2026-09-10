@@ -95,13 +95,43 @@ describe("the roulette felt", () => {
     expect(settled.container.querySelector(".rl__square--won")).toBeTruthy();
   });
 
-  it("refuses a chip the bank could not pay out on", () => {
-    // Shown rather than enforced — the table refuses it either way — but a
-    // player who learns the cap by being refused learns it the worse way.
+  it("refuses a chip the bank could not pay out on, and says so", () => {
+    /*
+     * The refusal is the server's either way. What this is about is the
+     * player: a press that does nothing at all and gives no reason is a
+     * broken button, and that is exactly what an empty bank felt like — every
+     * chip silently ignored, with the table looking perfectly normal.
+     */
     const { table, act } = stub();
     render(<Felt table={table} state={view({ bank: 0 })} seatId="s1" />);
     fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
     expect(act).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toMatch(/bank/i);
+  });
+
+  it("says the bank is empty before anybody presses anything", () => {
+    // A table that cannot take a bet should say so while you are still
+    // deciding, not once you have tried and been ignored.
+    render(<Felt table={stub().table} state={view({ bank: 0 })} seatId="s1" />);
+    expect(screen.getByRole("status").textContent).toMatch(/nothing to play for yet/i);
+  });
+
+  it("names the cap when the bank can cover something but not this", () => {
+    // 3,500 covers exactly 100 straight up, so a 500 chip is too big for it
+    // and the player is told the number rather than left guessing.
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ bank: 3_500 })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("radio", { name: "Bet with 500" }));
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain("100");
+  });
+
+  it("takes the chip when the bank can cover it", () => {
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ bank: 3_500 })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).toHaveBeenCalled();
   });
 
   it("offers a watcher no controls at all", () => {
