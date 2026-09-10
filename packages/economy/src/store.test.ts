@@ -52,7 +52,7 @@ describe("the memory store", () => {
       avatar: null,
       accentColor: null,
     });
-    expect(person.stats).toEqual({ games: 0, wins: 0, chipsWon: 0 });
+    expect(person.stats).toEqual({ games: 0, wins: 0, chipsWon: 0, chipsStaked: 0 });
     expect(person.byGame).toEqual({});
   });
 });
@@ -80,7 +80,7 @@ describe("figures a game keeps for itself", () => {
 
     const after = await store.get(person.id);
     // The shared totals count both games; neither game sees the other's words.
-    expect(after?.stats).toEqual({ games: 2, wins: 1, chipsWon: 300 });
+    expect(after?.stats).toEqual({ games: 2, wins: 1, chipsWon: 300, chipsStaked: 0 });
     expect(after?.byGame["greed"]).toEqual({ farkles: 2, bestTurn: 800 });
     expect(after?.byGame["blackjack"]).toEqual({ busts: 1 });
   });
@@ -99,6 +99,27 @@ describe("figures a game keeps for itself", () => {
     const after = await store.get(person.id);
     expect(after?.byGame["greed"]?.["bestTurn"]).toBe(800);
     expect(after?.byGame["greed"]?.["farkles"]).toBe(3);
+  });
+});
+
+describe("chips staked", () => {
+  it("starts at nothing and sums like the other shared totals", async () => {
+    const store = new MemoryStore();
+    const player = await store.upsertDiscordUser({
+      discordId: "d1",
+      name: "Ada",
+      avatar: null,
+      accentColor: null,
+    });
+    expect(player.stats.chipsStaked).toBe(0);
+
+    await store.bumpStats(player.id, { shared: { games: 1, wins: 0, chipsWon: -50, chipsStaked: 50 } });
+    await store.bumpStats(player.id, { shared: { games: 1, wins: 1, chipsWon: 30, chipsStaked: 20 } });
+
+    const after = await store.get(player.id);
+    expect(after?.stats.chipsStaked).toBe(70);
+    // The net is still a net: it went down fifty and up thirty.
+    expect(after?.stats.chipsWon).toBe(-20);
   });
 });
 

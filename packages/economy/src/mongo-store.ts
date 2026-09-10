@@ -42,6 +42,7 @@ const statsSchema = new mongoose.Schema<ProfileStats>(
     games: { type: Number, default: 0 },
     wins: { type: Number, default: 0 },
     chipsWon: { type: Number, default: 0 },
+    chipsStaked: { type: Number, default: 0 },
   },
   { _id: false },
 );
@@ -320,6 +321,7 @@ function toProfile(doc: UserDoc): Profile {
       games: doc.stats?.games ?? 0,
       wins: doc.stats?.wins ?? 0,
       chipsWon: doc.stats?.chipsWon ?? 0,
+      chipsStaked: doc.stats?.chipsStaked ?? 0,
     },
     byGame: structuredClone(doc.byGame ?? {}),
     // Copied field by field, for the same reason stats is: a live Mongoose

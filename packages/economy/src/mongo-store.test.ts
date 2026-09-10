@@ -124,6 +124,28 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     expect(await store.recentGames(mine.id, 10)).toHaveLength(0);
   });
 
+  it("reads an account written before staking was counted as having staked nothing", async () => {
+    const player = await newPlayer();
+    // An account exactly as it was before this field existed. `$unset` is the
+    // only honest way to make one: a document that has never held the field.
+    // A direct connection, not the store's own: mongoose never casts an
+    // `$unset` away, but the store's connection is private to `MongoStore`
+    // and the default `mongoose.connection` singleton is never opened here.
+    const direct = await mongoose.createConnection(url as string).asPromise();
+    await direct
+      .collection("users")
+      .updateOne({ _id: new mongoose.Types.ObjectId(player.id) }, { $unset: { "stats.chipsStaked": "" } });
+    await direct.close();
+
+    const before = await store.get(player.id);
+    expect(before?.stats.chipsStaked).toBe(0);
+
+    await store.bumpStats(player.id, { shared: { chipsStaked: 40 } });
+
+    const after = await store.get(player.id);
+    expect(after?.stats.chipsStaked).toBe(40);
+  });
+
   it("lifts dice figures out of a profile written before the split", async () => {
     /*
      * A profile from when there was one game: bestTurn, farkles and hotDice
@@ -149,7 +171,7 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     await migrated.close();
 
     expect(person?.byGame["greed"]).toEqual({ bestTurn: 3050, farkles: 62, hotDice: 11 });
-    expect(person?.stats).toEqual({ games: 9, wins: 4, chipsWon: 1200 });
+    expect(person?.stats).toEqual({ games: 9, wins: 4, chipsWon: 1200, chipsStaked: 0 });
     expect(person?.chips).toBe(7000);
   });
 

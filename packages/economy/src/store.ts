@@ -60,6 +60,14 @@ export interface ProfileStats {
   games: number;
   wins: number;
   chipsWon: number;
+  /**
+   * Chips put on the felt, win or lose.
+   *
+   * Not the opposite of `chipsWon`, which is a net: somebody who turns over a
+   * million chips and finishes level has done something, and the net says they
+   * did nothing. A free round stakes nothing, because nothing was staked.
+   */
+  chipsStaked: number;
 }
 
 /**
@@ -311,7 +319,7 @@ export interface Store {
 export const STARTING_CHIPS = 10_000;
 
 export function emptyStats(): ProfileStats {
-  return { games: 0, wins: 0, chipsWon: 0 };
+  return { games: 0, wins: 0, chipsWon: 0, chipsStaked: 0 };
 }
 
 export class MemoryStore implements Store {
