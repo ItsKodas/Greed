@@ -1838,7 +1838,30 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         sockets.set(socket.id, { code, seatId: socket.id });
         void socket.join(code);
         ack({ ok: true, code, seatId: socket.id });
-        broadcast(code);
+        /*
+         * What the bank holds, read before the first state rather than after it.
+         *
+         * A view is built synchronously and what the bank holds is a question
+         * for the store, so the figure reaches the table through `payOut`,
+         * which runs on every broadcast and therefore leaves it one broadcast
+         * behind. Everywhere else that costs nothing: the broadcast before
+         * this one already read it. A table's first has no broadcast before
+         * it, so the figure is still the nought it was built with — and a felt
+         * told the bank is empty greys out every spot on itself and stays that
+         * way until something unrelated sends another state, which at a table
+         * nobody has bet at yet can be a long time coming.
+         *
+         * The ack has already gone, so this delays the first state by one read
+         * of the store and nothing else.
+         */
+        if (game.payOut === undefined) {
+          broadcast(code);
+        } else {
+          void game
+            .payOut(table, deps)
+            .catch((error) => console.error("reading the bank failed", error))
+            .finally(() => broadcast(code));
+        }
       } catch (error) {
         ack(fail(error, "Could not open a table."));
       }
