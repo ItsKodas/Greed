@@ -683,11 +683,19 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       [
         "User-agent: *",
         "Allow: /",
-        // Somebody's own pages, and the desk behind the bar. Nothing here is
-        // secret — these are simply not results anybody wants to land on.
-        "Disallow: /me",
-        "Disallow: /admin",
-        "Disallow: /style",
+        /*
+         * Somebody's own pages, and the desk behind the bar. Nothing here is
+         * secret — these are simply not results anybody wants to land on.
+         *
+         * Anchored with `$`, because a Disallow is a prefix match: bare
+         * "/me" is also every address that merely starts with those two
+         * letters, and the room hands out five-letter table codes at the root.
+         * A code beginning "ME" is one shuffle away, and shutting a crawler
+         * out of a shared table is the opposite of what this line is for.
+         */
+        "Disallow: /me$",
+        "Disallow: /admin$",
+        "Disallow: /style$",
         "Disallow: /api/",
         "",
         `Sitemap: ${origin(request)}/sitemap.xml`,
@@ -723,7 +731,14 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       const listing = CATALOGUE.get(id);
       return listing === undefined
         ? null
-        : { name: listing.name, blurb: listing.blurb, maxSeats: listing.maxSeats };
+        : {
+            name: listing.name,
+            blurb: listing.blurb,
+            minSeats: listing.minSeats,
+            maxSeats: listing.maxSeats,
+            shape: listing.shape,
+            open: listing.open,
+          };
     },
     table(code: string) {
       const card = tableCard(code);
