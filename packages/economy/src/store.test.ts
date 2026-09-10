@@ -1,56 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  DAILY_FLOOR,
-  DAILY_GRANT,
-  MemoryStore,
-  STARTING_CHIPS,
-  emptyStats,
-  judgeDaily,
-} from "./store.js";
-import type { Profile } from "./store.js";
-
-function profile(overrides: Partial<Profile> = {}): Profile {
-  return {
-    id: "u1",
-    discordId: "d1",
-    name: "Ada",
-    avatar: null,
-    accentColor: null,
-    chips: STARTING_CHIPS,
-    lastDailyClaim: null,
-    stats: emptyStats(),
-    byGame: {},
-    ...overrides,
-  };
-}
-
-describe("the daily top-up rule", () => {
-  it("is refused while a player still has chips", () => {
-    const verdict = judgeDaily(profile({ chips: DAILY_FLOOR }), Date.now());
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toBe("not-needed");
-  });
-
-  it("is granted to someone who has run dry", () => {
-    const verdict = judgeDaily(profile({ chips: 50 }), Date.now());
-    expect(verdict.ok).toBe(true);
-    expect(verdict.granted).toBe(DAILY_GRANT);
-  });
-
-  it("cannot be claimed twice in a day", () => {
-    const now = Date.now();
-    const verdict = judgeDaily(profile({ chips: 50, lastDailyClaim: now - 1000 }), now);
-    expect(verdict.ok).toBe(false);
-    expect(verdict.reason).toBe("too-soon");
-    expect(verdict.nextAt).toBeGreaterThan(now);
-  });
-
-  it("comes round again after the interval", () => {
-    const now = Date.now();
-    const longAgo = now - 25 * 60 * 60 * 1000;
-    expect(judgeDaily(profile({ chips: 50, lastDailyClaim: longAgo }), now).ok).toBe(true);
-  });
-});
+import { MemoryStore, STARTING_CHIPS } from "./store.js";
 
 describe("the memory store", () => {
   it("starts a new profile with the opening stack", async () => {

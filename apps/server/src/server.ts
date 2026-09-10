@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
 import { Catalogue, COMING, Taunts } from "@backroom/core";
 import type { BankName, Store } from "@backroom/economy";
-import { judgeDaily, MemoryStore } from "@backroom/economy";
+import { MemoryStore } from "@backroom/economy";
 import {
   BLACKJACK,
   blackjackAdapter,
@@ -30,6 +30,7 @@ import {
   SLOTS,
 } from "@backroom/game-slots";
 import type { Die } from "@backroom/rules";
+import { TIPS } from "@backroom/game-tips";
 
 import type {
   Ack,
@@ -69,6 +70,7 @@ import { mountAuth, readAuthConfig } from "./auth.js";
 import { friendlyRedirect } from "./domains.js";
 import { EMOTE_UPLOAD_PATH, emoteUrls, mountEmotes } from "./emotes.js";
 import { mountTransfers } from "./transfers.js";
+import { wireTips } from "./tips.js";
 import { inject, pageFor } from "./meta.js";
 import type { CardSpec } from "./og.js";
 import { Avatars, Cards } from "./og.js";
@@ -87,7 +89,7 @@ import { Avatars, Cards } from "./og.js";
  */
 const CATALOGUE = COMING.reduce(
   (catalogue, game) => catalogue.add(game),
-  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER),
+  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER).add(TIPS),
 );
 
 
@@ -169,7 +171,12 @@ export interface BackRoomServerOptions {
  * What we hang off a socket: the display name its account owns, resolved once
  * at connection. Null for a guest, who has no account to be checked against.
  */
-interface SocketIdentity {
+/*
+ * Exported so tips.ts — the only other module that reads a socket's
+ * identity — can type its handlers against the real thing rather than a
+ * second copy of this shape that could drift from it.
+ */
+export interface SocketIdentity {
   /** Null for a guest, who has no account to be checked against. */
   identity: SeatIdentity | null;
   name: string | null;
@@ -441,35 +448,13 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
       response.json(
         profile === null
           ? { signedIn: false, signinAvailable: auth !== null }
-          : {
-              signedIn: true,
-              signinAvailable: auth !== null,
-              profile,
-              /*
-               * Whether the top-up would actually do anything. Answered here
-               * rather than worked out in the browser, so the rule for who is
-               * owed chips lives in exactly one place — offering a button that
-               * can only say "you have plenty already" is not an offer.
-               */
-              dailyDue: judgeDaily(profile, Date.now()).ok,
-            },
+          : { signedIn: true, signinAvailable: auth !== null, profile },
       );
     })();
   });
 
   app.post("/auth/logout", (request, response) => {
     request.session.destroy(() => response.json({ ok: true }));
-  });
-
-  app.post("/api/daily", (request, response) => {
-    void (async () => {
-      const id = userIdOfRequest(request);
-      if (id === undefined) {
-        response.status(401).json({ error: "Sign in first." });
-        return;
-      }
-      response.json(await store.claimDaily(id));
-    })();
   });
 
   /**
@@ -733,18 +718,28 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * Tells every screen this account is signed in on what it is now worth.
    *
    * Chips move from three directions — a stake taken here, a hand paying out
-   * on the table's clock, a daily claimed in another tab — and only the first
+   * on the table's clock, a jar tapped in another tab — and only the first
    * of those is something the browser asked for. Pushing the number is what
    * keeps the figure in the corner honest without it polling for one.
+   *
+   * `knownChips` lets a caller that just did the mutation — and so already
+   * has the resulting balance in hand, e.g. from `applyJar`'s own return —
+   * skip the `store.get` this would otherwise do to find out what it already
+   * knows. Every other caller omits it and gets exactly the lookup this
+   * always did.
    */
-  async function tellChips(userId: string): Promise<void> {
-    const profile = await store.get(userId);
-    if (profile === undefined || profile === null) {
-      return;
+  async function tellChips(userId: string, knownChips?: number): Promise<void> {
+    let chips = knownChips;
+    if (chips === undefined) {
+      const profile = await store.get(userId);
+      if (profile === undefined || profile === null) {
+        return;
+      }
+      chips = profile.chips;
     }
     for (const socket of io.sockets.sockets.values()) {
       if (socket.data.identity?.userId === userId) {
-        socket.emit("me:chips", profile.chips);
+        socket.emit("me:chips", chips);
       }
     }
   }
@@ -1658,6 +1653,8 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   }
 
   io.on("connection", (socket) => {
+    wireTips(socket, { store, tellChips });
+
     socket.on("lobby:create", (payload, ack) => {
       const parsed = createSchema.safeParse(payload);
       if (!parsed.success) {

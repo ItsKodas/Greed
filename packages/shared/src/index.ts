@@ -13,6 +13,7 @@ export {
   type TauntStake,
   type HouseRules,
   type ClientToServer,
+  type JarView,
   type Phase,
   type RoomStatus,
   type RoomView,
@@ -25,5 +26,6 @@ export {
   type SpinNews,
   type SpinLine,
   type SpinResult,
+  type TapResult,
   type TurnView,
 } from "./protocol.js";

@@ -6,19 +6,11 @@
  * whether it was won on dice or on cards, which is the whole reason it lives
  * apart from the games rather than inside one of them.
  */
-export {
-  DAILY_FLOOR,
-  DAILY_GRANT,
-  DAILY_INTERVAL_MS,
-  MemoryStore,
-  STARTING_CHIPS,
-  emptyStats,
-  judgeDaily,
-} from "./store.js";
+export { MemoryStore, STARTING_CHIPS, emptyJarRecord, emptyStats } from "./store.js";
 export type {
   BankName,
-  DailyResult,
   GameRecord,
+  JarRecord,
   Profile,
   ProfileStats,
   PublicPlayer,

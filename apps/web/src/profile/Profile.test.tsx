@@ -28,8 +28,6 @@ function signedIn(overrides: Partial<Account["profile"]> = {}): Account {
     loading: false,
     refresh: () => {},
     signOut: () => {},
-    claimDaily: () => {},
-    dailyMessage: null,
   } as Account;
 }
 
@@ -88,5 +86,12 @@ describe("a player's page", () => {
     const { container } = show(signedIn());
     const purse = container.querySelector(".purse__count");
     expect(purse?.textContent).toBe("10,000");
+  });
+
+  it("sends you to the jar instead of offering a top-up", () => {
+    show(signedIn());
+    expect(screen.queryByRole("button", { name: /claim daily/i })).toBeNull();
+    const link = screen.getByRole("link", { name: /jar/i });
+    expect(link.getAttribute("href")).toBe("/tips");
   });
 });

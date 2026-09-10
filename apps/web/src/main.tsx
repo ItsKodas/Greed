@@ -15,6 +15,7 @@ import "./game/game.css";
  * any one game's, and every table can carry them.
  */
 import "./taunt/taunt.css";
+import "./tips/tips.css";
 
 const container = document.getElementById("root");
 if (container === null) {

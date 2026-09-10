@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
 import { useAccount } from "../game/useAccount.js";
 import { Send } from "./Send.js";
@@ -22,9 +23,18 @@ const FIGURE_NAMES: Record<string, Record<string, string>> = {
     farkles: "farkles",
     hotDice: "hot dice",
   },
+  tips: {
+    taps: "taps",
+    chipsTipped: "chips tipped",
+    bestNight: "best night",
+  },
 };
 
-const GAME_NAMES: Record<string, string> = { greed: "Greed", blackjack: "Blackjack" };
+const GAME_NAMES: Record<string, string> = {
+  greed: "Greed",
+  blackjack: "Blackjack",
+  tips: "The Tip Jar",
+};
 
 export function Profile() {
   const account = useAccount();
@@ -63,15 +73,10 @@ export function Profile() {
         <Signed
           profile={account.profile}
           history={history}
-          dailyDue={account.dailyDue}
-          onDaily={account.claimDaily}
           onSignOut={account.signOut}
           onChips={account.setChips}
         />
       )}
-      {account.dailyMessage !== null ? (
-        <p className="play__event">{account.dailyMessage}</p>
-      ) : null}
     </main>
   );
 }
@@ -79,15 +84,11 @@ export function Profile() {
 function Signed({
   profile,
   history,
-  dailyDue,
-  onDaily,
   onSignOut,
   onChips,
 }: {
   profile: NonNullable<ReturnType<typeof useAccount>["profile"]>;
   history: PlayedGame[];
-  dailyDue: boolean;
-  onDaily: () => void;
   onSignOut: () => void;
   /** The balance after chips have moved, so the purse follows without a reload. */
   onChips: (chips: number) => void;
@@ -117,17 +118,11 @@ function Signed({
                 this is the one you can see the size of. */}
             <ChipColumns amount={profile.chips} unit={30} />
           </div>
-          {/* Only offered when it would grant something. A button whose only
-              possible answer is "you have plenty already" is not an offer. */}
-          {dailyDue ? (
-            <button type="button" className="btn btn--wide" onClick={onDaily}>
-              Claim daily top-up
-            </button>
-          ) : (
-            <p className="panel__note purse__note">
-              The daily top-up is for running dry. Come back under 2,000.
-            </p>
-          )}
+          {/* The daily top-up used to live here; the jar on the bar replaced
+              it, so this is a way there rather than a claim of its own. */}
+          <Link className="btn btn--wide" to="/tips">
+            Short of chips? There is a jar on the bar.
+          </Link>
         </div>
         <Redeem onRedeemed={() => window.location.reload()} />
         {/* Beside redeeming rather than out on the felt: this is a thing you do

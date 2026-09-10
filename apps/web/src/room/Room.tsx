@@ -7,6 +7,7 @@ import { TileArt } from "./TileArt.js";
 import "@backroom/game-greed/theme.css";
 import "@backroom/game-blackjack/theme.css";
 import "@backroom/game-slots/theme.css";
+import "@backroom/game-tips/theme.css";
 
 interface GameOnOffer {
   id: string;
@@ -14,7 +15,7 @@ interface GameOnOffer {
   blurb: string;
   /** How the game writes its own name, if it writes it any particular way. */
   mark?: { text: string; accentAt: number };
-  shape: "table" | "machine" | "party";
+  shape: "table" | "machine" | "party" | "bar";
   open: boolean;
   tables: number;
   seated: number;
@@ -59,6 +60,7 @@ export function Room() {
 
   const tables = games.filter((game) => game.shape === "table");
   const machines = games.filter((game) => game.shape === "machine");
+  const bar = games.filter((game) => game.shape === "bar");
   const party = games.filter((game) => game.shape === "party");
 
   return (
@@ -77,6 +79,27 @@ export function Room() {
           <p className="room__label">Against the wall</p>
           <div className="room__machines">
             {machines.map((game) => (
+              <Cabinet key={game.id} game={game} />
+            ))}
+          </div>
+        </>
+      ) : null}
+
+      {/* Between the machines and the back, because the page reads as a
+          gradient: money and people, then money alone, then nothing at risk,
+          then not about money at all. */}
+      {bar.length > 0 ? (
+        <>
+          <p className="room__label">At the bar</p>
+          {/*
+           * Cabinet, not TableTile: a bar game has no rooms to be busy or
+           * idle in, so TableTile's footer would call busyness() and print
+           * "Nobody playing — start one" forever, an instruction nobody
+           * tapping the jar can act on. Cabinet shows the game's blurb
+           * instead, the same as a machine with nobody at it.
+           */}
+          <div className="room__few">
+            {bar.map((game) => (
               <Cabinet key={game.id} game={game} />
             ))}
           </div>
