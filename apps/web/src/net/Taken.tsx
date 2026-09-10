@@ -15,10 +15,10 @@ export function Taken({
   onRetry: () => void;
 }) {
   return (
-    <section className="taken" role="status">
+    <section className="taken" role="status" aria-live="polite">
       <p className="taken__what">{message}</p>
       <p className="taken__how">Close it and try again.</p>
-      <button type="button" className="taken__retry" onClick={onRetry}>
+      <button type="button" className="btn taken__retry" onClick={onRetry}>
         Try again
       </button>
     </section>

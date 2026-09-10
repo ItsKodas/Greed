@@ -1609,10 +1609,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    */
   io.use((socket, next) => {
     socket.data.atGame = null;
-    const parsed = handshakeSchema.safeParse(socket.handshake.auth ?? {});
-    const declared = parsed.success ? parsed.data : {};
+    /*
+     * Read apart rather than through one `safeParse` on the whole object: a
+     * `window` that fails its own schema (empty, or absurdly long) must not
+     * take a valid `game` down with it. A bad window degrades to the same
+     * socket-id fallback below as a private window that sent none at all; it
+     * must not exempt the socket from the rule entirely.
+     */
+    const auth = (socket.handshake.auth ?? {}) as Record<string, unknown>;
+    const declaredGame = handshakeSchema.shape.game.safeParse(auth.game);
+    const declaredWindow = handshakeSchema.shape.window.safeParse(auth.window);
     const userId = socket.data.identity?.userId ?? null;
-    const game = declared.game ?? null;
+    const game = declaredGame.success ? (declaredGame.data ?? null) : null;
     const listing = game === null ? undefined : CATALOGUE.get(game);
     // A guest has no account to key on, and a socket naming no game — or one the
     // building does not have — is not at a game to be turned away from.
@@ -1625,7 +1633,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
      * nothing. That is the private-window case: it still claims, it just cannot
      * prove itself across a refresh.
      */
-    const windowId = declared.window ?? socket.id;
+    const windowId =
+      declaredWindow.success && declaredWindow.data !== undefined
+        ? declaredWindow.data
+        : socket.id;
     const key = openKey(userId, game);
     const held = openGames.get(key);
     const mine =

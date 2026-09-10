@@ -1,0 +1,79 @@
+// @vitest-environment jsdom
+import { renderHook, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const handlers = new Map<string, (arg: unknown) => void>();
+const fake = {
+  on: (event: string, run: (arg: unknown) => void) => {
+    handlers.set(event, run);
+  },
+  emit: vi.fn(),
+  close: vi.fn(),
+  connect: vi.fn(),
+  // Mirrors socket.io's own flag: false once a middleware refusal has given
+  // up on reconnecting, true while a transport failure is still being retried.
+  active: true,
+};
+const made = vi.fn(() => fake);
+
+vi.mock("socket.io-client", () => ({ io: (...args: unknown[]) => made(...args) }));
+
+import { createElement } from "react";
+import { MemoryRouter } from "react-router-dom";
+import { useRoom } from "./useRoom.js";
+
+/** useRoom navigates on leave(), so it needs a router under it even unused here. */
+function wrapper({ children }: { children: React.ReactNode }) {
+  return createElement(MemoryRouter, null, children);
+}
+
+describe("what a Greed window tells the server about itself", () => {
+  beforeEach(() => {
+    handlers.clear();
+    made.mockClear();
+    window.sessionStorage.clear();
+    fake.active = true;
+  });
+
+  it("names greed and its window in the handshake", () => {
+    renderHook(() => useRoom(), { wrapper });
+    const options = made.mock.calls[0]?.[1] as {
+      auth?: { game?: string; window?: string };
+    };
+    expect(options.auth?.game).toBe("greed");
+    expect(options.auth?.window).toBe(window.sessionStorage.getItem("backroom.window"));
+  });
+
+  it("holds a refusal apart from a disconnection", async () => {
+    /*
+     * They look nothing alike to a player and must not render alike: one says
+     * wait, the other says go and close a tab.
+     */
+    const { result } = renderHook(() => useRoom(), { wrapper });
+    // A middleware refusal is one socket.io has given up retrying.
+    fake.active = false;
+    handlers.get("connect_error")?.(new Error("You already have Greed open in another window."));
+    await waitFor(() =>
+      expect(result.current.taken).toBe("You already have Greed open in another window."),
+    );
+    expect(result.current.error).toBeNull();
+  });
+
+  it("leaves a dropped connection alone, because it is not a refusal", async () => {
+    /*
+     * connect_error also fires for an ordinary transport failure, and
+     * socket.io keeps retrying those on its own — `active` stays true. That
+     * is nothing this window did wrong, so it must not be shown as one. This
+     * is the one wiring where the old behaviour (a "Cannot reach the server"
+     * message) was deleted and then restored, so it is the most likely of the
+     * three to regress silently.
+     */
+    const { result } = renderHook(() => useRoom(), { wrapper });
+    fake.active = true;
+    handlers.get("connect_error")?.(new Error("xhr poll error"));
+    await waitFor(() =>
+      expect(result.current.error).toBe("Cannot reach the server. Is it running?"),
+    );
+    expect(result.current.taken).toBeNull();
+  });
+});

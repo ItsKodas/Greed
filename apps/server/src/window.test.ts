@@ -160,6 +160,25 @@ describe("one window per game", () => {
     expect(second.ok).toBe(true);
   });
 
+  it("still refuses a second window whose window id fails its own schema", async () => {
+    /*
+     * `window: ""` fails the shared schema's `min(1)` on its own. A `safeParse`
+     * over the whole handshake object would then discard `game` as well and
+     * let the socket straight through unclaimed — one bad field is not
+     * license to skip the rule for a socket that otherwise declared a valid
+     * game.
+     */
+    const port = await start(["Ada", "Ada"]);
+    const first = await arrive(port, { game: "slots", window: "w1" });
+    expect(first.ok).toBe(true);
+
+    const second = await arrive(port, { game: "slots", window: "" });
+    expect(second.ok).toBe(false);
+    expect(!second.ok && second.error).toBe(
+      "You already have Slots open in another window.",
+    );
+  });
+
   it("does not let a refused window release the one that holds it", async () => {
     const port = await start(["Ada", "Ada", "Ada"]);
     const first = await arrive(port, { game: "slots", window: "w1" });
