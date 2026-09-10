@@ -1832,6 +1832,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           maxSeats: parsed.data.maxSeats,
           buyIn: parsed.data.buyIn,
           window: parsed.data.window,
+          ceiling: parsed.data.ceiling,
         });
         rooms.set(code, { game, table, listed: parsed.data.listed ?? true });
         table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);
