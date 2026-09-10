@@ -47,6 +47,16 @@ export const createSchema = z.object({
    * be a client setting the stakes for other people.
    */
   buyIn: z.number().int().min(1).max(1_000_000).optional(),
+  /**
+   * How long the table takes bets for, in milliseconds.
+   *
+   * A decision about everybody's evening rather than one player's — a wheel
+   * that comes round every fifteen seconds and one that comes round every
+   * minute are different games to sit at — so it belongs to the host, with the
+   * rest of the table's shape. Bounded here and snapped to a level the game
+   * offers, the same way the buy-in is.
+   */
+  window: z.number().int().min(1_000).max(300_000).optional(),
 });
 
 export const setListedSchema = z.object({ listed: z.boolean() });

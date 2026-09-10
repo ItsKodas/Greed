@@ -581,6 +581,10 @@
   gap: 3px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .rl__past {
@@ -657,6 +661,141 @@
 .rl__spin:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* --------------------------------------------------- what the table is doing */
+
+/*
+ * The one line everybody at the table reads.
+ *
+ * A betting window with no clock on it is a window that shuts while somebody
+ * is still deciding, and at a table that deals itself that is the difference
+ * between a game and an ambush.
+ */
+.rl__standing {
+  margin: 0;
+  text-align: center;
+  font-size: var(--gr-text-base);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--gr-color-ink);
+  min-height: 1.6em;
+}
+
+/* Last call, when the felt stops taking chips. Warm rather than alarming. */
+.rl__standing--last {
+  color: var(--rl-brass-lit);
+}
+
+.rl__standing--shut {
+  color: var(--gr-color-ink-dim);
+  text-transform: uppercase;
+}
+
+.rl__watching {
+  margin: 0;
+  text-align: center;
+  color: var(--gr-color-ink-dim);
+  font-size: var(--gr-text-sm);
+}
+
+/* ------------------------------------------------------------- the controls */
+
+.rl__controls {
+  display: grid;
+  gap: var(--gr-space-2);
+  justify-items: center;
+}
+
+.rl__acts {
+  display: flex;
+  gap: var(--gr-space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.rl__act {
+  /* Thumb-sized: these are pressed during a window that is closing. */
+  min-height: 40px;
+  padding: 0 var(--gr-space-3);
+  border-radius: var(--gr-radius-sm);
+  border: var(--gr-edge-soft);
+  background: rgb(255 255 255 / 0.05);
+  color: var(--gr-color-ink);
+  font-size: var(--gr-text-sm);
+  cursor: pointer;
+}
+
+.rl__act:hover:not(:disabled) {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.rl__act:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rl__note {
+  margin: 0;
+  text-align: center;
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+/* ---------------------------------------------------------------- the seats */
+
+/*
+ * Who is at the table. A list rather than places round the felt, because a
+ * roulette cloth has no seats on it — everybody reaches the same layout, and
+ * where somebody stands is not part of the game the way a poker seat is.
+ */
+.rl__seats {
+  display: flex;
+  gap: var(--gr-space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rl__seat {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-1);
+  padding: 4px var(--gr-space-2);
+  border-radius: var(--gr-radius-sm);
+  background: rgb(0 0 0 / 0.25);
+  border: var(--gr-edge-soft);
+  font-size: var(--gr-text-sm);
+}
+
+.rl__seat--you {
+  border-color: var(--rl-brass);
+}
+
+.rl__seat--away {
+  opacity: 0.45;
+}
+
+.rl__seat-name {
+  color: var(--gr-color-ink);
+}
+
+/* What they have on the cloth, which is gold because it is money. */
+.rl__seat-down {
+  color: var(--gr-color-chip);
+  font-variant-numeric: tabular-nums;
+}
+
+.rl__seat-up {
+  color: var(--gr-color-good);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rl__seat-up--down {
+  color: var(--gr-color-ink-faint);
 }
 
 /* ------------------------------------------------------------- the layout */

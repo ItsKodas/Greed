@@ -253,6 +253,26 @@ export function rouletteAdapter(
       }
     },
 
+    /**
+     * Reads what the store's bank holds, so the view can show a cap.
+     *
+     * Not a payout — a seat that leaves this table is owed nothing, because
+     * its chips went into the bank as they landed. What this hook uniquely
+     * offers is that it runs on every broadcast, and what the bank holds is a
+     * question for the store, which a view cannot ask because building one is
+     * synchronous.
+     *
+     * A for-fun table never needs this: its bank is on the table and its
+     * figure is exact from the moment it exists. Which is the good half of
+     * doing it this way — the number can only ever be stale where staleness
+     * costs a greyed-out spot on a table nobody is sitting at yet.
+     */
+    async payOut(table) {
+      if (!table.forFun) {
+        table.housed = await holds(table);
+      }
+    },
+
     isSettled(table) {
       return table.phase === "settled";
     },

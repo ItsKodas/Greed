@@ -3,6 +3,7 @@ import { Admin } from "./admin/Admin.js";
 import { Haze } from "./atmosphere/Haze.js";
 import { Blackjack } from "./blackjack/Blackjack.js";
 import { Poker } from "./poker/Poker.js";
+import { Roulette } from "./roulette/Roulette.js";
 import Slots from "./slots/Slots.js";
 import { Play } from "./game/Play.js";
 import { useButtonSound } from "./game/useButtonSound.js";
@@ -37,6 +38,8 @@ export default function App() {
       <Route path="/blackjack" element={<Blackjack />} />
       <Route path="/poker" element={<Poker />} />
       <Route path="/poker/:code" element={<Poker />} />
+      <Route path="/roulette" element={<Roulette />} />
+      <Route path="/roulette/:code" element={<Roulette />} />
       <Route path="/slots" element={<Slots />} />
       <Route path="/blackjack/:code" element={<Blackjack />} />
       {/*

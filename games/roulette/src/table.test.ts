@@ -226,6 +226,28 @@ describe("a roulette table", () => {
     expect(one.history).toEqual([32, 32, 32]);
   });
 
+  it("says what the bank can be measured against, from the moment it exists", () => {
+    /*
+     * A fresh table must not show a bank of nothing. This was a number the
+     * adapter set after each broadcast, which meant a table nobody had touched
+     * yet reported zero and greyed out every spot on the cloth — a table
+     * unusable until somebody managed a bet on it.
+     */
+    const { one } = table();
+    one.forFun = true;
+    expect(one.bank).toBeGreaterThan(0);
+  });
+
+  it("does not let the cloth's own chips vouch for the bank", () => {
+    // Chips go into the bank as they land, so a figure that counted them would
+    // grow with every bet and let the cloth talk itself into more.
+    const { one } = table();
+    one.forFun = true;
+    const before = one.bank;
+    one.place("s1", RED, 500);
+    expect(one.bank).toBe(before - 500);
+  });
+
   it("shows a watcher the cloth but never anybody's account", () => {
     const { one } = table();
     one.place("s1", "straight:17", 100);

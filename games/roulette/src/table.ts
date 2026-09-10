@@ -36,7 +36,8 @@ export const LAST_CALL_MS = 5_000;
  * narrower window than it sounds. Six seconds felt like a ball fighting its way
  * to a stop, but that turned out to be the deceleration curve rather than the
  * length — with a curve that coasts, eleven was simply a long wait between
- * bets. Seven, with the coast doing the work.
+ * bets. This is what is left after both: long enough that the wheel can wind
+ * down on its own rather than being finished with by a deadline.
  */
 export const SPIN_MS = 8_500;
 
@@ -107,8 +108,13 @@ export class Table {
   /** Last spin's chips, by seat, so "same again" is one press. */
   private previous = new Map<string, Placed[]>();
 
-  /** What the bank holds, kept fresh by the adapter purely so the view can say. */
-  bank = 0;
+  /**
+   * What the store's bank holds, for a table playing for chips.
+   *
+   * Kept by the adapter, because it is a question for the store and building a
+   * view is synchronous. Only ever a display figure — see {@link bank}.
+   */
+  housed = 0;
   forFun = false;
 
   /**
@@ -230,6 +236,30 @@ export class Table {
   /** What one seat has on one spot. */
   onSpot(seatId: string, spotId: string): number {
     return this.placed.find((one) => one.seatId === seatId && one.spotId === spotId)?.chips ?? 0;
+  }
+
+  /**
+   * What the bank can be measured against, not counting this spin's chips.
+   *
+   * A getter rather than a number somebody remembers to set. A for-fun table's
+   * bank lives here and is exact the instant the table exists; a chips table's
+   * is whatever the adapter last read from the store. Both then have the
+   * cloth's own chips taken back off, because chips go into the bank as they
+   * land and a cloth that counted them would be vouching for itself.
+   *
+   * For showing only. It lets a felt grey out a spot the bank cannot cover
+   * rather than letting somebody find the cap by being refused — and every bet
+   * is checked again on the way in, because a number a browser has been told
+   * is a number a browser can change.
+   */
+  get bank(): number {
+    const held = this.forFun ? this.funBank : this.housed;
+    return Math.max(0, held - this.onCloth);
+  }
+
+  /** Everything on the cloth this spin, everybody's. */
+  get onCloth(): number {
+    return this.placed.reduce((sum, one) => sum + one.chips, 0);
   }
 
   /** What one seat has on the cloth altogether. */
