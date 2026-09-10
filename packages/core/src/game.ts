@@ -132,6 +132,7 @@ export interface GameAdapter<T extends PlayTable = PlayTable> {
    * A game that returns `true` on every call is a broadcast calling a
    * broadcast. Return it only for the call that actually changed something.
    */
+  // biome-ignore lint/suspicious/noConfusingVoidType: void is what lets a game that returns nothing satisfy this at all — boolean is the opt-in
   payOut?(table: T, deps: GameDeps): Promise<void | boolean>;
 
   /**
