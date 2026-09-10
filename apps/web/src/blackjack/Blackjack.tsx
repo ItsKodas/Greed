@@ -15,6 +15,7 @@ import { useAccount } from "../game/useAccount.js";
 import { TurnRing } from "../game/TurnRing.js";
 import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
+import { Taken } from "../net/Taken.js";
 import { PublicTables } from "../table/PublicTables.js";
 import { TauntPicker } from "../taunt/TauntPicker.js";
 import { TauntStage } from "../taunt/TauntStage.js";
@@ -113,7 +114,9 @@ export function Blackjack() {
       {table.error !== null ? <p className="play__error">{table.error}</p> : null}
       {state?.lastEvent != null ? <p className="play__event">{state.lastEvent}</p> : null}
 
-      {state === null ? (
+      {table.taken !== null ? (
+        <Taken message={table.taken} onRetry={table.retry} />
+      ) : state === null ? (
         <Sit table={table} invited={urlCode} account={account} />
       ) : (
         <>
