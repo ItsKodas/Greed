@@ -1,3 +1,4 @@
+import { WHEEL, colourOf } from "@backroom/game-roulette";
 import { Resvg } from "@resvg/resvg-js";
 
 /**
@@ -172,12 +173,18 @@ function sign(x: number, y: number, scale: number, accent: string, accentHi: str
  * this renders with have no such glyph — a card with a hollow box where its
  * suit should be is worse than a card with none. Paths always draw.
  */
-function suit(x: number, y: number, size: number, red: boolean): string {
+function suit(x: number, y: number, size: number, red: boolean, ink?: string): string {
   const s = size;
   const d = red
     ? `M ${x} ${y + s * 0.78} C ${x - s * 1.15} ${y + s * 0.02}, ${x - s * 0.72} ${y - s * 0.82}, ${x} ${y - s * 0.24} C ${x + s * 0.72} ${y - s * 0.82}, ${x + s * 1.15} ${y + s * 0.02}, ${x} ${y + s * 0.78} Z`
     : `M ${x} ${y - s * 0.86} C ${x + s * 1.0} ${y + s * 0.02}, ${x + s * 0.58} ${y + s * 0.54}, ${x + s * 0.13} ${y + s * 0.3} L ${x + s * 0.32} ${y + s * 0.78} L ${x - s * 0.32} ${y + s * 0.78} L ${x - s * 0.13} ${y + s * 0.3} C ${x - s * 0.58} ${y + s * 0.54}, ${x - s * 1.0} ${y + s * 0.02}, ${x} ${y - s * 0.86} Z`;
-  return `<path d="${d}" fill="${red ? "#a8321f" : "#1b2028"}"/>`;
+  /*
+   * The card's own ink by default, and something else on request. A reel is
+   * not a card: its window is nearly black, and a spade drawn in a playing
+   * card's near-black is a spade nobody can see. It rendered as an empty
+   * window, which on a machine is not a missing symbol — it is a broken reel.
+   */
+  return `<path d="${d}" fill="${ink ?? (red ? "#a8321f" : "#1b2028")}"/>`;
 }
 
 /** A playing card, for the corner of a blackjack banner. */
@@ -201,18 +208,170 @@ function die(cx: number, cy: number, turn: number, spots: Array<[number, number]
   </g>`;
 }
 
+/** A smaller card, for a game whose furniture is a row of them. */
+function board(x: number, y: number, turn: number, rank: string, red: boolean): string {
+  const ink = red ? "#a8321f" : "#1b2028";
+  return `<g transform="translate(${x} ${y}) rotate(${turn})">
+    <rect x="-39" y="-56" width="78" height="112" rx="9" fill="#e8ecf3"/>
+    <rect x="-39" y="-56" width="78" height="112" rx="9" fill="none" stroke="#aab4c4" stroke-width="2"/>
+    <text x="-27" y="-24" font-family="IBM Plex Sans" font-weight="600" font-size="30" fill="${ink}">${rank}</text>
+    ${suit(-16, 6, 13, red)}
+    ${suit(18, 34, 10, red)}
+  </g>`;
+}
+
 /**
- * The thing on the right that says which game without spending a word on it.
+ * The wheel, cut from the order the rules lay the rim out in.
  *
- * Kept behind the type and slightly turned, because it is the furniture in the
- * room rather than a second headline competing with the first.
+ * Borrowed rather than copied, for the same reason the felt's wheel and the
+ * tile's are: a wheel drawn in counting order stops alternating colours half
+ * way round, which is a picture that lies about the game it is advertising.
+ * Numbers are left off — a pocket is twenty pixels wide here — so what is left
+ * is what anybody recognises a wheel by: mahogany, a ring of red and black,
+ * and brass in the middle.
  */
-function motif(game: string | null): string {
-  if (game === "blackjack") {
-    return `<g opacity="0.92">${pip(944, 322, -13, "A", false)}${pip(1082, 296, 9, "K", true)}</g>`;
+function wheel(cx: number, cy: number, r: number): string {
+  const step = 360 / WHEEL.length;
+  const inner = r * 0.73;
+  const at = (angle: number, radius: number): [number, number] => around(cx, cy, radius, angle);
+
+  const pockets = WHEEL.map((n, index) => {
+    const [ax, ay] = at(index * step - step / 2, r);
+    const [bx, by] = at(index * step + step / 2, r);
+    const [ix, iy] = at(index * step + step / 2, inner);
+    const [jx, jy] = at(index * step - step / 2, inner);
+    const colour = colourOf(n);
+    const fill = colour === "red" ? "#d13a30" : colour === "black" ? "#17120f" : "#17663f";
+    const arc = `M ${ax.toFixed(2)} ${ay.toFixed(2)} A ${r} ${r} 0 0 1 ${bx.toFixed(2)} ${by.toFixed(2)} L ${ix.toFixed(2)} ${iy.toFixed(2)} A ${inner.toFixed(2)} ${inner.toFixed(2)} 0 0 0 ${jx.toFixed(2)} ${jy.toFixed(2)} Z`;
+    return `<path d="${arc}" fill="${fill}" stroke="#c9a227" stroke-width="1"/>`;
+  }).join("");
+
+  const spokes = [0, 45, 90, 135]
+    .map((turn) => {
+      const [x1, y1] = at(turn, inner * 0.94);
+      const [x2, y2] = at(turn + 180, inner * 0.94);
+      return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="#c9a227" stroke-width="4" opacity="0.7"/>`;
+    })
+    .join("");
+
+  const [bx, by] = at(64, r * 0.87);
+  return `<g>
+    <circle cx="${cx}" cy="${cy}" r="${(r * 1.06).toFixed(2)}" fill="#4a2418" stroke="#c9a227" stroke-width="3"/>
+    ${pockets}
+    <circle cx="${cx}" cy="${cy}" r="${(inner - 2).toFixed(2)}" fill="#6b3625"/>
+    ${spokes}
+    <circle cx="${cx}" cy="${cy}" r="${(r * 0.32).toFixed(2)}" fill="#4a2418" stroke="#c9a227" stroke-width="2"/>
+    <circle cx="${cx}" cy="${cy}" r="${(r * 0.12).toFixed(2)}" fill="#f0cf68"/>
+    <circle cx="${bx.toFixed(2)}" cy="${by.toFixed(2)}" r="9" fill="#f7efe9"/>
+  </g>`;
+}
+
+/** A diamond, for a reel. A rotated square is one, and a path always draws. */
+function diamond(cx: number, cy: number, size: number): string {
+  return `<path d="M ${cx} ${cy - size} L ${cx + size * 0.72} ${cy} L ${cx} ${cy + size} L ${cx - size * 0.72} ${cy} Z" fill="#5fc9e8"/>`;
+}
+
+/** The three kinds of thing a reel on this card can be showing. */
+type Face = "seven" | "diamond" | "spade";
+
+function reelFace(face: Face, x: number, y: number): string {
+  if (face === "seven") {
+    return `<text x="${x}" y="${y + 16}" font-family="Bevan" font-size="42" fill="#e0b048" text-anchor="middle">7</text>`;
   }
-  if (game === "greed") {
-    return `<g opacity="0.92">
+  if (face === "diamond") {
+    return diamond(x, y, 20);
+  }
+  // Ivory rather than the card's ink: see suit().
+  return suit(x, y, 20, false, "#e8ecf3");
+}
+
+/**
+ * The machine against the wall: five windows, and the strips behind them.
+ *
+ * Five because the machine has five, and a card advertising three is a card
+ * advertising a different game. Three rows deep because a window showing one
+ * symbol in the middle of a tall black rectangle is a machine that has
+ * finished; a strip with something arriving and something leaving is one that
+ * is running, which is the thing worth putting on a poster.
+ *
+ * No two strips alike, and no line straight across. Five of the same thing is
+ * a jackpot on a banner for a machine nobody has played.
+ */
+const STRIPS: readonly (readonly [Face, Face, Face])[] = [
+  ["spade", "seven", "diamond"],
+  ["seven", "diamond", "spade"],
+  ["diamond", "seven", "spade"],
+  ["seven", "spade", "diamond"],
+  ["spade", "diamond", "seven"],
+];
+
+function cabinet(): string {
+  const windows = [923, 975, 1027, 1079, 1131];
+  /* The rows the strip sits on: the outer two are cut by the glass. */
+  const rows = [252, 322, 392];
+  const reels = windows
+    .map((x, index) => {
+      const strip = STRIPS[index] as readonly [Face, Face, Face];
+      const faces = rows
+        .map(
+          (y, row) =>
+            `<g opacity="${row === 1 ? "1" : "0.42"}">${reelFace(strip[row] as Face, x, y)}</g>`,
+        )
+        .join("");
+      return `<g>
+      <rect x="${x - 22}" y="226" width="44" height="192" rx="6" fill="#0f0a14" stroke="#3a2749" stroke-width="2"/>
+      <g clip-path="url(#reel${index})">${faces}</g>
+    </g>`;
+    })
+    .join("");
+  const clips = windows
+    .map(
+      (x, index) =>
+        `<clipPath id="reel${index}"><rect x="${x - 22}" y="226" width="44" height="192" rx="6"/></clipPath>`,
+    )
+    .join("");
+  return `<g>
+    <defs>${clips}</defs>
+    <rect x="884" y="204" width="286" height="236" rx="20" fill="#1b1024" stroke="#c9439e" stroke-width="3"/>
+    ${reels}
+    <!-- The line the middle row pays on, which is what a window is for. -->
+    <rect x="895" y="320" width="264" height="3" rx="1.5" fill="#c9439e" opacity="0.35"/>
+  </g>`;
+}
+
+/**
+ * The jar on the bar, with what has already dripped into it.
+ *
+ * Glass rather than a pot, because the whole of this one is watching it fill.
+ * A jar you cannot see into is a jar with nothing to say.
+ */
+function jar(): string {
+  return `<g>
+    <rect x="936" y="238" width="178" height="26" rx="8" fill="#d99a3f"/>
+    <rect x="950" y="264" width="150" height="184" rx="24" fill="#ffffff" fill-opacity="0.07" stroke="#d99a3f" stroke-width="3"/>
+    <rect x="968" y="286" width="22" height="130" rx="11" fill="#ffffff" fill-opacity="0.09"/>
+    ${chip(989, 406, 28, true)}
+    ${chip(1057, 412, 28, true)}
+    ${chip(1024, 356, 28, true)}
+    ${/* One still on its way in, because the bar drips rather than pays. Close
+         enough to the mouth to be arriving: further up it read as a mark on
+         the wall rather than as anything to do with the jar. */ ""}
+    ${chip(1025, 198, 22, true)}
+  </g>`;
+}
+
+/**
+ * The furniture each game keeps, by which game it is.
+ *
+ * A record rather than a run of ifs, so the set can be counted. A game that is
+ * open and has no entry here falls back to the house's own chip, which is a
+ * card saying "a casino" where it should be saying which game — and nothing
+ * anywhere would have mentioned it. `og.test.ts` holds these keys against the
+ * games the room actually deals.
+ */
+export const MOTIFS: Record<string, () => string> = {
+  blackjack: () => `${pip(944, 322, -13, "A", false)}${pip(1082, 296, 9, "K", true)}`,
+  greed: () => `
       ${die(958, 240, -12, [[0, 0]])}
       ${die(1092, 330, 8, [
         [-27, -27],
@@ -225,12 +384,43 @@ function motif(game: string | null): string {
         [-27, -27],
         [0, 0],
         [27, 27],
-      ])}
-    </g>`;
+      ])}`,
+  /*
+   * The board rather than a hand, which is what tells this card from the
+   * blackjack one at a glance. Two cards held at an angle is somebody's hand;
+   * five spread in a line is the middle of the table, and the middle of the
+   * table is most of the difference between the two games.
+   */
+  poker: () => `
+      ${board(908, 330, -5, "A", false)}
+      ${board(960, 324, -2, "K", true)}
+      ${board(1012, 322, 1, "Q", false)}
+      ${board(1064, 324, 3, "J", true)}
+      ${board(1116, 330, 6, "9", false)}
+      ${/* The pot, under the board rather than beside it — a chip off the
+           corner of the spread reads as one somebody dropped. */ ""}
+      ${chip(982, 432, 30, true)}
+      ${chip(1040, 438, 30, true)}`,
+  roulette: () => wheel(1028, 318, 128),
+  slots: cabinet,
+  tips: jar,
+};
+
+/**
+ * The thing on the right that says which game without spending a word on it.
+ *
+ * Kept behind the type and slightly turned, because it is the furniture in the
+ * room rather than a second headline competing with the first.
+ */
+function motif(game: string | null): string {
+  const drawn = game === null ? undefined : MOTIFS[game];
+  if (drawn !== undefined) {
+    return `<g opacity="0.92">${drawn()}</g>`;
   }
   /*
-   * The room itself gets one chip, large. A stack drawn face-on is four discs
-   * on top of each other rather than a pile — the pile in the app works
+   * The room itself gets one chip, large — and so does a game listed before it
+   * exists, which has no furniture to draw yet. A stack drawn face-on is four
+   * discs on top of each other rather than a pile: the pile in the app works
    * because it is seen from the side, and half a pile is worse than one chip
    * drawn properly.
    */
