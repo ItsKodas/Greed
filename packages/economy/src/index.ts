@@ -6,7 +6,7 @@
  * whether it was won on dice or on cards, which is the whole reason it lives
  * apart from the games rather than inside one of them.
  */
-export { MemoryStore, STARTING_CHIPS, emptyJarRecord, emptyStats } from "./store.js";
+export { BANKS, MemoryStore, STARTING_CHIPS, emptyJarRecord, emptyStats } from "./store.js";
 export type {
   BankName,
   GameRecord,

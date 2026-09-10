@@ -1863,6 +1863,191 @@ a.btn {
   }
 }
 
+/*
+ * Roulette's wheel, which slides rather than flies.
+ *
+ * Every other table keeps loose furniture in its corner and throws it up when
+ * the pointer arrives, because dice and cards are things that come off a
+ * table. A wheel is not one of those: it is bolted to the middle of its own
+ * table and the only thing it ever does is turn. So it comes across in one
+ * piece and spins.
+ *
+ * Three elements for three motions, and that is not tidiness — a CSS transform
+ * replaces an element's transform rather than composing with it, so the slide
+ * and the spin have to be on different things or only the last one declared
+ * ever happens. The group slides, the rotor inside it turns, and the ball's
+ * arm turns the other way.
+ */
+.art__wheel {
+  transform-box: view-box;
+  transform-origin: 120px 94px;
+  transform: translate(34px, 18px) scale(0.88);
+  transition:
+    transform 520ms cubic-bezier(0.16, 1.06, 0.28, 1),
+    opacity 260ms ease;
+  opacity: 0.9;
+}
+
+/* Mostly sideways, and only a little up. The other tiles throw their
+   furniture into the air; this one slides a heavy thing across a table. */
+.tile:hover .art__wheel,
+.tile:focus-visible .art__wheel {
+  transform: translate(-18px, -12px) scale(1.02);
+  opacity: 1;
+}
+
+.art__wheel-rim,
+.art__ball-arm {
+  transform-box: view-box;
+  transform-origin: 120px 94px;
+}
+
+/*
+ * Whole turns, both ways.
+ *
+ * Three one way and four the other, and both of them whole, so the wheel is
+ * standing exactly where it started by the time the animation ends. It has to
+ * be: the animation is dropped the instant the pointer leaves, and a rotor
+ * that had settled at some angle of its own would snap back to zero on the way
+ * out — which is a worse thing to watch than the spin was to have.
+ *
+ * The rim stops before the ball does, the way the felt's own wheel has it. A
+ * ball still hunting over a rotor that has already stopped is what the end of
+ * a spin looks like.
+ */
+.tile:hover .art__wheel-rim,
+.tile:focus-visible .art__wheel-rim {
+  animation: tile-rotor 1500ms cubic-bezier(0.16, 0.62, 0.24, 1) both;
+}
+
+.tile:hover .art__ball-arm,
+.tile:focus-visible .art__ball-arm {
+  animation: tile-ball-round 1800ms cubic-bezier(0.14, 0.6, 0.22, 1) both;
+}
+
+.tile:hover .art__ball,
+.tile:focus-visible .art__ball {
+  animation: tile-ball-fall 1800ms ease-in-out both;
+}
+
+@keyframes tile-rotor {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(1080deg);
+  }
+}
+
+@keyframes tile-ball-round {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-1440deg);
+  }
+}
+
+/*
+ * The drop.
+ *
+ * Thrown out onto the track while there is speed in it, held there, then
+ * knocked inward past the frets and settling back where it began. A ball does
+ * not glide into a pocket; it clatters into one and stops.
+ */
+@keyframes tile-ball-fall {
+  0% {
+    transform: translateY(-51px);
+  }
+  10%,
+  62% {
+    transform: translateY(-56px);
+  }
+  78% {
+    transform: translateY(-46px);
+  }
+  90% {
+    transform: translateY(-53px);
+  }
+  100% {
+    transform: translateY(-51px);
+  }
+}
+
+/*
+ * The materials, which are the room's rather than this drawing's. They come
+ * from roulette's theme.css, and the fallbacks are what a tile wears if that
+ * file ever stops being loaded here.
+ */
+.art__wheel-bowl {
+  fill: var(--rl-mahogany, #4a2418);
+  stroke: var(--rl-brass, #c9a227);
+  stroke-width: 1.2;
+}
+
+.art__pocket {
+  stroke: var(--rl-brass, #c9a227);
+  stroke-width: 0.6;
+}
+
+.art__pocket--red {
+  fill: var(--rl-red, #d13a30);
+}
+
+.art__pocket--black {
+  fill: var(--rl-black, #17120f);
+}
+
+.art__pocket--zero {
+  fill: var(--rl-green, #17663f);
+}
+
+.art__wheel-hub {
+  fill: var(--rl-mahogany-lit, #6b3625);
+}
+
+.art__wheel-spokes line {
+  stroke: var(--rl-brass, #c9a227);
+  stroke-width: 1.6;
+  opacity: 0.7;
+}
+
+.art__wheel-cone {
+  fill: var(--rl-mahogany, #4a2418);
+  stroke: var(--rl-brass, #c9a227);
+  stroke-width: 1;
+}
+
+.art__wheel-turret {
+  fill: var(--rl-brass-lit, #f0cf68);
+}
+
+/* Out in the frets at rest, which is where the fall starts and ends. */
+.art__ball {
+  transform: translateY(-51px);
+  fill: var(--rl-ivory, #f7efe9);
+  stroke: rgb(0 0 0 / 0.35);
+  stroke-width: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art__wheel,
+  .tile:hover .art__wheel,
+  .tile:focus-visible .art__wheel {
+    transition: none;
+    transform: none;
+  }
+
+  .tile:hover .art__wheel-rim,
+  .tile:focus-visible .art__wheel-rim,
+  .tile:hover .art__ball-arm,
+  .tile:focus-visible .art__ball-arm,
+  .tile:hover .art__ball,
+  .tile:focus-visible .art__ball {
+    animation: none;
+  }
+}
+
 .tile__foot {
   display: flex;
   align-items: center;

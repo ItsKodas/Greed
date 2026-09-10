@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import type { GameAdapter, GameDeps, PlayTable, SeatIdentity } from "@backroom/core";
 import { Catalogue, COMING, Taunts } from "@backroom/core";
 import type { BankName, Store } from "@backroom/economy";
-import { MemoryStore } from "@backroom/economy";
+import { BANKS, MemoryStore } from "@backroom/economy";
 import {
   BLACKJACK,
   blackjackAdapter,
@@ -988,13 +988,10 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * bank means the one they have always meant.
    */
   function bankNamed(value: unknown): BankName | null {
-    if (value === undefined || value === "slots") {
+    if (value === undefined) {
       return "slots";
     }
-    if (value === "blackjack" || value === "roulette") {
-      return value;
-    }
-    return null;
+    return BANKS.find((one) => one === value) ?? null;
   }
 
   /** What a bank can offer, which each game works out its own way. */

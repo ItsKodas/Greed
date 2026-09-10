@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
 import { TileArt } from "./TileArt.js";
-// Both rooms' colours, because the tiles below are dressed in them.
+// Every room's colours, because the tiles below are dressed in them.
 import "@backroom/game-greed/theme.css";
 import "@backroom/game-blackjack/theme.css";
+import "@backroom/game-roulette/theme.css";
 import "@backroom/game-slots/theme.css";
 import "@backroom/game-tips/theme.css";
 

@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { POCKETS, WHEEL, colourOf } from "@backroom/game-roulette";
 import { FACES } from "@backroom/game-slots";
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ReelsArt, TileArt } from "./TileArt.js";
+import { ReelsArt, TileArt, WheelArt } from "./TileArt.js";
 
 describe("the furniture in a tile's corner", () => {
   it("gives the slot machine as many reels as the machine has", () => {
@@ -69,6 +70,57 @@ describe("the furniture in a tile's corner", () => {
 });
 
 /*
+ * The stylesheet that moves all of this, read once for every suite below.
+ *
+ * Found from the working directory rather than from import.meta.url: this file
+ * runs under jsdom, where that is an http URL and not a path at all. Two
+ * candidates because the suite can be run from the repository root or from the
+ * web package.
+ */
+const css = readFileSync(
+  [
+    resolve(process.cwd(), "apps/web/src/game/game.css"),
+    resolve(process.cwd(), "src/game/game.css"),
+  ].find((path) => existsSync(path)) as string,
+  "utf8",
+);
+
+/**
+ * The stylesheet with every @media block taken out of it.
+ *
+ * Because a selector inside the reduced-motion block is the *absence* of a
+ * motion: searching the whole file for one finds the rule that switches it off
+ * and calls that a rule that moves it. Checked without this, removing a reel's
+ * roll outright still passed.
+ */
+const always = (() => {
+  let out = "";
+  let at = 0;
+  while (at < css.length) {
+    const start = css.indexOf("@media", at);
+    if (start === -1) {
+      out += css.slice(at);
+      break;
+    }
+    out += css.slice(at, start);
+    let depth = 0;
+    let cursor = css.indexOf("{", start);
+    for (; cursor < css.length; cursor += 1) {
+      if (css[cursor] === "{") {
+        depth += 1;
+      } else if (css[cursor] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          break;
+        }
+      }
+    }
+    at = cursor + 1;
+  }
+  return out;
+})();
+
+/*
  * The drawing and the stylesheet that moves it.
  *
  * These are two files that have to agree on a number, and nothing made them.
@@ -78,55 +130,6 @@ describe("the furniture in a tile's corner", () => {
  * match them, which is the quietest way for a stylesheet to be wrong.
  */
 describe("the reels the stylesheet knows how to roll", () => {
-  /*
-   * Found from the working directory rather than from import.meta.url: this
-   * file runs under jsdom, where that is an http URL and not a path at all.
-   * Two candidates because the suite can be run from the repository root or
-   * from the web package.
-   */
-  const css = readFileSync(
-    [
-      resolve(process.cwd(), "apps/web/src/game/game.css"),
-      resolve(process.cwd(), "src/game/game.css"),
-    ].find((path) => existsSync(path)) as string,
-    "utf8",
-  );
-
-  /**
-   * The stylesheet with every @media block taken out of it.
-   *
-   * Because a selector inside the reduced-motion block is the *absence* of a
-   * roll: searching the whole file for one finds the rule that switches it off
-   * and calls that a rule that moves it. Checked without this, removing a
-   * reel's roll outright still passed.
-   */
-  const always = (() => {
-    let out = "";
-    let at = 0;
-    while (at < css.length) {
-      const start = css.indexOf("@media", at);
-      if (start === -1) {
-        out += css.slice(at);
-        break;
-      }
-      out += css.slice(at, start);
-      let depth = 0;
-      let cursor = css.indexOf("{", start);
-      for (; cursor < css.length; cursor += 1) {
-        if (css[cursor] === "{") {
-          depth += 1;
-        } else if (css[cursor] === "}") {
-          depth -= 1;
-          if (depth === 0) {
-            break;
-          }
-        }
-      }
-      at = cursor + 1;
-    }
-    return out;
-  })();
-
   it("has a rule for every reel the machine draws", () => {
     const { container } = render(<TileArt game="slots" />);
     const reels = container.querySelectorAll(".art__piece").length;
@@ -159,3 +162,126 @@ describe("the reels the stylesheet knows how to roll", () => {
   });
 });
 
+
+/*
+ * The wheel in roulette's corner.
+ *
+ * It had no drawing of its own for a while and fell through to the stack of
+ * chips every game without one gets — which is not wrong, exactly, but it is
+ * the one game in the building whose whole shape is an object, and a tile that
+ * does not show it is a tile advertising nothing in particular.
+ */
+describe("the wheel in the corner", () => {
+  it("gives roulette a wheel rather than the stack of chips", () => {
+    const { container } = render(<TileArt game="roulette" />);
+    expect(container.querySelector(".art__wheel")).not.toBeNull();
+  });
+
+  it("still hands a game with nothing of its own the chips", () => {
+    // The fallback is what makes the check above mean something: it has to be
+    // roulette that got a wheel, not everybody.
+    const { container } = render(<TileArt game="tips" />);
+    expect(container.querySelector(".art__wheel")).toBeNull();
+    expect(container.querySelectorAll(".art__piece").length).toBeGreaterThan(0);
+  });
+
+  it("cuts as many pockets as the wheel has", () => {
+    const { container } = render(<WheelArt />);
+    expect(container.querySelectorAll(".art__pocket")).toHaveLength(POCKETS);
+  });
+
+  it("lays them out in the rim's order, not in counting order", () => {
+    /*
+     * The whole of this drawing is a band of alternating colour, and counting
+     * order is the way to draw one that stops alternating half way round. It
+     * borrows the rules' own rim rather than keeping a copy, and this is what
+     * pins that: WHEEL is the wheel.
+     */
+    const { container } = render(<WheelArt />);
+    const drawn = [...container.querySelectorAll("[data-pocket]")].map((one) =>
+      Number(one.getAttribute("data-pocket")),
+    );
+    expect(drawn).toEqual([...WHEEL]);
+  });
+
+  it("paints every pocket the colour that pocket is", () => {
+    const { container } = render(<WheelArt />);
+    for (const one of container.querySelectorAll("[data-pocket]")) {
+      const n = Number(one.getAttribute("data-pocket"));
+      expect(one.getAttribute("class")).toContain(`art__pocket--${colourOf(n) ?? "zero"}`);
+    }
+  });
+
+  it("never puts the slide and the spin on one element", () => {
+    /*
+     * A CSS transform replaces an element's transform rather than composing
+     * with it, so a group asked to slide and to turn would only ever do the
+     * last one declared — silently, and only in a browser. The rotor and the
+     * ball's arm have to be inside the group that slides, not be it.
+     */
+    const { container } = render(<WheelArt />);
+    const slides = container.querySelector(".art__wheel") as Element;
+    for (const selector of [".art__wheel-rim", ".art__ball-arm"]) {
+      const turns = container.querySelector(selector) as Element;
+      expect(turns).not.toBeNull();
+      expect(turns).not.toBe(slides);
+      expect(slides.contains(turns)).toBe(true);
+    }
+  });
+});
+
+/*
+ * The wheel and the stylesheet that moves it.
+ *
+ * Same trap as the reels: two files that have to agree on a class name, and
+ * nothing but somebody remembering makes them. A renamed group here is a wheel
+ * that sits perfectly still in the corner and throws nothing.
+ */
+describe("the wheel the stylesheet knows how to spin", () => {
+  it("slides the wheel across and turns the rotor and the ball", () => {
+    const { container } = render(<WheelArt />);
+    for (const part of ["art__wheel", "art__wheel-rim", "art__ball-arm", "art__ball"]) {
+      expect(container.querySelector(`.${part}`)).not.toBeNull();
+      expect(always).toContain(`.tile:hover .${part}`);
+    }
+  });
+
+  it("turns whole numbers of turns, so nothing snaps back on the way out", () => {
+    /*
+     * The animation is dropped the instant the pointer leaves. A rotor that
+     * had settled at some angle of its own would jump back to where it started
+     * at that moment, which is worse to watch than the spin was to have.
+     */
+    for (const [keyframes, ends] of [
+      ["tile-rotor", /rotate\((-?\d+)deg\)/g],
+      ["tile-ball-round", /rotate\((-?\d+)deg\)/g],
+    ] as const) {
+      const at = css.indexOf(`@keyframes ${keyframes}`);
+      expect(at).toBeGreaterThan(-1);
+      const block = css.slice(at, css.indexOf("}\n", css.indexOf("to", at)));
+      const turns = [...block.matchAll(ends)].map(([, degrees]) => Number(degrees));
+      expect(turns.length).toBeGreaterThan(0);
+      for (const turn of turns) {
+        expect(Math.abs(turn) % 360).toBe(0);
+      }
+    }
+  });
+
+  it("puts the ball back where it started when it lands", () => {
+    // The fall's last frame and the ball's resting depth are the same number,
+    // or the ball jumps out of its pocket as the animation is taken away.
+    const rest = /\.art__ball \{[^}]*transform: translateY\((-?[\d.]+)px\)/.exec(css);
+    const fall = css.slice(css.indexOf("@keyframes tile-ball-fall"));
+    const landed = /100% \{\s*transform: translateY\((-?[\d.]+)px\)/.exec(fall);
+    expect(rest).not.toBeNull();
+    expect(landed).not.toBeNull();
+    expect(Number((landed as RegExpExecArray)[1])).toBe(Number((rest as RegExpExecArray)[1]));
+  });
+
+  it("stills every part of it when motion is not wanted", () => {
+    const stilled = css.split("@media (prefers-reduced-motion: reduce)").slice(1);
+    for (const part of ["art__wheel", "art__wheel-rim", "art__ball-arm", "art__ball"]) {
+      expect(stilled.some((block) => block.includes(`.tile:hover .${part}`))).toBe(true);
+    }
+  });
+});

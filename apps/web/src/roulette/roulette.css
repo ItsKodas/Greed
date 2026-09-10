@@ -530,8 +530,37 @@
   transform: translate(-50%, -50%);
   pointer-events: none;
   z-index: 5;
-  /* Chips are drawn at a fixed small size on the cloth; the pile scales. */
   font-size: clamp(8px, 2cqw, 13px);
+}
+
+/*
+ * The chips scale with the cloth, the way poker's do.
+ *
+ * React sizes them for the smallest cloth they appear on — a phone's, where a
+ * square is about forty-five pixels — and that number was then the number at
+ * every width. On a wide screen the same cloth is drawn at three times the
+ * size and the chips were not, so a stake read as a speck sitting on a square
+ * rather than as money on a table.
+ *
+ * Only the width is given; the drawing's own viewBox takes care of the rest.
+ * That is safe here because a pile on the cloth is capped at three chips in
+ * one stack, so the box is the same width whether it holds one or three — a
+ * heap that grew sideways would get thinner chips as it grew, which is the
+ * trap ChipStack's own comment describes.
+ *
+ * Half a square, which is what a chip covers on a phone and is the figure both
+ * rules are derived from. It cannot be written once, because the two layouts
+ * give the cloth different shares of the container the query measures: stacked
+ * it is the whole of it, and with the wheel beside it about seven tenths. One
+ * value would be right for one of them and wrong for the other by half again.
+ *
+ * The floor is the size these were before, so nothing on a phone or a turned
+ * cloth moves — below about 630 the cloth is sized by its height and the
+ * container's width stops describing it at all.
+ */
+.rl__pile .stack {
+  width: clamp(22px, 3.5cqw, 40px);
+  height: auto;
 }
 
 .rl__pile--yours {
@@ -657,6 +686,140 @@
 /* The newest result, which is the one being talked about. */
 .rl__past--latest {
   box-shadow: 0 0 0 2px var(--rl-brass-lit);
+}
+
+/*
+ * The two boards, one above the other.
+ *
+ * A column rather than a row, and at every width. Side by side they are two
+ * strips of small type competing for the same glance, and on a phone one of
+ * them would be four characters wide. Stacked, the numbers are a line and the
+ * names are a line, and the eye takes them in that order — which is the order
+ * they happened in.
+ */
+.rl__boards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  align-items: center;
+}
+
+/*
+ * The board of who has been paid.
+ *
+ * The numbers say what the wheel has been doing; this says what that has been
+ * worth to the people at the table, which the numbers cannot. A run of reds is
+ * a fact about the wheel; a run of reds with nobody's name against it is a
+ * table that has been on black all evening.
+ *
+ * Wraps rather than scrolls. A row of names is a row of unpredictable widths,
+ * and a strip that scrolls sideways on a phone is a strip whose last entry —
+ * the one that just happened — is the one off the edge.
+ */
+.rl__winners {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 100%;
+}
+
+.rl__won {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px 2px 3px;
+  border-radius: 999px;
+  background: var(--gr-color-shadow);
+  border: 1px solid color-mix(in srgb, var(--rl-brass) 28%, transparent);
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* The number they were paid on, wearing the same mark the board above uses so
+   the two read as one thing. */
+.rl__won-pocket {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  padding: 1px 3px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--rl-ivory);
+  flex: none;
+}
+.rl__won-pocket--red {
+  background: var(--rl-red);
+}
+.rl__won-pocket--black {
+  background: var(--rl-black);
+}
+.rl__won-pocket--zero {
+  background: var(--rl-green);
+}
+
+/*
+ * A name is somebody else's text.
+ *
+ * The seating caps one at MAX_NAME, so a real one always fits whole and this
+ * never fires. It is here for the case where that stops being true: without a
+ * width of its own a name is a flex item that grows the pill, the pill grows
+ * the board and the board grows the page — one long name and the whole felt
+ * scrolls sideways. Twenty characters is that cap, so this clips only what
+ * should never have arrived.
+ */
+.rl__won-name {
+  color: var(--gr-color-ink-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 20ch;
+}
+
+/* Chips, in the colour chips are everywhere in this building. */
+.rl__won-up {
+  font-family: var(--gr-font-data);
+  font-weight: 700;
+  color: var(--gr-color-chip);
+  flex: none;
+}
+
+/*
+ * The newest one, arriving.
+ *
+ * It comes up from under the board rather than fading in on the spot, because
+ * that is where it came from: the spin that just settled is below this, on the
+ * felt. One pass and done — a board that pulsed would be claiming something is
+ * still happening after the wheel has stopped.
+ */
+.rl__won--latest {
+  animation: rl-won 420ms cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  border-color: color-mix(in srgb, var(--rl-brass-lit) 55%, transparent);
+}
+
+@keyframes rl-won {
+  from {
+    transform: translateY(9px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl__won--latest {
+    animation: none;
+  }
 }
 
 /* The tray of chips you are betting with. */
@@ -942,5 +1105,11 @@
   }
   .rl__wheel-holds {
     width: 100%;
+  }
+  /* The cloth is about seven tenths of the container here rather than all of
+     it, so the same half-a-square works out to a smaller share of the query.
+     See the rule this overrides. */
+  .rl__pile .stack {
+    width: clamp(22px, 2.5cqw, 40px);
   }
 }
