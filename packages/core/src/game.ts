@@ -118,8 +118,21 @@ export interface GameAdapter<T extends PlayTable = PlayTable> {
    * it must take its work off the queue before its first await, which is what
    * makes calling it often exactly-once per item rather than a way to pay
    * somebody twice.
+   *
+   * Returning `true` asks the room to send the state again.
+   *
+   * Almost nothing needs that. Every other game moves its state synchronously
+   * and moves money afterwards — a hand is over the instant the last card
+   * lands, and settling only catches the chips up — so by the time this runs
+   * the players have already been told everything. Death roll is the
+   * exception: its antes are taken here, because taking one is asynchronous
+   * and a duel begins on a timer, so the duel it starts would otherwise be
+   * invisible until something unrelated woke the table.
+   *
+   * A game that returns `true` on every call is a broadcast calling a
+   * broadcast. Return it only for the call that actually changed something.
    */
-  payOut?(table: T, deps: GameDeps): Promise<void>;
+  payOut?(table: T, deps: GameDeps): Promise<void | boolean>;
 
   /**
    * The seats that just won, asked once a table is settled.
