@@ -404,6 +404,24 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     });
   });
 
+  describe("the leaderboard", () => {
+    it("orders by chips and answers a rank from outside the page", async () => {
+      const rich = await newPlayer();
+      const middle = await newPlayer();
+      const poor = await newPlayer();
+      await store.adjustChips(rich.id, 5_000);
+      await store.adjustChips(poor.id, -5_000);
+
+      const board = await store.leaderboard({ sort: "chips", limit: 1, you: poor.id });
+      expect(board.rows).toHaveLength(1);
+      expect(board.rows[0]?.id).toBe(rich.id);
+      expect(board.you?.row.id).toBe(poor.id);
+      // Two players hold more than this one, whatever else is in the database.
+      expect(board.you?.rank).toBeGreaterThanOrEqual(3);
+      expect(middle.id).not.toBe(rich.id);
+    });
+  });
+
   /**
    * An emote's files, all the way out and back.
    *
