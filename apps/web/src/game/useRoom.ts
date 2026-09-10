@@ -215,7 +215,20 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
       });
     });
     socket.on("disconnect", () => setConnected(false));
-    socket.on("connect_error", (error: Error) => setTaken(error.message));
+    socket.on("connect_error", (error: Error) => {
+      /*
+       * socket.io keeps retrying a transport failure and gives up on a
+       * middleware refusal, so `active` is what tells the two apart. Only the
+       * second is this window being turned away; the first is a connection to
+       * wait out, and dressing it as a refusal would tell somebody to close a
+       * tab they do not have open.
+       */
+      if (!socket.active) {
+        setTaken(error.message);
+      } else {
+        setError("Cannot reach the server. Is it running?");
+      }
+    });
     socket.on("room:state", (raw) => {
       /*
        * One channel now carries every game's state, so what arrives is checked

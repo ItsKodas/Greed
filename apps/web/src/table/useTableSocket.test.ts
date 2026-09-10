@@ -10,6 +10,9 @@ const fake = {
   emit: vi.fn(),
   close: vi.fn(),
   connect: vi.fn(),
+  // Mirrors socket.io's own flag: false once a middleware refusal has given
+  // up on reconnecting, true while a transport failure is still being retried.
+  active: true,
 };
 const made = vi.fn(() => fake);
 
@@ -22,6 +25,7 @@ describe("what a table window tells the server about itself", () => {
     handlers.clear();
     made.mockClear();
     window.sessionStorage.clear();
+    fake.active = true;
   });
 
   it("names its game and its window in the handshake", () => {
@@ -39,6 +43,8 @@ describe("what a table window tells the server about itself", () => {
      * wait, the other says go and close a tab.
      */
     const { result } = renderHook(() => useTableSocket("blackjack", () => {}));
+    // A middleware refusal is one socket.io has given up retrying.
+    fake.active = false;
     handlers.get("connect_error")?.(
       new Error("You already have Blackjack open in another window."),
     );
@@ -52,10 +58,24 @@ describe("what a table window tells the server about itself", () => {
 
   it("asks again when told to, because socket.io will not on its own", async () => {
     const { result } = renderHook(() => useTableSocket("blackjack", () => {}));
+    fake.active = false;
     handlers.get("connect_error")?.(new Error("You already have Blackjack open in another window."));
     await waitFor(() => expect(result.current.taken).not.toBeNull());
     result.current.retry();
     expect(fake.connect).toHaveBeenCalled();
     await waitFor(() => expect(result.current.taken).toBeNull());
+  });
+
+  it("leaves a dropped connection alone, because it is not a refusal", async () => {
+    /*
+     * connect_error also fires for an ordinary transport failure, and
+     * socket.io keeps retrying those on its own — `active` stays true. That
+     * is nothing this window did wrong, so it must not be shown as one.
+     */
+    const { result } = renderHook(() => useTableSocket("blackjack", () => {}));
+    fake.active = true;
+    handlers.get("connect_error")?.(new Error("xhr poll error"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(result.current.taken).toBeNull();
   });
 });
