@@ -148,6 +148,16 @@ export interface BackRoomServerOptions {
   clientOrigin?: string;
   /** Off in tests: there is no built client to serve. */
   serveClient?: boolean;
+  /**
+   * Where that built client is.
+   *
+   * An option only so a test can hand over a directory it wrote itself. The
+   * head this server injects is the whole of what a link unfurls into, and
+   * checking that meant either depending on a real `vite build` having been
+   * run — a test that passes or fails on whether somebody remembered — or
+   * being able to point this somewhere.
+   */
+  clientDist?: string;
   /** Range of the bot's fake thinking time. Tests set this to nearly nothing. */
   botDelayMs?: number | null;
   /** Where profiles and chips live. Defaults to memory, which is a real mode. */
@@ -271,6 +281,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     emptyRoomTtlMs = 5 * 60 * 1000,
     clientOrigin = "http://localhost:5173",
     serveClient = true,
+    clientDist: clientDistOption,
     botDelayMs = null,
     store = new MemoryStore(),
     auth = readAuthConfig(process.env),
@@ -288,7 +299,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    */
   const rooms = new Map<string, Seated>();
   const here = dirname(fileURLToPath(import.meta.url));
-  const clientDist = join(here, "../../web/dist");
+  const clientDist = clientDistOption ?? join(here, "../../web/dist");
   /** Draws the picture a link unfurls into, and keeps the last few. */
   const cards = new Cards(join(here, "../assets/fonts"));
   /** Players' faces, so a link to a table shows who is already at it. */
@@ -1088,7 +1099,18 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   });
 
   if (serveClient) {
-    app.use(express.static(clientDist));
+    /*
+     * Files only. Never the index.
+     *
+     * `express.static` answers a directory with its index.html by default, and
+     * the site's own front door is a directory — so "/" was served the built
+     * file straight off the disk and never reached the handler below that
+     * writes the head. Which is the one address that gets pasted more than any
+     * table's: it unfurled with the defaults baked into index.html, whose
+     * og:image is a *relative* path, and a relative one reaches nobody. Every
+     * other address was fine, so nothing looked wrong anywhere.
+     */
+    app.use(express.static(clientDist, { index: false }));
 
     /**
      * The built page, read once.

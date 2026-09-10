@@ -1,8 +1,16 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { GameListing } from "@backroom/core";
+import { COMING } from "@backroom/core";
+import { BLACKJACK } from "@backroom/game-blackjack";
+import { GREED } from "@backroom/game-greed";
+import { POKER } from "@backroom/game-poker";
+import { POCKETS, ROULETTE } from "@backroom/game-roulette";
+import { SLOTS } from "@backroom/game-slots";
+import { TIPS } from "@backroom/game-tips";
 import { describe, expect, it } from "vitest";
 import type { CardSpec } from "./og.js";
-import { Avatars, Cards, cardSvg, fit } from "./og.js";
+import { Avatars, Cards, cardSvg, fit, MOTIFS } from "./og.js";
 
 const FONTS = join(dirname(fileURLToPath(import.meta.url)), "../assets/fonts");
 
@@ -71,6 +79,105 @@ describe("the card a link unfurls into", () => {
     };
     expect(cardSvg({ ...table, game: greed })).toContain('rx="20"');
     expect(cardSvg({ ...table, game: null, code: null })).not.toContain("rx=\"20\"");
+  });
+});
+
+/*
+ * The picture every game unfurls into.
+ *
+ * A card falls back to the house's own chip when a game has no furniture of
+ * its own, which is right for a name on a door and wrong for a game somebody
+ * can sit down at: a link to the wheel that unfurls into a chip is a link that
+ * says "a casino" where it should be saying which game. Nothing failed when
+ * four of the six were doing exactly that — a card still rendered, and still
+ * had the right words on it.
+ */
+const DEALT: readonly GameListing[] = [GREED, BLACKJACK, SLOTS, POKER, ROULETTE, TIPS];
+
+/** One card for a whole game, which is the shape a link to /roulette unfurls into. */
+const banner = (game: GameListing): string =>
+  cardSvg({
+    game: { id: game.id, name: game.name, theme: game.theme, mark: game.mark },
+    host: null,
+    code: null,
+    players: [],
+    maxSeats: game.maxSeats,
+    note: game.blurb,
+  });
+
+describe("the furniture on a game's card", () => {
+  it("gives every game the room deals something of its own", () => {
+    for (const game of DEALT) {
+      expect(Object.keys(MOTIFS), game.id).toContain(game.id);
+    }
+  });
+
+  it("draws a different thing for each of them", () => {
+    /*
+     * The other half of the check above, and the one that catches the lazy
+     * version of it: a motif added by copying its neighbour and never edited
+     * has an entry, passes, and puts blackjack's cards on the poker card.
+     */
+    const drawn = DEALT.map((game) => MOTIFS[game.id]?.() ?? "");
+    expect(new Set(drawn).size).toBe(DEALT.length);
+  });
+
+  it("puts that furniture on the card itself, not just in the record", () => {
+    // The record is only worth having if `cardSvg` reaches for it.
+    for (const game of DEALT) {
+      const own = MOTIFS[game.id]?.() ?? "";
+      expect(own.length, game.id).toBeGreaterThan(0);
+      expect(banner(game), game.id).toContain(own);
+    }
+  });
+
+  it("cuts the wheel from the order the rules lay the rim out in", () => {
+    /*
+     * Borrowed rather than copied, the same as the felt's wheel and the tile's.
+     * A wheel drawn in counting order stops alternating colours half way round
+     * — a picture that lies about the game it is advertising.
+     */
+    const wheel = MOTIFS["roulette"]?.() ?? "";
+    expect((wheel.match(/<path /g) ?? []).length).toBe(POCKETS);
+    // And the zero, which is the one pocket belonging to neither colour.
+    expect(wheel).toContain("#17663f");
+  });
+
+  it("gives the machine as many reels as it has", () => {
+    // Five, because the machine has five. A card advertising three is a card
+    // advertising a different game.
+    const machine = MOTIFS["slots"]?.() ?? "";
+    expect((machine.match(/clip-path="url\(#reel/g) ?? []).length).toBe(5);
+  });
+
+  it("does not put a jackpot on the poster", () => {
+    /*
+     * Five of the same thing across the middle is a win on a banner for a
+     * machine nobody has played. Counted by kind rather than by strip: the
+     * point is that the window is showing a mixture at all.
+     */
+    const machine = MOTIFS["slots"]?.() ?? "";
+    const kinds = [/font-family="Bevan"/, /fill="#5fc9e8"/, /fill="#e8ecf3"/].filter((kind) =>
+      kind.test(machine),
+    );
+    expect(kinds).toHaveLength(3);
+  });
+
+  it("still draws a card for a game listed before it exists", () => {
+    /*
+     * The fallback is deliberate rather than an oversight. A game with no rules
+     * yet has no furniture to draw, and the house chip is the honest picture of
+     * a name on a door — so this pins that a coming-soon card renders, and that
+     * it is not quietly claiming to be one of the games above.
+     */
+    const soon = COMING[0] as GameListing;
+    expect(Object.keys(MOTIFS)).not.toContain(soon.id);
+    const card = banner(soon);
+    // The house chip, drawn large, which is what "no furniture yet" looks like.
+    expect(card).toContain('r="122"');
+    for (const game of DEALT) {
+      expect(card, game.id).not.toContain(MOTIFS[game.id]?.() ?? "never");
+    }
   });
 });
 

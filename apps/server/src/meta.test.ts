@@ -1,3 +1,10 @@
+import type { GameListing } from "@backroom/core";
+import { BLACKJACK } from "@backroom/game-blackjack";
+import { GREED } from "@backroom/game-greed";
+import { POKER } from "@backroom/game-poker";
+import { ROULETTE } from "@backroom/game-roulette";
+import { SLOTS } from "@backroom/game-slots";
+import { TIPS } from "@backroom/game-tips";
 import { describe, expect, it } from "vitest";
 import type { Lookups } from "./meta.js";
 import { headTags, inject, pageFor } from "./meta.js";
@@ -50,6 +57,32 @@ describe("what an address says about itself", () => {
     expect(page.title).toBe("Blackjack · The Back Room");
     expect(page.description).toContain("Beat the dealer to twenty-one.");
     expect(page.image).toBe("https://back.example/og/blackjack.png");
+  });
+
+  it("sends every game to a card of its own rather than to the room's", () => {
+    /*
+     * The other end of the picture. `og.ts` draws each game its own furniture,
+     * and that is worth nothing if the head points every one of them at the
+     * same file — a link to the wheel that unfurls into the house banner is a
+     * link that says "a casino" where it should be saying which game.
+     */
+    const dealt: readonly GameListing[] = [GREED, BLACKJACK, SLOTS, POKER, ROULETTE, TIPS];
+    const all: Lookups = {
+      game: (id) => {
+        const found = dealt.find((game) => game.id === id);
+        return found === undefined
+          ? null
+          : { name: found.name, blurb: found.blurb, maxSeats: found.maxSeats };
+      },
+      table: () => null,
+    };
+
+    const images = dealt.map((game) => pageFor(`/${game.id}`, SITE, all).image);
+    for (const [at, game] of dealt.entries()) {
+      expect(images[at], game.id).toBe(`${SITE}/og/${game.id}.png`);
+    }
+    expect(new Set(images).size).toBe(dealt.length);
+    expect(images).not.toContain(`${SITE}/og/site.png`);
   });
 
   it("falls back to the room when the code is not a table any more", () => {
