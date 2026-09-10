@@ -181,3 +181,98 @@
     transition: none;
   }
 }
+
+/*
+ * The card at the front door: the top three and your own place, nothing
+ * more. It always links to the board — signed out it has nothing to show and
+ * says so instead of disappearing, because a page you cannot see yet is
+ * better than a page you never learn is there.
+ */
+.standings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  padding: var(--gr-space-3);
+  min-height: 44px;
+  border: var(--gr-edge-soft);
+  border-radius: var(--gr-radius-sm);
+  background:
+    radial-gradient(80% 60% at 50% -10%, var(--gr-color-smoke-lit) 0%, transparent 70%),
+    var(--gr-color-night);
+  text-decoration: none;
+  color: inherit;
+}
+
+.standings:hover {
+  border-color: color-mix(in srgb, var(--gr-color-neon) 45%, transparent);
+}
+
+.standings:focus-visible {
+  outline: 2px solid var(--gr-color-neon);
+  outline-offset: 2px;
+}
+
+.standings__note {
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
+
+.standings__top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gr-space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.standings__place {
+  display: flex;
+  align-items: center;
+  gap: var(--gr-space-2);
+  min-width: 0;
+}
+
+.standings__place b {
+  width: 1.2rem;
+  flex: none;
+  font-family: var(--gr-font-data);
+  color: var(--gr-color-ink-dim);
+  text-align: right;
+}
+
+.standings__face {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: var(--gr-color-smoke);
+  border: 2px solid var(--gr-color-neon-dim);
+  font-weight: 600;
+  font-size: var(--gr-text-xs);
+}
+
+.standings__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.standings__chips {
+  flex: none;
+  font-family: var(--gr-font-data);
+  color: var(--gr-color-chip-hi);
+}
+
+.standings__you {
+  margin: 0;
+  padding-top: var(--gr-space-2);
+  border-top: 1px solid var(--gr-color-smoke-lit);
+  font-size: var(--gr-text-sm);
+  color: var(--gr-color-ink-dim);
+}
