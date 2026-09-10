@@ -27,19 +27,31 @@ describe("where the ball ends up", () => {
     expect(angleOf(WHEEL.at(-1) as number)).toBeCloseTo((360 / POCKETS) * 36, 6);
   });
 
+  /** The whole degrees in a `calc(var(--x) ± Ndeg)`, or null if it is not one. */
+  const offsetIn = (value: string): number | null => {
+    const found = /calc\(var\(--[a-z-]+\)\s*([+-])\s*([\d.]+)deg\)/.exec(value);
+    return found === null ? null : Number(found[2]) * (found[1] === "-" ? -1 : 1);
+  };
+
   it("brings the ball round a whole number of times to get there", () => {
     /*
      * Where it lands is the pocket's business — see "still puts the ball in the
      * true pocket" below. What this pins is the travel: the ball must arrive
      * from a whole number of turns away, or the number of revolutions changes
      * with the pocket and a spin to 32 looks visibly longer than a spin to 3.
+     *
+     * Read off the expression rather than off two numbers subtracted, because
+     * that is how it is written: a difference of separately-rounded decimals is
+     * only whole to about the twelfth place, and this used to fail one run in
+     * eight for exactly that reason.
      */
     const { container } = render(<Wheel pocket={17} spinning />);
-    const style = styleOf(container);
-    const from = Number.parseFloat(style.getPropertyValue("--ball-from"));
-    const to = Number.parseFloat(style.getPropertyValue("--ball-to"));
-    expect((to - from) % 360).toBe(0);
-    expect(to - from).toBeGreaterThan(0);
+    const travel = offsetIn(styleOf(container).getPropertyValue("--ball-from"));
+    expect(travel).not.toBeNull();
+    // Absolute before the modulo: the ball travels backwards to its start, and
+    // in JavaScript -4680 % 360 is negative zero, which `toBe(0)` refuses.
+    expect(Math.abs(travel as number) % 360).toBe(0);
+    expect(travel).toBeLessThan(0);
   });
 
   it("turns the rim a whole number of times", () => {
@@ -50,11 +62,10 @@ describe("where the ball ends up", () => {
      * pocket's own angle away from where the rim finished.
      */
     const { container } = render(<Wheel pocket={17} spinning />);
-    const style = styleOf(container);
-    const from = Number.parseFloat(style.getPropertyValue("--rim-from"));
-    const rest = Number.parseFloat(style.getPropertyValue("--rim-rest"));
-    expect((from - rest) % 360).toBe(0);
-    expect(from - rest).toBeGreaterThan(0);
+    const travel = offsetIn(styleOf(container).getPropertyValue("--rim-from"));
+    expect(travel).not.toBeNull();
+    expect((travel as number) % 360).toBe(0);
+    expect(travel).toBeGreaterThan(0);
   });
 
   it("does not park in the same place every time", () => {
@@ -82,14 +93,12 @@ describe("where the ball ends up", () => {
      * ever drift apart the ball lands visibly in the wrong number while the
      * table pays out on the right one.
      */
-    for (let go = 0; go < 8; go += 1) {
-      const { container } = render(<Wheel pocket={17} spinning />);
-      const style = styleOf(container);
-      const rest = Number.parseFloat(style.getPropertyValue("--rim-rest"));
-      const to = Number.parseFloat(style.getPropertyValue("--ball-to"));
-      expect(to - rest).toBeCloseTo(angleOf(17), 6);
-      cleanup();
-    }
+    const { container } = render(<Wheel pocket={17} spinning />);
+    const to = styleOf(container).getPropertyValue("--ball-to");
+    // Written as the rim's own resting place plus the pocket's angle, so the
+    // two cannot drift by so much as a rounding error however the rim lands.
+    expect(offsetIn(to)).toBeCloseTo(angleOf(17), 9);
+    expect(to).toContain("var(--rim-rest)");
   });
 
   it("sends the ball the opposite way to the rim", () => {
@@ -97,12 +106,9 @@ describe("where the ball ends up", () => {
     // spinner; going opposite ways it is unmistakably a roulette wheel.
     const { container } = render(<Wheel pocket={17} spinning />);
     const style = styleOf(container);
-    const rimFrom = Number.parseFloat(style.getPropertyValue("--rim-from"));
-    const ballFrom = Number.parseFloat(style.getPropertyValue("--ball-from"));
-    const ballTo = Number.parseFloat(style.getPropertyValue("--ball-to"));
-    // The rim winds down from positive to zero; the ball winds up to its pocket.
-    expect(rimFrom).toBeGreaterThan(0);
-    expect(ballTo - ballFrom).toBeGreaterThan(0);
+    // The rim winds down towards its rest; the ball winds up to its pocket.
+    expect(offsetIn(style.getPropertyValue("--rim-from"))).toBeGreaterThan(0);
+    expect(offsetIn(style.getPropertyValue("--ball-from"))).toBeLessThan(0);
   });
 
   it("takes its own time from the table rather than choosing one", () => {

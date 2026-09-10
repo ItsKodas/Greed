@@ -8,6 +8,28 @@
  * phone and a wide desk without a breakpoint for every element on it.
  */
 
+/*
+ * Roulette wants the width, where a card game does not.
+ *
+ * Every game in the building is laid out inside a thousand pixels, which is
+ * right for a felt you read cards off — a hand is a few objects and making
+ * them enormous only moves your eye further. A roulette cloth is fourteen
+ * squares across carrying thirty-seven numbers, and it is the thing you aim
+ * at; every pixel of width is a bigger target. So this room takes the screen
+ * it is given, up to the point where the cloth stops being a table and starts
+ * being a wall.
+ */
+/*
+ * Both classes, not one. `.play` sets its own max-width in game.css and a
+ * single class here only ties with it — which then loses on whichever
+ * stylesheet the bundler happened to put last, silently, with the page simply
+ * staying the width it always was. This stylesheet's ancestors have lost that
+ * argument twice.
+ */
+.play.play--wheel {
+  max-width: min(1560px, 96vw);
+}
+
 .rl {
   container-type: inline-size;
   display: grid;
@@ -623,6 +645,9 @@
 .rl__chip {
   background: none;
   border: none;
+  /* Scales with the table rather than the page: a tray on a wide screen is a
+     row of targets, and there is no reason for them to stay small. */
+  width: clamp(38px, 5cqw, 62px);
   padding: 2px;
   border-radius: 50%;
   cursor: pointer;
@@ -633,6 +658,12 @@
 
 .rl__chip:hover:not(:disabled) {
   opacity: 0.85;
+}
+
+.rl__chip svg {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 .rl__chip--picked {
@@ -701,10 +732,29 @@
 
 /* ------------------------------------------------------------- the controls */
 
+/*
+ * The tray and the three buttons, side by side where there is room.
+ *
+ * They are one thing — what you are betting with, and what you can do about
+ * what you have already bet — and stacking them put a column of controls under
+ * a table that was mostly empty either side.
+ */
 .rl__controls {
   display: grid;
-  gap: var(--gr-space-2);
+  gap: var(--gr-space-3);
   justify-items: center;
+}
+
+@container (min-width: 720px) {
+  .rl__controls {
+    grid-template-columns: auto auto;
+    justify-content: center;
+    align-items: center;
+    gap: var(--gr-space-5);
+  }
+  .rl__note {
+    grid-column: 1 / -1;
+  }
 }
 
 .rl__acts {
@@ -714,25 +764,52 @@
   justify-content: center;
 }
 
+/*
+ * All three the same weight, deliberately.
+ *
+ * One of them spends money — "same again" puts a whole round back down — and
+ * lighting it the way a primary action is usually lit would be the felt
+ * leaning on the player. Poker's raise stopped being the bright one for
+ * exactly this reason.
+ */
 .rl__act {
-  /* Thumb-sized: these are pressed during a window that is closing. */
-  min-height: 40px;
-  padding: 0 var(--gr-space-3);
+  /* Big enough for a thumb: these are pressed against a closing window. */
+  min-height: 52px;
+  min-width: 116px;
+  padding: var(--gr-space-2) var(--gr-space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   border-radius: var(--gr-radius-sm);
   border: var(--gr-edge-soft);
   background: rgb(255 255 255 / 0.05);
   color: var(--gr-color-ink);
-  font-size: var(--gr-text-sm);
   cursor: pointer;
+  transition: background 120ms ease;
 }
 
 .rl__act:hover:not(:disabled) {
-  background: rgb(255 255 255 / 0.1);
+  background: rgb(255 255 255 / 0.11);
 }
 
 .rl__act:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: default;
+}
+
+.rl__act-name {
+  font-size: var(--gr-text-base);
+  line-height: 1.1;
+}
+
+/* What it will actually do, because three verbs alone are three guesses. */
+.rl__act-note {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gr-color-ink-faint);
 }
 
 .rl__note {
@@ -740,6 +817,13 @@
   text-align: center;
   font-size: var(--gr-text-sm);
   color: var(--gr-color-ink-dim);
+}
+
+/* Money is gold everywhere in this building, including in a sentence. */
+.rl__note-figure {
+  color: var(--gr-color-chip);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* ---------------------------------------------------------------- the seats */

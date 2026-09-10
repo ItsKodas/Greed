@@ -65,7 +65,7 @@ export function Roulette() {
   }
 
   return (
-    <main className="play">
+    <main className="play play--wheel">
       <Navbar
         game="Roulette"
         {...(state !== null
@@ -263,43 +263,66 @@ function Controls({
             disabled={purse !== null && value > purse}
             onClick={() => onChip(value)}
           >
-            <Chip amount={value} size={40} />
+            <Chip amount={value} />
           </button>
         ))}
       </div>
 
+      {/*
+        Three buttons, all the same weight.
+
+        One of them spends money — "same again" puts a whole round back down —
+        and lighting it up the way a primary action is usually lit would be the
+        felt leaning on the player. The same reason poker's raise stopped being
+        the bright one.
+      */}
       <div className="rl__acts">
         <button
           type="button"
           className="rl__act"
-          disabled={!open || table.busy}
+          /* Written out, not left to how the two spans happen to sit: a name
+             and a note with nothing between them read as one run-on word. */
+          aria-label="Put last round's chips down again"
+          disabled={!open || !state.canRepeat || table.busy}
           onClick={() => table.act({ type: "repeat" })}
         >
-          Same again
+          <span className="rl__act-name">Same again</span>
+          <span className="rl__act-note">Last round's chips</span>
         </button>
         <button
           type="button"
           className="rl__act"
+          aria-label="Undo the last chip you put down"
           disabled={!open || down === 0 || table.busy}
           onClick={() => table.act({ type: "undo" })}
         >
-          Undo
+          <span className="rl__act-name">Undo</span>
+          <span className="rl__act-note">The last chip down</span>
         </button>
         <button
           type="button"
           className="rl__act"
+          aria-label="Take back everything you have on the cloth"
           disabled={!open || down === 0 || table.busy}
           onClick={() => table.act({ type: "clear" })}
         >
-          Take it all back
+          <span className="rl__act-name">Clear</span>
+          <span className="rl__act-note">Everything you have on</span>
         </button>
       </div>
 
       <p className="rl__note">
-        {down > 0 ? `${fmt(down)} on the cloth. ` : ""}
-        {purse === null
-          ? "Right-click a chip, or press and hold, to take it back off."
-          : `${fmt(purse)} in play money left. Right-click a chip to take it back off.`}
+        {down > 0 ? (
+          <>
+            <strong className="rl__note-figure">{fmt(down)}</strong> on the cloth.{" "}
+          </>
+        ) : null}
+        {purse === null ? null : (
+          <>
+            <strong className="rl__note-figure">{fmt(purse)}</strong> in play money left.{" "}
+          </>
+        )}
+        Right-click a chip, or press and hold, to take it back off.
       </p>
     </div>
   );

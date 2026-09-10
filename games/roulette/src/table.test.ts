@@ -248,6 +248,20 @@ describe("a roulette table", () => {
     expect(one.bank).toBe(before - 500);
   });
 
+  it("says whether there is a last round to put down again", () => {
+    // A button offering to repeat nothing is a button that lies.
+    const { one } = table(1);
+    expect(one.view("s1").canRepeat).toBe(false);
+    one.place("s1", RED, 50);
+    one.closeBetting();
+    one.land();
+    one.beginBetting();
+    expect(one.view("s1").canRepeat).toBe(true);
+    // And it is per seat: somebody who was not in that spin has nothing.
+    one.join("s2", "Bram", who("u2"));
+    expect(one.view("s2").canRepeat).toBe(false);
+  });
+
   it("shows a watcher the cloth but never anybody's account", () => {
     const { one } = table();
     one.place("s1", "straight:17", 100);

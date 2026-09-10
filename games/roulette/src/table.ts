@@ -78,6 +78,13 @@ export interface TableView {
   /** What the last spin paid, by seat. */
   paid: readonly { seatId: string; name: string; back: number; staked: number }[];
   /**
+   * Whether this seat has a last round to put down again.
+   *
+   * On the view because only the table knows it, and a button offering to
+   * repeat nothing is a button that lies about what it will do.
+   */
+  canRepeat: boolean;
+  /**
    * What the bank holds.
    *
    * For showing only — so a felt can grey out a spot it cannot cover. Every
@@ -485,6 +492,7 @@ export class Table {
         staked: one.staked,
       })),
       bank: this.bank,
+      canRepeat: forSeatId !== null && this.lastRound(forSeatId).length > 0,
       seats,
       you: seats.find((seat) => seat.id === forSeatId) ?? null,
       forFun: this.forFun,

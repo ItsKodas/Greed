@@ -47,6 +47,7 @@ const view = (over: Partial<TableView> = {}): TableView => ({
   watching: 0,
   lastEvent: null,
   window: 30_000,
+  canRepeat: false,
   ...over,
 });
 
@@ -105,7 +106,7 @@ describe("the roulette felt", () => {
 
   it("offers a watcher no controls at all", () => {
     render(<Felt table={stub().table} state={view({ you: null })} seatId={null} />);
-    expect(screen.queryByRole("button", { name: "Take it all back" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Take back everything/ })).toBeNull();
     expect(screen.getByText(/Take a seat to play/)).toBeTruthy();
   });
 
@@ -144,13 +145,41 @@ describe("the roulette felt", () => {
     expect((screen.getByRole("radio", { name: "Bet with 500" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("reads its buttons as sentences rather than as run-on words", () => {
+    /*
+     * Each of these is a word over a note, and two spans with nothing between
+     * them give an accessible name like "Undo The last chip down" — which is
+     * what a screen reader says out loud. Written once, so what it looks like
+     * and what it reads as cannot drift. Poker's felt learned this as "Call80".
+     */
+    render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect(screen.getByRole("button", { name: "Put last round's chips down again" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo the last chip you put down" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Take back everything you have on the cloth" }),
+    ).toBeTruthy();
+  });
+
+  it("will not offer to repeat a round that never happened", () => {
+    const nothing = render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect(
+      (nothing.getByRole("button", { name: /^Put last round/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    cleanup();
+
+    render(<Felt table={stub().table} state={view({ canRepeat: true })} seatId="s1" />);
+    expect(
+      (screen.getByRole("button", { name: /^Put last round/ }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
   it("has nothing to undo before anything is down", () => {
     render(<Felt table={stub().table} state={view()} seatId="s1" />);
-    expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: /^Undo the last chip/ }) as HTMLButtonElement).disabled).toBe(true);
     cleanup();
 
     const down = view({ you: seat({ id: "s1", name: "Ada", staked: 150 }), placed: [{ seatId: "s1", spotId: RED, chips: 150 }] });
     render(<Felt table={stub().table} state={down} seatId="s1" />);
-    expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("button", { name: /^Undo the last chip/ }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

@@ -150,13 +150,26 @@ export function Wheel({
    * lands visibly in the wrong number while the table pays out on the right
    * one, which is the worst way for this to be wrong.
    */
+  /*
+   * The three that matter are expressed as sums CSS works out, not as numbers
+   * added here.
+   *
+   * The relationships are what the spin is correct by: the rim travels whole
+   * turns, the ball travels whole turns, and the ball ends exactly its
+   * pocket's angle round from where the rim stopped. Added in JavaScript and
+   * printed as decimals, each of those survives only to about the twelfth
+   * place — an error far too small to see, but enough that "a whole number of
+   * turns" stops being exactly true, which is a thing a test can only be
+   * taught to tolerate rather than check. Written as calc(), they are exact
+   * because CSS never sees two separately-rounded numbers to subtract.
+   */
   const style = {
     "--rim-ease": RIM_EASE,
     "--ball-ease": BALL_EASE,
     "--rim-rest": `${rest}deg`,
-    "--rim-from": `${rest + RIM_TURNS * 360}deg`,
-    "--ball-to": `${home + rest}deg`,
-    "--ball-from": `${home + rest - BALL_TURNS * 360}deg`,
+    "--rim-from": `calc(var(--rim-rest) + ${RIM_TURNS * 360}deg)`,
+    "--ball-to": `calc(var(--rim-rest) + ${home}deg)`,
+    "--ball-from": `calc(var(--ball-to) - ${BALL_TURNS * 360}deg)`,
     "--spin-ms": `${spinMs}ms`,
   } as CSSProperties;
 
