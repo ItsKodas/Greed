@@ -15,6 +15,12 @@ import "./game/game.css";
  * any one game's, and every table can carry them.
  */
 import "./taunt/taunt.css";
+/*
+ * Here for the same reason as the two above: a window turned away from one
+ * game is turned away on every game's page, so its panel is the building's
+ * furniture rather than any one game's.
+ */
+import "./net/net.css";
 
 const container = document.getElementById("root");
 if (container === null) {
