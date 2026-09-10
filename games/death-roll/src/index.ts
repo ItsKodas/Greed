@@ -1,12 +1,17 @@
 /**
  * Death rolling: two people, and a number that only goes down.
  *
- * Only the listing so far — the arithmetic and the duel are worth reading on
- * their own for now, and gain their exports here once a table sits on top of
- * them. Without this, `@backroom/game-death-roll` has nothing a package.json
- * "main" of `./src/index.ts` can resolve, and the catalogue cannot tell this
- * game's real listing from its placeholder in COMING.
+ * The whole game in one package — its arithmetic, its duel, its table and its
+ * bot. It borrows seating and the shape of a table from @backroom/core and
+ * brings everything that makes it this game rather than another one.
  */
+export { edge, lossOdds, passCost, passGain, worthPassing } from "./odds.js";
+export type { Passed, Rolled } from "./duel.js";
+export { Duel } from "./duel.js";
+export type { Phase, SeatView, TableView } from "./table.js";
+export { Table } from "./table.js";
+export type { Choice } from "./bot.js";
+export { decide, thinkingTime } from "./bot.js";
 export {
   ANTE,
   CEILINGS,
@@ -16,9 +21,11 @@ export {
   OPENING,
   PASS_DIVISOR,
   RESULT_MS,
+  SHORT_RETRY_MS,
   STAKES,
   TURN_MS,
   anteFor,
   openingFor,
   passPrice,
 } from "./listing.js";
+export { deathRollAdapter } from "./adapter.js";
