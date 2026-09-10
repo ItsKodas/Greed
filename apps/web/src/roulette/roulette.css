@@ -94,10 +94,18 @@
   stroke-width: 0.7;
 }
 
-/* Where the ball actually is, which outranks merely being covered. */
+/*
+ * Where the ball actually is, which outranks merely being covered.
+ *
+ * White rather than the room's own light. Now that the room is lit red, a red
+ * glow on a red pocket is no glow at all — and this mark has to read the same
+ * on a red pocket, a black one and the green zero. White is the only thing
+ * that does all three, and it is also what a ball looks like.
+ */
 .rl__pocket--home {
-  stroke: var(--gr-color-neon);
-  stroke-width: 1.1;
+  stroke: var(--rl-ivory);
+  stroke-width: 1.3;
+  filter: drop-shadow(0 0 2px var(--rl-ivory));
 }
 
 .rl__pocket-number {
@@ -395,7 +403,9 @@
   position: absolute;
   display: grid;
   place-items: center;
-  border: 1px solid rgb(255 255 255 / 0.28);
+  /* The printing on the cloth. Stronger now the cloth is dark: on green these
+     lines had the felt's own lightness helping them. */
+  border: 1px solid rgb(255 255 255 / 0.34);
   font-weight: 700;
   color: var(--rl-ivory);
   /*
@@ -417,8 +427,16 @@
   background: var(--rl-green);
 }
 
+/*
+ * Lifted off the cloth rather than sunk into it.
+ *
+ * These were a dark overlay, which read as a printed panel on a green cloth
+ * and as nothing at all on an oxblood one — dark on dark. A light film reads
+ * as printing on either, and on this cloth it is the only thing separating the
+ * outside bets from the table they are printed on.
+ */
 .rl__outside {
-  background: rgb(0 0 0 / 0.22);
+  background: rgb(255 255 255 / 0.07);
   font-size: clamp(6px, 1.7cqw, 12px);
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -448,11 +466,18 @@
   color: var(--rl-ivory);
 }
 
-/* The number the ball landed in. */
+/*
+ * The number the ball landed in.
+ *
+ * White, for the same reason the pocket is: this has to pick one square out of
+ * thirty-seven, and eighteen of them are red. On the green cloth this was the
+ * room's own light and worked; on a red one it would have been a red ring
+ * round a red box.
+ */
 .rl__square--won {
   box-shadow:
-    inset 0 0 0 2px var(--gr-color-neon),
-    0 0 14px var(--gr-color-neon);
+    inset 0 0 0 2px var(--rl-ivory),
+    0 0 16px rgb(255 255 255 / 0.55);
   z-index: 3;
 }
 

@@ -15,6 +15,10 @@ export const ROULETTE: GameListing = {
   minSeats: 1,
   maxSeats: 8,
   mark: { text: "ROULETTE", accentAt: 4 },
-  theme: { wall: "#150f14", felt: "#14402c", accent: "#c8342f", accentHi: "#ff6b63" },
+  /*
+   * The same values theme.css sets, repeated because the link cards are drawn
+   * on the server where there is no stylesheet to read. They have to agree.
+   */
+  theme: { wall: "#160a0d", felt: "#4a181f", accent: "#d13a30", accentHi: "#ff7a6e" },
   open: true,
 };

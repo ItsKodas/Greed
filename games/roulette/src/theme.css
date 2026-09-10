@@ -10,40 +10,70 @@
  * the middle of it. Blackjack is a floor of felt; this is a felt table with a
  * lacquered mahogany wheel on it, so the room is darker and warmer than the
  * card room and the light is the low pool a wheel is lit by.
+ *
+ * And it is red, which the card rooms are not. Green is what a table you deal
+ * cards on looks like; a wheel is mahogany and brass and ivory, and those
+ * belong to a red room.
  */
 :root[data-game="roulette"],
 [data-game="roulette"] {
-  --gr-color-night: #120d11;
-  --gr-color-slate: #1c1419;
-  --gr-color-shadow: #070406;
-  --gr-color-smoke: #241a20;
-  --gr-color-smoke-lit: #30232b;
+  --gr-color-night: #160a0d;
+  --gr-color-slate: #211014;
+  --gr-color-shadow: #090305;
+  --gr-color-smoke: #2c1419;
+  --gr-color-smoke-lit: #3a1b21;
 
   /*
-   * Brighter and greener than the card room's, and than this started out.
+   * A red room, and a cloth deep enough to still be a cloth.
    *
-   * A blackjack felt is a surface you read two cards off, so it can be dark.
-   * A roulette cloth is printed: thirty-seven numbers, six outside boxes and
-   * every line between them, all of which have to carry against it. Taken
-   * deeper it stopped being a cloth and started being a shadow with numbers
-   * on it, which is what the first attempt looked like.
+   * This started green, the way a card room is, and red is the better answer
+   * for the one game in the building with a wheel in the middle of it: the
+   * mahogany, the brass and the ball all belong to a red room and were only
+   * ever tolerated by a green one.
+   *
+   * The depth is not a mood, though. A roulette cloth is printed with
+   * thirty-seven numbers and half of them are red, so a bright red cloth is
+   * one that swallows half the board. Taken down to oxblood the red cells lift
+   * off it clearly and the black ones still read, which is the only version of
+   * red this table can actually wear.
    */
-  --gr-color-felt: #0d7a3d;
-  --gr-color-felt-lit: #149450;
-  --gr-color-felt-deep: #085c2d;
+  --gr-color-felt: #4a181f;
+  --gr-color-felt-lit: #5c2029;
+  --gr-color-felt-deep: #330f15;
 
   /*
-   * The air over the table, warmed towards the wheel's mahogany rather than
-   * the felt's green. A wheel is the lit thing in this room and the air should
-   * agree with it.
+   * The air over the table, which a wheel is lit through. Warmer and redder
+   * than the felt so the light reads as falling on the table rather than as
+   * more table.
    */
-  --gr-color-air: #4a2119;
-  --gr-color-air-hi: #8d3d2c;
+  --gr-color-air: #6b2018;
+  --gr-color-air-hi: #c2503a;
 
-  --gr-color-ink: #ecdfd8;
-  --gr-color-ink-lit: #fff6f1;
-  --gr-color-ink-dim: #a08d85;
-  --gr-color-ink-faint: #6b5a55;
+  /*
+   * The tube, relit for this room, the way Greed's burns brass.
+   *
+   * What glowing *means* does not change — a lit edge is still something
+   * happening now — only what it is made of. Leaving it blue was what made the
+   * first red room look like a red room seen through the building's own light.
+   *
+   * The cost here is the one Greed pays with gold: the building's "bad" is a
+   * muted brick red, and a lit edge is now red too. It is survivable for the
+   * same reason — they never sit in the same role, because bad is a figure or
+   * a word and never a glowing edge — but the tube is deliberately hotter and
+   * lighter than that brick so the two do not read as the same red. The deep
+   * wash is pushed towards orange so the light thrown on the wall is not a
+   * second copy of the cloth.
+   */
+  --gr-color-neon-core: #fff1ec;
+  --gr-color-neon-hi: #ff9c8c;
+  --gr-color-neon: #e8443a;
+  --gr-color-neon-dim: #8f2820;
+  --gr-color-neon-deep: #c23a14;
+
+  --gr-color-ink: #f0dcd8;
+  --gr-color-ink-lit: #fff5f2;
+  --gr-color-ink-dim: #a68a86;
+  --gr-color-ink-faint: #705854;
 
   /*
    * The wheel's own materials, which nothing else in the building has.
@@ -56,8 +86,23 @@
   --rl-mahogany-lit: #6b3625;
   --rl-brass: #c9a227;
   --rl-brass-lit: #f0cf68;
-  --rl-red: #b3312c;
-  --rl-black: #1a1614;
+
+  /*
+   * The reds have to separate from the cloth as well as from each other, which
+   * they did not have to when the cloth was green. Brighter and a shade
+   * warmer, so a red number is plainly a number and not a patch of table.
+   */
+  --rl-red: #d13a30;
+  --rl-black: #17120f;
+
+  /*
+   * The zero stays green, and in a red room it is the only green thing.
+   *
+   * Which is right: it is the only pocket that belongs to neither colour, and
+   * every even-money bet on the cloth loses to it. On a green cloth that was a
+   * quiet fact; here the one green square on the table is the house, and
+   * looking like it is no bad thing.
+   */
   --rl-green: #17663f;
-  --rl-ivory: #f4ece2;
+  --rl-ivory: #f7efe9;
 }
