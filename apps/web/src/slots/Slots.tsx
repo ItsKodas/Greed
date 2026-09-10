@@ -22,6 +22,8 @@ import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
 import { Digits } from "../game/Digits.js";
+import { Taken } from "../net/Taken.js";
+import { windowId } from "../net/windowId.js";
 import { Fireworks } from "./Fireworks.js";
 import { Reel, REEL_STAGGER_MS } from "./Reel.js";
 import { FaceDefs } from "./Symbols.js";
@@ -510,6 +512,11 @@ export default function Slots() {
   /** Something refused. Separate from what a spin paid, and said straight away. */
   const [problem, setProblem] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  /**
+   * The server's reason for turning this window away, or null. Apart from
+   * `connected` on purpose: one says wait, the other says go and close a tab.
+   */
+  const [taken, setTaken] = useState<string | null>(null);
   /*
    * The stake, gone from the shown balance the moment it is pressed.
    *
@@ -538,15 +545,22 @@ export default function Slots() {
   const socketRef = useRef<SpinSocket | null>(null);
 
   useEffect(() => {
-    const socket = io("", { withCredentials: true }) as SpinSocket;
+    const socket = io("", {
+      withCredentials: true,
+      // One machine per account. The server needs the game and the window to
+      // tell a refresh from a second one of these.
+      auth: { game: "slots", window: windowId() },
+    }) as SpinSocket;
     socketRef.current = socket;
     socket.on("connect", () => {
+      setTaken(null);
       setConnected(true);
       // Stand at the machine. The backlog comes back with the ack, so the
       // wall is never briefly blank for somebody who has just walked up.
       socket.emit("slots:watch", {}, (recent) => setNews(recent));
     });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", (error: Error) => setTaken(error.message));
     socket.on("slots:spun", (spun) => {
       /*
        * Held while this machine is still turning.
@@ -1054,6 +1068,15 @@ export default function Slots() {
         connected={connected}
       />
 
+      {taken !== null ? (
+        <Taken
+          message={taken}
+          onRetry={() => {
+            setTaken(null);
+            socketRef.current?.connect();
+          }}
+        />
+      ) : (
       <div className="slots__floor">
         <SpinFeed
           title="At the machine"
@@ -1156,6 +1179,7 @@ export default function Slots() {
           side="right"
         />
       </div>
+      )}
     </main>
   );
 }
