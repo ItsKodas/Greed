@@ -6,6 +6,7 @@ import { useAccount } from "../game/useAccount.js";
 import { Navbar } from "../nav/Navbar.js";
 import { COLUMNS, pinned, ranked, winRate } from "./board.js";
 import type { Board, BoardRow, BoardSort } from "./board.js";
+import { useSlide } from "./useSlide.js";
 
 /**
  * Who is ahead.
@@ -36,9 +37,16 @@ export function Leaderboard() {
   }, [sort]);
 
   useEffect(() => {
-    void load().catch(() => {
-      // Same as above: the last answer is better than no answer.
-    });
+    const tick = () => {
+      void load().catch(() => {
+        // Same as above: the last answer is better than no answer.
+      });
+    };
+    tick();
+    // The same ten seconds the room refreshes its busyness on: the page is
+    // already in that rhythm, and a board rarely changes faster than that.
+    const timer = window.setInterval(tick, 10_000);
+    return () => window.clearInterval(timer);
   }, [load]);
 
   return (
@@ -68,9 +76,10 @@ function BoardTable({
   you: string | null;
 }) {
   const below = pinned(board);
+  const slide = useSlide(board.rows);
 
   return (
-    <div className="board">
+    <div className="board" ref={slide}>
       <div className="board__head">
         {COLUMNS.map((column) => (
           <button

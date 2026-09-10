@@ -118,6 +118,40 @@ describe("the leaderboard page", () => {
     expect(screen.getByText("Ada", inRow)).toBeTruthy();
   });
 
+  it("asks again on a clock, and shows the new order without being reloaded", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let answer = {
+      sort: "chips",
+      total: 2,
+      rows: [row("u1", "Ada", 900), row("u2", "Bram", 100)],
+      you: null,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.startsWith("/api/leaderboard")) {
+          return { ok: true, json: async () => answer };
+        }
+        return { ok: true, json: async () => ({ signedIn: false, signinAvailable: true }) };
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <Leaderboard />
+      </MemoryRouter>,
+    );
+    await screen.findByText("Ada", inRow);
+
+    answer = { ...answer, rows: [row("u2", "Bram", 5000), row("u1", "Ada", 900)] };
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    await waitFor(() => {
+      const names = screen.getAllByText(/Ada|Bram/).map((node) => node.textContent);
+      expect(names[0]).toBe("Bram");
+    });
+  });
+
   it("says to sign in rather than showing an empty board", async () => {
     vi.stubGlobal(
       "fetch",
