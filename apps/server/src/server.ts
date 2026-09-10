@@ -16,6 +16,11 @@ import {
 import { GREED, greedAdapter, RoomError } from "@backroom/game-greed";
 import { POKER, pokerAdapter } from "@backroom/game-poker";
 import {
+  ROULETTE,
+  rouletteAdapter,
+  STAKE_DIVISOR as ROULETTE_DIVISOR,
+} from "@backroom/game-roulette";
+import {
   countScatters,
   drawGrid,
   evaluate,
@@ -90,7 +95,7 @@ import { Avatars, Cards } from "./og.js";
  */
 const CATALOGUE = COMING.reduce(
   (catalogue, game) => catalogue.add(game),
-  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER).add(TIPS),
+  new Catalogue().add(GREED).add(BLACKJACK).add(SLOTS).add(POKER).add(TIPS).add(ROULETTE),
 );
 
 
@@ -822,6 +827,24 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
         ...(turnMs === undefined ? {} : { turnMs }),
       }) as GameAdapter<PlayTable>,
     ],
+    [
+      ROULETTE.id,
+      rouletteAdapter({
+        /*
+         * The wheel, from the same source the reels come from. A table hands
+         * every watcher its whole result every spin, which over an evening is
+         * exactly the run of observations needed to recover Math.random's
+         * state — and then the next pocket is not a question.
+         */
+        pick: (pockets: number) => Math.floor(spinRandom() * pockets),
+        /* Its own bank, kept apart from the machine's and the felt's. */
+        bank: {
+          holds: () => store.bank("roulette"),
+          add: (amount: number) => store.bankAdd("roulette", amount),
+          take: (amount: number) => store.bankTake("roulette", amount),
+        },
+      }) as GameAdapter<PlayTable>,
+    ],
   ]);
 
   /**
@@ -968,12 +991,29 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
     if (value === undefined || value === "slots") {
       return "slots";
     }
-    return value === "blackjack" ? "blackjack" : null;
+    if (value === "blackjack" || value === "roulette") {
+      return value;
+    }
+    return null;
   }
 
   /** What a bank can offer, which each game works out its own way. */
   function capOf(which: BankName, bank: number): number {
-    return which === "slots" ? maxStake(bank) : blackjackMaxStake(bank);
+    switch (which) {
+      case "slots":
+        return maxStake(bank);
+      case "blackjack":
+        return blackjackMaxStake(bank);
+      /*
+       * The worst the cloth can do to a lone chip: straight up, at 35 to 1.
+       * A real table is capped far more finely than this — every chip is
+       * measured against the whole cloth's exposure as it lands — but this
+       * route answers "what could the bank take at all", and that is the
+       * straight-up.
+       */
+      case "roulette":
+        return Math.max(0, Math.floor(Math.max(0, bank) / ROULETTE_DIVISOR));
+    }
   }
 
   /**
@@ -1772,6 +1812,7 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           forFun: parsed.data.forFun,
           maxSeats: parsed.data.maxSeats,
           buyIn: parsed.data.buyIn,
+          window: parsed.data.window,
         });
         rooms.set(code, { game, table, listed: parsed.data.listed ?? true });
         table.join(socket.id, seatNameFor(socket, parsed.data.name), socket.data.identity);

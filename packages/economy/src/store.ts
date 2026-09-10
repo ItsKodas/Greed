@@ -108,7 +108,16 @@ export interface GameRecord {
  * A closed set rather than a string, so a typo is a build error rather than a
  * bank nobody can find that quietly holds somebody's chips.
  */
-export type BankName = "slots" | "blackjack";
+/**
+ * The banks in the building, one per game that pays from one.
+ *
+ * Separate on purpose. A shared bank would be whichever game holds back the
+ * most quietly paying for the one that holds back the least — the machine
+ * keeps a tenth of what goes through it, a blackjack table about a
+ * two-hundredth and a single-zero wheel about a thirty-seventh, so one pot
+ * would be the machine funding the felt.
+ */
+export type BankName = "slots" | "blackjack" | "roulette";
 
 /**
  * A player's tip jar, structurally identical to `Jar` in

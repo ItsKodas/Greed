@@ -1,0 +1,215 @@
+// @vitest-environment jsdom
+import type { SeatView, TableView } from "@backroom/game-roulette";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TableSocketHook } from "../table/useTableSocket.js";
+import { Felt } from "./Roulette.js";
+
+afterEach(cleanup);
+
+/**
+ * The felt, given a table.
+ *
+ * Rendered against a real view rather than checked piecemeal, because the
+ * mistakes worth catching here only exist once the two are put together: a
+ * felt reading a field the view has not got, a control offered to somebody who
+ * may not press it, or the result on screen before the ball is in.
+ */
+
+const RED = "even:1-3-5-7-9-12-14-16-18-19-21-23-25-27-30-32-34-36";
+
+const seat = (over: Partial<SeatView> & { id: string; name: string }): SeatView => ({
+  connected: true,
+  waiting: false,
+  isBot: false,
+  avatar: null,
+  accentColor: null,
+  staked: 0,
+  paid: null,
+  purse: null,
+  ...over,
+});
+
+const view = (over: Partial<TableView> = {}): TableView => ({
+  code: "ABCDE",
+  phase: "betting",
+  deadline: Date.now() + 20_000,
+  lastCall: false,
+  pocket: null,
+  history: [],
+  placed: [],
+  paid: [],
+  bank: 1_000_000,
+  seats: [seat({ id: "s1", name: "Ada" })],
+  you: seat({ id: "s1", name: "Ada" }),
+  forFun: false,
+  hostId: "s1",
+  watching: 0,
+  lastEvent: null,
+  window: 30_000,
+  canRepeat: false,
+  ...over,
+});
+
+const stub = () => {
+  const act = vi.fn();
+  return {
+    table: { act, busy: false } as unknown as TableSocketHook<TableView>,
+    act,
+  };
+};
+
+describe("the roulette felt", () => {
+  it("takes a chip when the window is open", () => {
+    const { table, act } = stub();
+    render(<Felt table={table} state={view()} seatId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).toHaveBeenCalledWith(expect.objectContaining({ type: "place", spotId: "straight:17" }));
+  });
+
+  it("takes nothing once the wheel is turning", () => {
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ phase: "spinning", pocket: 17 })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).not.toHaveBeenCalled();
+  });
+
+  it("takes nothing at last call, so a late chip is never a race", () => {
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ lastCall: true })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).not.toHaveBeenCalled();
+  });
+
+  it("keeps the result off the cloth until the ball is in", () => {
+    /*
+     * The view carries the pocket all through the spin, because the wheel
+     * needs it to roll the ball to the right place. A felt that passed it
+     * straight through would light the winning square seconds early.
+     */
+    const spinning = render(<Felt table={stub().table} state={view({ phase: "spinning", pocket: 17 })} seatId="s1" />);
+    expect(spinning.container.querySelector(".rl__square--won")).toBeNull();
+    cleanup();
+
+    const settled = render(<Felt table={stub().table} state={view({ phase: "settled", pocket: 17 })} seatId="s1" />);
+    expect(settled.container.querySelector(".rl__square--won")).toBeTruthy();
+  });
+
+  it("refuses a chip the bank could not pay out on, and says so", () => {
+    /*
+     * The refusal is the server's either way. What this is about is the
+     * player: a press that does nothing at all and gives no reason is a
+     * broken button, and that is exactly what an empty bank felt like — every
+     * chip silently ignored, with the table looking perfectly normal.
+     */
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ bank: 0 })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toMatch(/bank/i);
+  });
+
+  it("says the bank is empty before anybody presses anything", () => {
+    // A table that cannot take a bet should say so while you are still
+    // deciding, not once you have tried and been ignored.
+    render(<Felt table={stub().table} state={view({ bank: 0 })} seatId="s1" />);
+    expect(screen.getByRole("status").textContent).toMatch(/nothing to play for yet/i);
+  });
+
+  it("names the cap when the bank can cover something but not this", () => {
+    // 3,500 covers exactly 100 straight up, so a 500 chip is too big for it
+    // and the player is told the number rather than left guessing.
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ bank: 3_500 })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("radio", { name: "Bet with 500" }));
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain("100");
+  });
+
+  it("takes the chip when the bank can cover it", () => {
+    const { table, act } = stub();
+    render(<Felt table={table} state={view({ bank: 3_500 })} seatId="s1" />);
+    fireEvent.click(screen.getByRole("button", { name: /^17, pays 35 to 1/ }));
+    expect(act).toHaveBeenCalled();
+  });
+
+  it("offers a watcher no controls at all", () => {
+    render(<Felt table={stub().table} state={view({ you: null })} seatId={null} />);
+    expect(screen.queryByRole("button", { name: /Take back everything/ })).toBeNull();
+    expect(screen.getByText(/Take a seat to play/)).toBeTruthy();
+  });
+
+  it("says what the table is doing", () => {
+    const open = render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect(open.container.textContent).toContain("Place your bets");
+    cleanup();
+
+    const last = render(<Felt table={stub().table} state={view({ lastCall: true })} seatId="s1" />);
+    expect(last.container.textContent).toContain("Last call");
+    cleanup();
+
+    const turning = render(<Felt table={stub().table} state={view({ phase: "spinning", pocket: 3 })} seatId="s1" />);
+    expect(turning.container.textContent).toContain("No more bets");
+  });
+
+  it("shows what each seat has down, and what the spin did to them", () => {
+    const state = view({
+      phase: "settled",
+      pocket: 32,
+      seats: [seat({ id: "s1", name: "Ada", staked: 200 }), seat({ id: "s2", name: "Bram", staked: 100 })],
+      paid: [
+        { seatId: "s1", name: "Ada", back: 400, staked: 200 },
+        { seatId: "s2", name: "Bram", back: 0, staked: 100 },
+      ],
+    });
+    render(<Felt table={stub().table} state={state} seatId="s1" />);
+    expect(screen.getByText("+200")).toBeTruthy();
+    expect(screen.getByText("-100")).toBeTruthy();
+  });
+
+  it("greys the tray down to what a play purse can afford", () => {
+    const state = view({ forFun: true, you: seat({ id: "s1", name: "Ada", purse: 60 }) });
+    render(<Felt table={stub().table} state={state} seatId="s1" />);
+    expect((screen.getByRole("radio", { name: "Bet with 25" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole("radio", { name: "Bet with 500" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("reads its buttons as sentences rather than as run-on words", () => {
+    /*
+     * Each of these is a word over a note, and two spans with nothing between
+     * them give an accessible name like "Undo The last chip down" — which is
+     * what a screen reader says out loud. Written once, so what it looks like
+     * and what it reads as cannot drift. Poker's felt learned this as "Call80".
+     */
+    render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect(screen.getByRole("button", { name: "Put last round's chips down again" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo the last chip you put down" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Take back everything you have on the cloth" }),
+    ).toBeTruthy();
+  });
+
+  it("will not offer to repeat a round that never happened", () => {
+    const nothing = render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect(
+      (nothing.getByRole("button", { name: /^Put last round/ }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    cleanup();
+
+    render(<Felt table={stub().table} state={view({ canRepeat: true })} seatId="s1" />);
+    expect(
+      (screen.getByRole("button", { name: /^Put last round/ }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("has nothing to undo before anything is down", () => {
+    render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect((screen.getByRole("button", { name: /^Undo the last chip/ }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+
+    const down = view({ you: seat({ id: "s1", name: "Ada", staked: 150 }), placed: [{ seatId: "s1", spotId: RED, chips: 150 }] });
+    render(<Felt table={stub().table} state={down} seatId="s1" />);
+    expect((screen.getByRole("button", { name: /^Undo the last chip/ }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});

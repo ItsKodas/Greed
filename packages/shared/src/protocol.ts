@@ -149,6 +149,15 @@ export interface ClientToServer {
        * down at, and it is not a number a client gets to invent.
        */
       buyIn?: number;
+      /**
+       * How long the table takes bets for, in milliseconds.
+       *
+       * The same kind of decision as the seat count: a wheel that comes round
+       * every fifteen seconds and one that comes round every minute are
+       * different games to sit at, so it is the host's rather than anybody's.
+       * Snapped to a level the game offers.
+       */
+      window?: number;
     },
     ack: (result: Ack) => void,
   ) => void;

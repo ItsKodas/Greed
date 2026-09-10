@@ -7,7 +7,8 @@
       "**/*.mjs",
       "!**/dist",
       "!**/node_modules",
-      "!apps/web/public"
+      "!apps/web/public",
+      "!.claude/worktrees"
     ]
   },
   "formatter": {
@@ -51,7 +52,9 @@
   "overrides": [
     {
       "includes": [
-        "apps/web/src/game/Table.tsx"
+        "apps/web/src/game/Table.tsx",
+        "apps/web/src/roulette/History.tsx",
+        "apps/web/src/style/RouletteMockup.tsx"
       ],
       "linter": {
         "rules": {

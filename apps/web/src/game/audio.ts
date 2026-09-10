@@ -48,7 +48,14 @@ export type Cue =
   | "sayRaise"
   | "sayAllIn"
   /* The pot going across the felt to whoever took it. */
-  | "potPush";
+  | "potPush"
+  /*
+   * The wheel. Everything continuous about a spin is scheduled in one go by
+   * `spinWheel`; these are the two moments around it — the window shutting,
+   * and the number the ball finally sat down in.
+   */
+  | "noMoreBets"
+  | "numberUp";
 
 interface Manifest {
   dice?: string[];
@@ -697,6 +704,28 @@ export function play(
         }
       });
       break;
+    /*
+     * Two firm knocks, the way a croupier raps the rim. Deliberately not a
+     * chime: this is an instruction and the last moment a chip can move, so it
+     * wants to sound like somebody's hand rather than like a notification.
+     */
+    case "noMoreBets":
+      noise(0.05, 320, 0.22, 0.7);
+      noise(0.05, 300, 0.18, 0.7);
+      tone({ frequency: 210, duration: 0.14, type: "sine", gain: 0.1, delay: 0.11 });
+      return;
+
+    /*
+     * The number arriving, once the ball is in. A small two-note figure rather
+     * than a win sound, because most spins are not wins and this one plays on
+     * every single one of them — it says "that is the number", and whether it
+     * was a good number is the felt's business.
+     */
+    case "numberUp":
+      tone({ frequency: 620, duration: 0.1, type: "sine", gain: 0.12 });
+      tone({ frequency: 930, duration: 0.22, type: "sine", gain: 0.1, delay: 0.07 });
+      return;
+
     case "sayCheck":
       /*
        * Two knuckles on the table, which is what a check actually is. Noise
@@ -1076,4 +1105,195 @@ export async function playEmoteSound(url: string, gain = 0.7): Promise<void> {
   level.gain.value = gain;
   source.connect(level).connect(master);
   source.start();
+}
+
+/**
+ * The whole of a roulette spin, as one scheduled sound.
+ *
+ * Placeholders. Every one of these is synthesised, and a ball on a lacquered
+ * track is exactly the sort of physical thing this file says should be
+ * sampled — so these are meant to be replaced, and are written to be easy to
+ * replace: one function, one call, nothing about the wheel's timings living
+ * anywhere else.
+ *
+ * Scheduled up front rather than driven by timers, and that is the part worth
+ * keeping whatever the sounds become. The whole arc is known the moment the
+ * ball is released, so every event is placed on the audio clock in one go.
+ * Timers fired from React would drift against the animation on a busy frame,
+ * and the drift a listener notices first is a clatter that does not land with
+ * the ball they can see.
+ *
+ * The four voices are the four things happening: the wheel's low hum dying
+ * with the rim, the ball's roll running the length of the spin, the frets it
+ * clatters through once it drops, and the click of it settling.
+ */
+export function spinWheel(options: {
+  /** How long the ball is in the air. */
+  spinMs: number;
+  /** When the wheel itself comes to rest, as a share of the spin. */
+  rimAt: number;
+  /** When the ball comes off the track, as a share of the spin. */
+  dropAt: number;
+  /**
+   * When each pocket passes the marker, as shares of the wheel's own run.
+   *
+   * Worked out from the curve the rim is animated by, so the clicks land on
+   * pockets the player can watch going past rather than on a rhythm chosen
+   * here. See spin.ts — this only schedules what it is given.
+   */
+  ticks?: readonly number[];
+}): () => void {
+  if (context === null || master === null || muted || volume === 0) {
+    return () => {};
+  }
+  const now = context.currentTime;
+  const seconds = options.spinMs / 1000;
+  const drop = now + seconds * options.dropAt;
+  const rimEnds = now + seconds * options.rimAt;
+  const settled = now + seconds * 0.97;
+
+  const stop: Array<{ stop(when: number): void }> = [];
+  const bus = context.createGain();
+  bus.gain.value = 1;
+  bus.connect(master);
+
+  /*
+   * The wheel: a low hum with a fifth above it, sliding down as the rim loses
+   * speed and gone by the time it stops. Two voices rather than one because a
+   * single sine reads as a test tone; a fifth apart it reads as mass.
+   */
+  const hum = context.createGain();
+  hum.gain.setValueAtTime(0.0001, now);
+  hum.gain.exponentialRampToValueAtTime(0.05, now + 0.4);
+  hum.gain.exponentialRampToValueAtTime(0.0001, rimEnds);
+  hum.connect(bus);
+  for (const [at, interval] of [
+    ["triangle", 1],
+    ["sine", 1.5],
+  ] as const) {
+    const osc = context.createOscillator();
+    osc.type = at;
+    osc.frequency.setValueAtTime(58 * interval, now);
+    osc.frequency.exponentialRampToValueAtTime(22 * interval, rimEnds);
+    osc.connect(hum);
+    osc.start(now);
+    stop.push(osc);
+  }
+
+  /*
+   * The ball: filtered noise, because a ball running a track is a rush of air
+   * and not a note. The filter opens high while it is up on the rim and closes
+   * as it slows, which is what makes it read as losing speed rather than
+   * simply getting quieter — a roll that only fades sounds like someone
+   * turning it down.
+   */
+  const frames = Math.floor(context.sampleRate * 2);
+  const rush = context.createBuffer(1, frames, context.sampleRate);
+  const data = rush.getChannelData(0);
+  for (let index = 0; index < frames; index += 1) {
+    data[index] = Math.random() * 2 - 1;
+  }
+  const roll = context.createBufferSource();
+  roll.buffer = rush;
+  roll.loop = true;
+  const band = context.createBiquadFilter();
+  band.type = "bandpass";
+  band.Q.value = 6;
+  band.frequency.setValueAtTime(1400, now);
+  band.frequency.linearRampToValueAtTime(1150, drop);
+  band.frequency.exponentialRampToValueAtTime(240, settled);
+  const rollLevel = context.createGain();
+  rollLevel.gain.setValueAtTime(0.0001, now);
+  rollLevel.gain.exponentialRampToValueAtTime(0.07, now + 0.25);
+  rollLevel.gain.setValueAtTime(0.07, drop);
+  rollLevel.gain.exponentialRampToValueAtTime(0.0001, settled);
+  roll.connect(band).connect(rollLevel).connect(bus);
+  roll.start(now);
+  stop.push(roll);
+
+  /*
+   * The frets: a run of clicks from the moment it comes off the track, coming
+   * closer together and quieter as it loses the last of its speed. Spaced by
+   * the same shape the ball is drawn with, so the last few crowd together the
+   * way they do when a ball is hunting a pocket.
+   */
+  const clatters = 11;
+  for (let index = 0; index < clatters; index += 1) {
+    const through = index / (clatters - 1);
+    const when = drop + (settled - drop) * (1 - (1 - through) ** 1.8);
+    const level = context.createGain();
+    level.gain.value = 0.16 * (1 - through) ** 0.8 + 0.02;
+    level.connect(bus);
+    const click = context.createBufferSource();
+    const short = Math.floor(context.sampleRate * 0.03);
+    const buf = context.createBuffer(1, short, context.sampleRate);
+    const bits = buf.getChannelData(0);
+    for (let at = 0; at < short; at += 1) {
+      bits[at] = (Math.random() * 2 - 1) * (1 - at / short) ** 3;
+    }
+    click.buffer = buf;
+    const edge = context.createBiquadFilter();
+    edge.type = "bandpass";
+    edge.frequency.value = 2600 - through * 1200;
+    edge.Q.value = 3;
+    click.connect(edge).connect(level);
+    click.start(when);
+    stop.push(click);
+  }
+
+  /*
+   * The rim's ticking: one click for each pocket going past the marker.
+   *
+   * Not a rhythm but the rotation itself, heard — which is why the times come
+   * from the same curve the rim is drawn with. They widen on their own as the
+   * wheel runs down, and that widening is the whole sound of a wheel stopping.
+   * Sharper and quieter than the ball's clatter through the frets, because a
+   * marker flicking over a fret is a lighter thing than a ball dropping onto
+   * one, and there are a great many more of them.
+   */
+  const rimRun = seconds * options.rimAt;
+  for (const share of options.ticks ?? []) {
+    const when = now + rimRun * share;
+    const level = context.createGain();
+    /*
+     * Loud enough to be a tick from the first one. They still swell as they
+     * thin out, so the last few carry, but the floor is what a wheel at speed
+     * is: a fast, present rattle rather than something faint behind the roll.
+     */
+    level.gain.value = 0.12 + 0.13 * share;
+    level.connect(bus);
+    const tick = context.createBufferSource();
+    const short = Math.floor(context.sampleRate * 0.012);
+    const buf = context.createBuffer(1, short, context.sampleRate);
+    const bits = buf.getChannelData(0);
+    for (let at = 0; at < short; at += 1) {
+      bits[at] = (Math.random() * 2 - 1) * (1 - at / short) ** 5;
+    }
+    tick.buffer = buf;
+    const edge = context.createBiquadFilter();
+    edge.type = "bandpass";
+    edge.frequency.value = 3400;
+    edge.Q.value = 8;
+    tick.connect(edge).connect(level);
+    tick.start(when);
+    stop.push(tick);
+  }
+
+  return () => {
+    if (context === null) {
+      return;
+    }
+    const at = context.currentTime;
+    const end = at + 0.1;
+    bus.gain.cancelScheduledValues(at);
+    bus.gain.setValueAtTime(Math.max(0.0001, bus.gain.value), at);
+    bus.gain.exponentialRampToValueAtTime(0.0001, end);
+    for (const node of stop) {
+      try {
+        node.stop(end + 0.02);
+      } catch {
+        // Already stopped, or never started. Neither is worth a fuss.
+      }
+    }
+  };
 }
