@@ -18,6 +18,7 @@ import { useTableSocket } from "../table/useTableSocket.js";
 import { Cloth } from "./Cloth.js";
 import { History } from "./History.js";
 import { Wheel } from "./Wheel.js";
+import { Winners } from "./Winners.js";
 import "@backroom/game-roulette/theme.css";
 import "./roulette.css";
 
@@ -207,7 +208,12 @@ export function Felt({
         />
       </div>
 
-      <History pockets={state.history} />
+      {/* The two boards, together: what the wheel has been doing, and what it
+          has been worth to the people sitting at it. */}
+      <div className="rl__boards">
+        <History pockets={state.history} />
+        <Winners winners={state.winners} />
+      </div>
 
       {mine === null ? (
         <p className="rl__watching">{state.watching} watching. Take a seat to play.</p>

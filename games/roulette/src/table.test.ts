@@ -1,6 +1,6 @@
 import { TableError } from "@backroom/core";
 import { describe, expect, it } from "vitest";
-import { LAST_CALL_MS, Table } from "./table.js";
+import { LAST_CALL_MS, Table, WINNERS } from "./table.js";
 
 const RED = "even:1-3-5-7-9-12-14-16-18-19-21-23-25-27-30-32-34-36";
 
@@ -268,5 +268,138 @@ describe("a roulette table", () => {
     const seen = one.view(null);
     expect(seen.placed).toHaveLength(1);
     expect(seen.you).toBeNull();
+  });
+});
+
+/*
+ * The board of who has been paid.
+ *
+ * The number board says what the wheel has been doing; this says what that has
+ * been worth to the people sitting at it, which the numbers on their own
+ * cannot. A run of reds is a fact about the wheel. A run of reds with nobody's
+ * name against it is a table that has been on black all evening.
+ */
+describe("the winners a roulette table remembers", () => {
+  /** A spin, from an empty cloth to the next open window. */
+  const round = (one: Table, bets: readonly [string, string, number][]) => {
+    for (const [seatId, spotId, chips] of bets) {
+      one.place(seatId, spotId, chips);
+    }
+    one.closeBetting();
+    one.land();
+    one.beginBetting();
+  };
+
+  /** A table where the ball always finds 32, which is red. */
+  const red = () => {
+    const one = new Table("ABCDE", 6, { pick: () => 1 });
+    one.join("s1", "Ada", who("u1"));
+    return one;
+  };
+
+  it("writes down what a seat finished the spin up by", () => {
+    const one = red();
+    round(one, [["s1", RED, 50]]);
+    // Even money: fifty back on top of the fifty that was theirs already.
+    expect(one.winners).toEqual([
+      { spin: 1, pocket: 32, seatId: "s1", name: "Ada", up: 50 },
+    ]);
+  });
+
+  it("keeps a seat that lost off it", () => {
+    const one = red();
+    round(one, [["s1", "straight:17", 50]]);
+    expect(one.winners).toEqual([]);
+  });
+
+  it("keeps a seat that only broke even off it", () => {
+    /*
+     * The reason this board is profit rather than what came back. Fifty on red
+     * and fifty on black hands a hundred back on a hundred staked, every spin
+     * that is not a zero — a board counting payouts would print that as a win
+     * forever and be a board about nothing.
+     */
+    const BLACK = "even:2-4-6-8-10-11-13-15-17-20-22-24-26-28-29-31-33-35";
+    const one = red();
+    round(one, [
+      ["s1", RED, 50],
+      ["s1", BLACK, 50],
+    ]);
+    expect(one.winners).toEqual([]);
+  });
+
+  it("tells two identical wins apart", () => {
+    // The same player on the same number for the same chips twice is an
+    // ordinary evening, and both of them happened.
+    const one = red();
+    round(one, [["s1", RED, 50]]);
+    round(one, [["s1", RED, 50]]);
+    expect(one.winners).toHaveLength(2);
+    expect(one.winners.map((win) => win.spin)).toEqual([1, 2]);
+  });
+
+  it("does not count a spin the wheel never turned for", () => {
+    /*
+     * An empty cloth does not turn the wheel — it re-opens the window instead.
+     * The count is of spins that settled, so a table sat at by nobody for an
+     * hour does not walk it along.
+     */
+    const one = red();
+    one.closeBetting();
+    one.closeBetting();
+    round(one, [["s1", RED, 50]]);
+    expect(one.winners[0]?.spin).toBe(1);
+  });
+
+  it("remembers the name of somebody who has since left", () => {
+    /*
+     * The name is copied when the spin settles rather than looked up when the
+     * board is drawn. A seat that won and then stood up still won, and a board
+     * that blanks them is a list of who is here rather than of what happened.
+     */
+    const one = red();
+    one.join("s2", "Bram", who("u2"));
+    round(one, [["s2", RED, 100]]);
+    one.removeSeat("s2");
+    expect(one.winners.map((win) => win.name)).toEqual(["Bram"]);
+  });
+
+  it("holds only the last few", () => {
+    const one = red();
+    for (let go = 0; go < WINNERS + 4; go += 1) {
+      round(one, [["s1", RED, 50]]);
+    }
+    expect(one.winners).toHaveLength(WINNERS);
+    // The newest, not the oldest: a board that filled up and then stopped
+    // listening would be a board of the first spins of the evening.
+    expect(one.winners.at(-1)?.spin).toBe(WINNERS + 4);
+  });
+
+  it("writes down everybody one wheel paid, not just the best of them", () => {
+    /*
+     * One wheel settles the whole table at once, which is the shape that makes
+     * roulette different from the card tables. A board that recorded the spin
+     * rather than the people in it would print one name and drop four, and the
+     * four dropped were paid exactly as much as the one kept.
+     */
+    const one = new Table("ABCDE", 6, { pick: () => 1 });
+    const seats = ["s1", "s2", "s3", "s4", "s5"];
+    seats.forEach((seatId, at) => {
+      one.join(seatId, `P${at}`, who(`u${at}`));
+    });
+    round(
+      one,
+      seats.map((seatId, at) => [seatId, RED, 50 * (at + 1)] as [string, string, number]),
+    );
+    expect(new Set(one.winners.map((win) => win.seatId))).toEqual(new Set(seats));
+    expect(new Set(one.winners.map((win) => win.spin))).toEqual(new Set([1]));
+    expect(one.winners.map((win) => win.up)).toEqual([50, 100, 150, 200, 250]);
+  });
+
+  it("hands the board to the felt", () => {
+    // It is on the view or it is a log nobody can read.
+    const one = red();
+    round(one, [["s1", RED, 50]]);
+    expect(one.view("s1").winners).toEqual(one.winners);
   });
 });

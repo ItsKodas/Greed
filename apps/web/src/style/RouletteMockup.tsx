@@ -1,8 +1,10 @@
+import type { Win } from "@backroom/game-roulette";
 import { CHIPS, SPIN_MS, WHEEL, colourOf } from "@backroom/game-roulette";
 import { useEffect, useRef, useState } from "react";
 import { Chip } from "../chips/Chip.js";
 import { Cloth } from "../roulette/Cloth.js";
 import { Wheel } from "../roulette/Wheel.js";
+import { Winners } from "../roulette/Winners.js";
 import "@backroom/game-roulette/theme.css";
 // The table's own stylesheet, which the real felt shares: see roulette.css.
 import "../roulette/roulette.css";
@@ -21,6 +23,22 @@ import "../roulette/roulette.css";
  */
 
 const HISTORY = [17, 0, 32, 5, 21, 34, 2, 26, 14];
+
+/*
+ * A board of winners, fixed.
+ *
+ * Nothing here settles anything — chips placed on this cloth are placed
+ * nowhere — so these are furniture rather than results. Which is all the
+ * mockup needs them to be: what it is being asked is whether a row of names
+ * and figures beside a row of numbers is readable at 375px, and a name long
+ * enough to be a problem is a better test of that than a real one would be.
+ */
+const WINNERS: Win[] = [
+  { spin: 7, pocket: 21, seatId: "them", name: "Marguerite", up: 1750 },
+  { spin: 8, pocket: 34, seatId: "you", name: "You", up: 300 },
+  { spin: 9, pocket: 26, seatId: "them", name: "Sal", up: 8600 },
+  { spin: 10, pocket: 14, seatId: "you", name: "You", up: 3500 },
+];
 
 /*
  * The real table's own figure, not a shortened one.
@@ -80,17 +98,20 @@ export function RouletteMockup() {
         screen the cloth turns on its side, so its squares stay big enough to hit.
       </p>
 
-      <div className="rl__history">
-        {history.map((n, at) => (
-          <span
-            key={`${n}-${at}`}
-            className={`rl__past rl__past--${colourOf(n) ?? "zero"}${
-              at === history.length - 1 ? " rl__past--latest" : ""
-            }`}
-          >
-            {n}
-          </span>
-        ))}
+      <div className="rl__boards">
+        <div className="rl__history">
+          {history.map((n, at) => (
+            <span
+              key={`${n}-${at}`}
+              className={`rl__past rl__past--${colourOf(n) ?? "zero"}${
+                at === history.length - 1 ? " rl__past--latest" : ""
+              }`}
+            >
+              {n}
+            </span>
+          ))}
+        </div>
+        <Winners winners={WINNERS} />
       </div>
 
       <div className="rl__table">

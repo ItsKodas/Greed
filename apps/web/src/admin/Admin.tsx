@@ -89,18 +89,32 @@ export function Admin() {
 }
 
 /**
- * The slot machine's bank.
+ * A game's bank.
  *
- * The only way chips enter that bank from outside play, which is why it sits
- * behind the same allowlist as minting a code: it is the same power. It is a
+ * The only way chips enter one from outside play, which is why it sits behind
+ * the same allowlist as minting a code: it is the same power. It is a
  * deliberate act rather than something automatic because an empty bank offers
- * a stake of zero — the machine cannot open itself, and somebody has to strike
- * the match.
+ * a stake of zero — a game cannot open itself, and somebody has to strike the
+ * match.
  */
-/** The games that keep a bank, and what each calls the thing it deals. */
-const BANKS = [
+/**
+ * The games that keep a bank, and what each calls the thing it deals.
+ *
+ * Every bank the economy keeps has to be here, and the wheel's was missing for
+ * a while: the store held it, the route served it and the felt asked it for
+ * headroom — there was simply no panel to put the first chips in, and a bank
+ * at zero refuses every bet on the cloth. `Admin.test.tsx` holds this list
+ * against the economy's own now.
+ *
+ * The wording stays here rather than being read off that list, because it is
+ * the wording that has to be the game's own: a machine takes a stake on a
+ * spin, a felt on a hand, and a wheel's cap is what one chip may sit on a
+ * single number for.
+ */
+export const BANKS = [
   { game: "slots", label: "Slots", per: "a spin" },
   { game: "blackjack", label: "Blackjack", per: "a hand" },
+  { game: "roulette", label: "Roulette", per: "straight up" },
 ] as const;
 
 function Bank({ game, label, per }: { game: string; label: string; per: string }) {

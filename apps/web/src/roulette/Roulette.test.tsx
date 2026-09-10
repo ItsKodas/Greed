@@ -37,6 +37,7 @@ const view = (over: Partial<TableView> = {}): TableView => ({
   lastCall: false,
   pocket: null,
   history: [],
+  winners: [],
   placed: [],
   paid: [],
   bank: 1_000_000,
@@ -201,6 +202,38 @@ describe("the roulette felt", () => {
     expect(
       (screen.getByRole("button", { name: /^Put last round/ }) as HTMLButtonElement).disabled,
     ).toBe(false);
+  });
+
+  it("shows who the wheel has been paying, and what they are up", () => {
+    /*
+     * The board beside the numbers. The numbers say what the wheel has been
+     * doing; this says what that has been worth to the people at the table,
+     * which is the half of the evening a strip of numbers cannot show.
+     */
+    render(
+      <Felt
+        table={stub().table}
+        state={view({
+          winners: [
+            { spin: 4, pocket: 32, seatId: "s2", name: "Bram", up: 1750 },
+            { spin: 5, pocket: 17, seatId: "s1", name: "Ada", up: 350 },
+          ],
+        })}
+        seatId="s1"
+      />,
+    );
+    const board = screen.getByLabelText("Recent winners, oldest first");
+    expect(board.textContent).toContain("Bram");
+    expect(board.textContent).toContain("+1,750");
+    expect(board.textContent).toContain("Ada");
+    expect(board.textContent).toContain("+350");
+  });
+
+  it("has no winners' board before anybody has won", () => {
+    // An empty board is a heading over nothing. A table nobody has been paid
+    // at yet says so by having no board rather than by having a blank one.
+    render(<Felt table={stub().table} state={view()} seatId="s1" />);
+    expect(screen.queryByLabelText("Recent winners, oldest first")).toBeNull();
   });
 
   it("has nothing to undo before anything is down", () => {

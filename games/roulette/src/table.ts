@@ -47,6 +47,41 @@ export const SETTLE_MS = 6_000;
 /** How many results the table remembers, for the board beside the wheel. */
 export const HISTORY = 12;
 
+/**
+ * How many wins the table remembers, for the board beside that one.
+ *
+ * Shorter than the number board, and not for want of room. A number is two
+ * characters and a win is a name and a figure, so a dozen of them is a wall of
+ * text next to a strip of numbers — and the two boards answer different
+ * questions. The numbers are what the wheel has been doing, which wants a run
+ * long enough to look at; the wins are who has been getting paid, which wants
+ * the last few and nothing older.
+ */
+export const WINNERS = 6;
+
+/**
+ * Somebody being paid, kept after the spin that paid them.
+ *
+ * The profit rather than what came back, because the stake was already theirs.
+ * A hundred returned on a hundred staked is a bet that came in and paid
+ * nothing, and a board that called it a win would be a board that lies about
+ * the evening.
+ *
+ * The name is copied rather than looked up when the board is drawn: a seat
+ * that won and then left the table still won, and a log that forgets people
+ * the moment they stand up is a log of who is here rather than of what
+ * happened.
+ */
+export interface Win {
+  /** Which spin this was, so two identical wins are still two entries. */
+  spin: number;
+  pocket: number;
+  seatId: string;
+  name: string;
+  /** What they finished the spin up by, over and above their stake. */
+  up: number;
+}
+
 export interface SeatView {
   id: string;
   name: string;
@@ -77,6 +112,8 @@ export interface TableView {
   placed: readonly Placed[];
   /** What the last spin paid, by seat. */
   paid: readonly { seatId: string; name: string; back: number; staked: number }[];
+  /** Who has been paid lately, newest last. */
+  winners: readonly Win[];
   /**
    * Whether this seat has a last round to put down again.
    *
@@ -112,6 +149,16 @@ export class Table {
   placed: Placed[] = [];
   paid: Map<string, Paid> | null = null;
   history: number[] = [];
+  winners: Win[] = [];
+  /**
+   * How many spins this table has actually settled.
+   *
+   * Only ever counts up, and never restarts: it is what tells two identical
+   * wins apart. The same player winning the same amount on the same number
+   * twice is an ordinary evening, and without this the board would draw one of
+   * them.
+   */
+  private spins = 0;
   /** Last spin's chips, by seat, so "same again" is one press. */
   private previous = new Map<string, Placed[]>();
 
@@ -435,6 +482,38 @@ export class Table {
     this.paid = settle(this.placed, this.pocket);
     this.history = [...this.history, this.pocket].slice(-HISTORY);
 
+    /*
+     * Who came out ahead, and only them.
+     *
+     * A seat that got its stake back and nothing else is not on this board.
+     * Every bet on the cloth pays the stake back with it, so "was handed
+     * something" is true of half the table on most spins and means nothing —
+     * finishing up is the thing a person would tell somebody about.
+     */
+    this.spins += 1;
+    const spin = this.spins;
+    const pocket = this.pocket;
+    for (const [seatId, one] of this.paid) {
+      const up = one.back - one.staked;
+      if (up <= 0) {
+        continue;
+      }
+      this.winners.push({
+        spin,
+        pocket,
+        seatId,
+        name: this.seats.find((seat) => seat.id === seatId)?.name ?? "",
+        up,
+      });
+    }
+    /*
+     * A rolling log, and it may well cut a spin in half at the front. That is
+     * what a board of the last few is: the alternative is a board whose length
+     * is however many people a full table happened to pay, which is a board
+     * that jumps about.
+     */
+    this.winners = this.winners.slice(-WINNERS);
+
     this.previous = new Map();
     for (const one of this.placed) {
       this.previous.set(one.seatId, [...(this.previous.get(one.seatId) ?? []), { ...one }]);
@@ -484,6 +563,7 @@ export class Table {
       lastCall: this.lastCall,
       pocket: this.pocket,
       history: this.history,
+      winners: this.winners,
       placed: this.placed,
       paid: [...paid.entries()].map(([seatId, one]) => ({
         seatId,

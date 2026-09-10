@@ -103,12 +103,6 @@ export interface GameRecord {
 }
 
 /**
- * The banks this building keeps, by the game that fills them.
- *
- * A closed set rather than a string, so a typo is a build error rather than a
- * bank nobody can find that quietly holds somebody's chips.
- */
-/**
  * The banks in the building, one per game that pays from one.
  *
  * Separate on purpose. A shared bank would be whichever game holds back the
@@ -116,8 +110,18 @@ export interface GameRecord {
  * keeps a tenth of what goes through it, a blackjack table about a
  * two-hundredth and a single-zero wheel about a thirty-seventh, so one pot
  * would be the machine funding the felt.
+ *
+ * A list rather than only a type, because a type cannot be counted. Every
+ * bank needs a float before its game will take a stake at all, so the admin
+ * room has to have a panel for each one — and a bank added here and forgotten
+ * there is a game that silently will not deal, which is exactly what happened
+ * to the wheel. The name is still a closed set: the type is read off the list,
+ * so a typo is a build error rather than a bank nobody can find that quietly
+ * holds somebody's chips.
  */
-export type BankName = "slots" | "blackjack" | "roulette";
+export const BANKS = ["slots", "blackjack", "roulette"] as const;
+
+export type BankName = (typeof BANKS)[number];
 
 /**
  * A player's tip jar, structurally identical to `Jar` in

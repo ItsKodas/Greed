@@ -1,3 +1,4 @@
+import { POCKETS, WHEEL, colourOf } from "@backroom/game-roulette";
 import type { Face } from "@backroom/game-slots";
 import { ChipFace } from "../chips/Chip.js";
 import { FaceDefs, ReelFace } from "../slots/Symbols.js";
@@ -274,6 +275,117 @@ export function ReelsArt() {
   );
 }
 
+/**
+ * The wheel in the corner.
+ *
+ * Drawn from the same rim order the rules use, for the reason the felt's own
+ * wheel is: a wheel laid out in counting order stops alternating colours half
+ * way round, and at this size the alternating band *is* the drawing. There
+ * would be no way to see it was wrong and no way to miss that it was.
+ *
+ * The numbers are left off, which the big one cannot do. A pocket is four
+ * pixels wide here, so what is left is what you recognise a wheel by from
+ * across a room: mahogany, a ring of red and black, brass in the middle and a
+ * ball out on the track.
+ *
+ * Its motion is in game.css beside the tile, and it is not the throw the other
+ * tables get. Dice and cards are loose things that come off a table; a wheel
+ * is bolted to the middle of its own and the only thing it ever does is turn.
+ * So it comes across in one piece and spins.
+ */
+
+/** The middle of the wheel, in the drawing's own coordinates. */
+const WHEEL_X = 120;
+const WHEEL_Y = 94;
+/** The band the pockets are cut into. */
+const POCKET_OUTER = 60;
+const POCKET_INNER = 44;
+/** How far round the rim one pocket is, in degrees. */
+const RIM_STEP = 360 / POCKETS;
+
+function on(angle: number, radius: number): { x: number; y: number } {
+  const radians = ((angle - 90) * Math.PI) / 180;
+  return { x: WHEEL_X + Math.cos(radians) * radius, y: WHEEL_Y + Math.sin(radians) * radius };
+}
+
+/** One pocket, as a wedge of the rim. */
+function pocketWedge(at: number): string {
+  const from = at * RIM_STEP - RIM_STEP / 2;
+  const to = at * RIM_STEP + RIM_STEP / 2;
+  const a = on(from, POCKET_OUTER);
+  const b = on(to, POCKET_OUTER);
+  const c = on(to, POCKET_INNER);
+  const d = on(from, POCKET_INNER);
+  return [
+    `M ${a.x} ${a.y}`,
+    `A ${POCKET_OUTER} ${POCKET_OUTER} 0 0 1 ${b.x} ${b.y}`,
+    `L ${c.x} ${c.y}`,
+    `A ${POCKET_INNER} ${POCKET_INNER} 0 0 0 ${d.x} ${d.y}`,
+    "Z",
+  ].join(" ");
+}
+
+export function WheelArt() {
+  return (
+    <svg viewBox="0 0 200 160" role="img" aria-hidden="true" focusable="false">
+      {/*
+        Three nested groups, and the nesting is the point: the outer one slides
+        and everything that turns lives inside it. A CSS transform replaces an
+        element's transform rather than composing with it, so a group asked to
+        slide and spin at once would only ever do the second of them.
+      */}
+      <g className="art__wheel">
+        {/* The bowl, which does not turn. Everything else here does. */}
+        <circle cx={WHEEL_X} cy={WHEEL_Y} r={POCKET_OUTER + 5} className="art__wheel-bowl" />
+
+        {/*
+          The rotor: pockets, frets, cone and turret, all one piece. On a real
+          wheel these turn together and the bowl around them does not, and the
+          spokes are what makes that legible — thirty-seven wedges four pixels
+          wide turning is a band that shimmers, and four brass arms turning is
+          plainly a wheel going round.
+        */}
+        <g className="art__wheel-rim">
+          {WHEEL.map((n, at) => (
+            <path
+              key={n}
+              d={pocketWedge(at)}
+              data-pocket={n}
+              className={`art__pocket art__pocket--${colourOf(n) ?? "zero"}`}
+            />
+          ))}
+          <circle cx={WHEEL_X} cy={WHEEL_Y} r={POCKET_INNER - 1} className="art__wheel-hub" />
+          <g className="art__wheel-spokes">
+            {[0, 45, 90, 135].map((turn) => (
+              <line
+                key={turn}
+                x1={on(turn, POCKET_INNER - 3).x}
+                y1={on(turn, POCKET_INNER - 3).y}
+                x2={on(turn + 180, POCKET_INNER - 3).x}
+                y2={on(turn + 180, POCKET_INNER - 3).y}
+              />
+            ))}
+          </g>
+          <circle cx={WHEEL_X} cy={WHEEL_Y} r="19" className="art__wheel-cone" />
+          <circle cx={WHEEL_X} cy={WHEEL_Y} r="7.5" className="art__wheel-turret" />
+        </g>
+
+        {/*
+          The ball, on an arm that swings the other way round the middle.
+
+          The opposition is the whole illusion — a disc and a dot going the same
+          way is a loading spinner. Two motions again, and two elements again:
+          the arm carries it round and the ball itself sits out on the track or
+          drops into the frets, and those have nothing to do with each other.
+        */}
+        <g className="art__ball-arm">
+          <circle cx={WHEEL_X} cy={WHEEL_Y} r="4" className="art__ball" />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
 /** The furniture a game keeps, by which game it is. */
 export function TileArt({ game }: { game: string }) {
   if (game === "greed") {
@@ -284,6 +396,9 @@ export function TileArt({ game }: { game: string }) {
   }
   if (game === "slots") {
     return <ReelsArt />;
+  }
+  if (game === "roulette") {
+    return <WheelArt />;
   }
   return <ChipsArt />;
 }
