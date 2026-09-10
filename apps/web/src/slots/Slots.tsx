@@ -1267,13 +1267,31 @@ export default function Slots() {
           <SpinFeed
             title="Paying out"
             empty="No wins yet."
-            news={news.filter((spun) => spun.won > 0)}
+            news={winningSpins(news)}
             side="right"
           />
         </div>
       )}
     </main>
   );
+}
+
+/**
+ * Whether a spin left the player up.
+ *
+ * Not the same question as whether the machine paid: five lines at 500 is
+ * 2,500 on the felt, and a single line coming in at 2,000 is the reels
+ * handing chips back to somebody who is still down five hundred. Both columns
+ * ask this one question, so a row can never be green in the sum and absent
+ * from the wins.
+ */
+export function cameOutAhead(spun: SpinNews): boolean {
+  return spun.won > spun.stake;
+}
+
+/** The right-hand column: the spins that actually left somebody up. */
+export function winningSpins(news: SpinNews[]): SpinNews[] {
+  return news.filter(cameOutAhead);
 }
 
 /**
@@ -1284,10 +1302,15 @@ export default function Slots() {
  * machine busier than it is.
  *
  * Two of these, either side. The left is everything as it happens and the
- * right is only what paid, so a quiet room still has one column with
- * something in it and a busy one reads twice over.
+ * right is only what somebody came out ahead on, so a quiet room still has one
+ * column with something in it and a busy one reads twice over.
+ *
+ * Both write the same figure: what the spin did to the player's account. Not
+ * what the reels handed over — a row saying the machine paid 2,000 on a stake
+ * of 2,500 is a row telling somebody they won five hundred chips less than
+ * nothing.
  */
-function SpinFeed({
+export function SpinFeed({
   title,
   empty,
   news,
@@ -1305,22 +1328,26 @@ function SpinFeed({
         <p className="feed__empty">{empty}</p>
       ) : (
         <ul className="feed__list">
-          {news.slice(0, 8).map((spun) => (
-            <li
-              key={spun.id}
-              className={`feed__row${spun.jackpot ? " feed__row--jackpot" : ""}`}
-            >
-              <Avatar name={spun.name} avatar={spun.avatar} accentColor={null} className="feed__face" />
-              <span className="feed__who">{spun.name}</span>
-              <span className="feed__sum">
-                {spun.won > 0 ? (
-                  <b className="feed__won">+{exact(spun.won - spun.stake)}</b>
-                ) : (
-                  <span className="feed__lost">-{exact(spun.stake)}</span>
-                )}
-              </span>
-            </li>
-          ))}
+          {news.slice(0, 8).map((spun) => {
+            // Negative numbers write their own sign; only a win needs one adding.
+            const net = spun.won - spun.stake;
+            return (
+              <li
+                key={spun.id}
+                className={`feed__row${spun.jackpot ? " feed__row--jackpot" : ""}`}
+              >
+                <Avatar name={spun.name} avatar={spun.avatar} accentColor={null} className="feed__face" />
+                <span className="feed__who">{spun.name}</span>
+                <span className="feed__sum">
+                  {cameOutAhead(spun) ? (
+                    <b className="feed__won">+{exact(net)}</b>
+                  ) : (
+                    <span className="feed__lost">{exact(net)}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
     </aside>

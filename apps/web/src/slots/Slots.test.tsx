@@ -2,6 +2,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { MIN_STAKE, STAKE_DIVISOR, type Face } from "@backroom/game-slots";
+import type { SpinNews } from "@backroom/shared";
 import { exact } from "../game/money.js";
 import { REEL_STAGGER_MS } from "./Reel.js";
 import {
@@ -21,7 +22,9 @@ import {
   Marquee,
   PaylineOverlay,
   roomShow,
+  SpinFeed,
   winningCells,
+  winningSpins,
 } from "./Slots.js";
 
 describe("a win", () => {
@@ -762,5 +765,53 @@ describe("how much of the room a win lights up", () => {
     // nothing. The caller passes the bet; this is the guard for when it does
     // not.
     expect(roomShow({ won: 9000, bet: 0, jackpot: false })).toBe(0);
+  });
+});
+
+describe("the wall either side", () => {
+  const spun = (over: Partial<SpinNews>): SpinNews => ({
+    id: "one",
+    name: "Ada",
+    avatar: null,
+    stake: 2500,
+    won: 0,
+    jackpot: false,
+    at: 0,
+    ...over,
+  });
+
+  const wall = (news: SpinNews[]) =>
+    render(<SpinFeed title="At the machine" empty="Nobody has pulled it yet." news={news} side="left" />)
+      .container;
+
+  it("writes a spin that paid less than it took as the loss it was", () => {
+    /*
+     * Two thousand back on a stake of two and a half is a player five hundred
+     * down, however much the machine handed over on the way. A row that reads
+     * "+-500" is the wall unable to decide, and neither half of it is true.
+     */
+    const sum = wall([spun({ stake: 2500, won: 2000 })]).querySelector(".feed__sum");
+    expect(sum?.textContent).toBe("-500");
+    expect(sum?.querySelector(".feed__won")).toBeNull();
+  });
+
+  it("still writes a spin that cleared its stake in the black", () => {
+    const sum = wall([spun({ stake: 2500, won: 13000 })]).querySelector(".feed__sum");
+    expect(sum?.textContent).toBe("+10,500");
+    expect(sum?.querySelector(".feed__won")).not.toBeNull();
+  });
+
+  it("writes a spin that paid nothing as the whole stake gone", () => {
+    const sum = wall([spun({ stake: 2500, won: 0 })]).querySelector(".feed__sum");
+    expect(sum?.textContent).toBe("-2,500");
+  });
+
+  it("keeps a spin that did not clear its stake off the paying-out column", () => {
+    // The column says "Paying out" and its empty line says "No wins yet". A
+    // spin that left the player down is neither, whatever the reels did.
+    const short = spun({ id: "short", stake: 2500, won: 2000 });
+    const push = spun({ id: "push", stake: 2500, won: 2500 });
+    const ahead = spun({ id: "ahead", stake: 2500, won: 2501 });
+    expect(winningSpins([short, push, ahead]).map((one) => one.id)).toEqual(["ahead"]);
   });
 });
