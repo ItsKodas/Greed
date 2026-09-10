@@ -46,17 +46,6 @@ export const COMING: readonly GameListing[] = [
     theme: { wall: "#13181a", felt: "#1d3336", accent: "#2f8f92", accentHi: "#7fdde0" },
   },
   {
-    id: "roulette",
-    name: "Roulette",
-    blurb: "One wheel, and thirty-seven ways to be wrong.",
-    shape: "table",
-    minSeats: 1,
-    maxSeats: 8,
-    open: false,
-    mark: { text: "ROULETTE", accentAt: 0 },
-    theme: { wall: "#1a1113", felt: "#3a1a1c", accent: "#b8323c", accentHi: "#ff7a84" },
-  },
-  {
     id: "death-roll",
     name: "Death Rolling",
     blurb: "Halve the number or pay. Last one to roll a one loses.",
