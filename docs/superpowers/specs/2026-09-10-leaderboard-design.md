@@ -215,9 +215,11 @@ Signed out, the card says so and still links through, so a guest can see the
 board exists rather than finding a link that is not there. The page itself
 gives the same answer: sign in first.
 
-The card reads the same route as the board, asking for three rows, and polls
-on the same clock as the room's busyness — the room already refreshes every
-ten seconds, so this is the rhythm the page is in.
+The card reads the same route as the board and shows the first three of what
+comes back. It does not ask for three: how many rows the route hands out is
+the server's decision and not a query parameter, for the reason given above.
+It polls on the same clock as the room's busyness — the room already refreshes
+every ten seconds, so this is the rhythm the page is in.
 
 ### A row
 
