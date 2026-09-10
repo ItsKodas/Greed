@@ -124,6 +124,62 @@ describe("getting a duel started", () => {
     expect(await deal(game, table, deps)).toBe(false);
   });
 
+  it("says who is short even when handing the first ante back fails", async () => {
+    /*
+     * The refund is the only thing standing between a refused second ante and
+     * a stake held for a game that never happened, and it is a database write
+     * like any other — it can fail. If it does, the felt must still say why
+     * the table stopped, because a table that says nothing goes back round on
+     * the fast clock and takes that same ante again every couple of seconds.
+     */
+    const game = deathRollAdapter({ roll: () => 500 });
+    const table = seated(game);
+    const deps = {
+      take: vi
+        .fn<(userId: string, amount: number) => Promise<boolean>>()
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false),
+      give: vi.fn(async () => {
+        throw new Error("the store is down");
+      }),
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    // Loudly, too: the room logs this, and it is somebody's chips.
+    await expect(deal(game, table, deps)).rejects.toThrow("the store is down");
+    expect(table.view(null).shortId).toBe("bob");
+    expect(table.view(null).waitingFor).toBe("funds");
+  });
+
+  it("deals the duel to exactly the two seats that paid for it", async () => {
+    /*
+     * `payOut` takes the antes from the seats it was handed, and `begin` used
+     * to go and work out who was playing all over again — two sources of truth
+     * for one question, with the money resting on the first of them. Taking an
+     * ante is a real await, and the table is free to move while it runs.
+     */
+    const game = deathRollAdapter({ roll: () => 500 });
+    const table = seated(game);
+    const deps = {
+      take: vi.fn(async () => {
+        const bob = table.seats.find((seat) => seat.id === "bob");
+        if (bob !== undefined) {
+          bob.waiting = true;
+        }
+        return true;
+      }),
+      give: vi.fn(async () => {}),
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    await deal(game, table, deps);
+
+    expect(table.phase).toBe("dueling");
+    expect(table.view(null).pot).toBe(1_000);
+  });
+
   it("waits longer before trying a refused ante again", async () => {
     // Still asking — they may top up — but not every two seconds.
     const game = deathRollAdapter({ roll: () => 500 });
@@ -182,6 +238,37 @@ describe("rolling and passing", () => {
     );
     expect(table.view(null).pot).toBe(1_000);
     expect(table.view(null).seats.find((seat) => seat.id === first)?.passed).toBe(false);
+  });
+
+  it("hands a pass back when the table moved on while the chips were in flight", async () => {
+    /*
+     * Taking the price of a pass is a real write to a real store, and the
+     * world moves while it is in flight: the turn clock can fire and roll for
+     * this seat, or a second press can arrive — there is no lock on a table
+     * and the rate limit is sixty events every two seconds. The duel then
+     * refuses the pass, and a player charged for a pass that never reached the
+     * pot is chips gone from a game with no bank to lose them out of.
+     */
+    const game = deathRollAdapter({ roll: () => 743 });
+    const table = seated(game);
+    const { deps } = spy();
+    await deal(game, table, deps);
+    const first = table.view(null).toRoll as string;
+
+    const gave = vi.fn(async () => {});
+    const racing = {
+      take: vi.fn(async () => {
+        game.timeout?.(table, first);
+        return true;
+      }),
+      give: gave,
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    await expect(game.act(table, first, { type: "pass" }, racing)).rejects.toThrow(TableError);
+    expect(gave).toHaveBeenCalledWith(first === "ada" ? "u1" : "u2", 50);
+    expect(table.view(null).pot).toBe(1_000);
   });
 
   it("refuses a move from somebody who is not at the table", async () => {
@@ -288,6 +375,71 @@ describe("settling", () => {
     expect(game.isSettled(table)).toBe(true);
     table.finish();
     expect(game.isSettled(table)).toBe(false);
+  });
+});
+
+describe("a seat that goes mid-duel", () => {
+  /*
+   * The room reaps a seat ninety seconds after it drops, whatever the table is
+   * doing — and an absent player burns thirty seconds of turn clock every
+   * turn, so a duel routinely outlives that. `leavesMidHand: false` promises
+   * the seat is held until the hand is over, and the pot rests on it: a winner
+   * whose seat had already gone would be both antes paid to nobody.
+   */
+  it("holds the seat so the duel still settles to whoever won it", async () => {
+    const game = deathRollAdapter({ roll: () => 1 });
+    const table = seated(game);
+    const { deps, gave } = spy();
+    await deal(game, table, deps);
+    const loser = table.view(null).toRoll as string;
+    const winner = loser === "ada" ? "bob" : "ada";
+
+    table.removeSeat(winner);
+    await game.act(table, loser, { type: "roll" }, deps);
+    await game.settle(table, deps);
+
+    expect(table.seats.map((seat) => seat.id)).toContain(winner);
+    expect(gave).toHaveBeenCalledWith(winner === "ada" ? "u1" : "u2", 1_000);
+  });
+
+  it("lets the seat go once the felt is cleared", async () => {
+    const game = deathRollAdapter({ roll: () => 1 });
+    const table = seated(game);
+    const { deps } = spy();
+    await deal(game, table, deps);
+    const loser = table.view(null).toRoll as string;
+    const winner = loser === "ada" ? "bob" : "ada";
+
+    table.removeSeat(winner);
+    await game.act(table, loser, { type: "roll" }, deps);
+    await game.settle(table, deps);
+
+    // Held right up until the pot is paid, and then honoured.
+    expect(table.seats.map((seat) => seat.id)).toContain(winner);
+    table.finish();
+    expect(table.seats.map((seat) => seat.id)).toEqual([loser]);
+  });
+
+  it("records no settlement it did not pay", async () => {
+    /*
+     * Defensive, now that a seat is held until the felt clears — but a
+     * settlement written for a pot that was never paid is worse than a lost
+     * pot: it is a win on somebody's profile and a figure in the history for
+     * chips that never moved.
+     */
+    const game = deathRollAdapter({ roll: () => 1 });
+    const table = seated(game);
+    const { deps, gave } = spy();
+    const finished = deps.finished as unknown as ReturnType<typeof vi.fn>;
+    table.begin(undefined, ["ada", "ghost"]);
+    table.duel?.roll("ada", () => 1);
+
+    // Loudly: an unpaid pot is the worst thing that can happen at this table,
+    // and the room logs what it cannot fix.
+    await expect(game.settle(table, deps)).rejects.toThrow(/pot unpaid/);
+
+    expect(gave).not.toHaveBeenCalled();
+    expect(finished).not.toHaveBeenCalled();
   });
 });
 

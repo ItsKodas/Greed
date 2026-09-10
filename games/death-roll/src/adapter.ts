@@ -144,7 +144,21 @@ export function deathRollAdapter(
               table.forFun ? "That is more than your purse." : "You cannot cover a pass.",
             );
           }
-          duel.pass(seatId);
+          /*
+           * And handed straight back if the table moved while the chips were
+           * in flight. Taking them is a real write to a real store, and
+           * nothing holds the table still for it: the turn clock can fire and
+           * roll for this seat, or a second press can arrive — the duel then
+           * refuses the pass, and a player charged for one that never reached
+           * the pot is chips gone out of a game with no bank to lose them
+           * from. Blackjack's double does the same, for the same reason.
+           */
+          try {
+            duel.pass(seatId);
+          } catch (error) {
+            await give(table, seat, price, deps);
+            throw error;
+          }
           table.touchClock();
           return;
         }
@@ -198,10 +212,29 @@ export function deathRollAdapter(
          * ante and failed the second would be a table holding somebody's stake
          * for a game that never happened.
          */
-        await give(table, one, table.ante, deps);
-        return table.noteShort(two.id);
+        let news = false;
+        try {
+          await give(table, one, table.ante, deps);
+        } finally {
+          /*
+           * Noted whatever the refund did, and this is the half that matters
+           * when it throws. The failure itself goes up to the room, which logs
+           * it — but a table that had not also recorded who was short would go
+           * round again on the fast deal clock and take that same ante again
+           * every couple of seconds, running the risk afresh each time. The
+           * note is what puts it on the slow one, and what lets the felt say
+           * why it stopped.
+           */
+          news = table.noteShort(two.id);
+        }
+        return news;
       }
-      table.begin();
+      /*
+       * Dealt to the two seats the antes actually came off, named rather than
+       * looked up again. The chips are already gone from these two people, so
+       * they are who the duel is between.
+       */
+      table.begin(undefined, [one.id, two.id]);
       return true;
     },
 
@@ -223,9 +256,18 @@ export function deathRollAdapter(
       }
       const winnerId = duel.winnerId;
       const winner = table.seats.find((one) => one.id === winnerId);
-      if (winner !== undefined) {
-        await give(table, winner, duel.pot, deps);
+      if (winner === undefined) {
+        /*
+         * Nothing paid, so nothing written. The table holds a seat until the
+         * felt clears precisely so a winner cannot go missing between the last
+         * roll and the pot, and there is nothing this can do about it if one
+         * somehow has — but recording it would be worse than the lost pot: a
+         * win on somebody's profile and a figure in the history for chips that
+         * never moved. The room logs the settlement that never happened.
+         */
+        throw new Error(`death roll: ${table.code} won by a seat that is gone; pot unpaid`);
       }
+      await give(table, winner, duel.pot, deps);
 
       /*
        * Play money is paid but never recorded. A for-fun table touches no

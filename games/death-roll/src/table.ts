@@ -89,6 +89,8 @@ export class Table implements PlayTable {
   private startedWith: string | null = null;
   /** A duel the table wants started, waiting on somebody to take the antes. */
   private wanted: string[] | null = null;
+  /** Seats that asked to go while a duel was running, dropped when it clears. */
+  private readonly leaving = new Set<string>();
 
   constructor(
     code: string,
@@ -171,7 +173,31 @@ export class Table implements PlayTable {
     return seat;
   }
 
+  /**
+   * Standing somebody up, or promising to.
+   *
+   * The room reaps a seat once its player has been gone for a minute and a
+   * half, whatever the table happens to be doing — and an absent player burns
+   * a full turn clock every turn, so a duel outlives that grace routinely.
+   * Honouring it there and then would break what `leavesMidHand: false`
+   * promises: there are chips on the felt, the duel has to play out and settle
+   * before anybody can be paid, and a winner whose seat had already gone would
+   * be both antes paid to nobody. So it is held and carried out by `finish`.
+   *
+   * Not blackjack's outright refusal, which it can afford because its seats
+   * are only given up in its lobby. This table has no lobby and exactly two
+   * seats, so a refusal would leak them and leave nobody able to sit down.
+   */
   removeSeat(seatId: string): void {
+    if (this.duel !== null) {
+      this.leaving.add(seatId);
+      return;
+    }
+    this.drop(seatId);
+  }
+
+  private drop(seatId: string): void {
+    this.leaving.delete(seatId);
     this.seating.remove(seatId);
     this.purses.delete(seatId);
     if (this.nextFirst === seatId) {
@@ -185,6 +211,13 @@ export class Table implements PlayTable {
     this.seating.disconnect(seatId);
   }
   reconnect(seatId: string): Seat {
+    /*
+     * Coming back cancels a held removal. The room reaps on a timer that has
+     * already fired by the time somebody on a bad line gets their socket back,
+     * and a player sitting in a duel they are playing should not be stood up
+     * the moment it ends for having once been slow.
+     */
+    this.leaving.delete(seatId);
     return this.seating.reconnect(seatId);
   }
   watch(socketId: string): void {
@@ -264,15 +297,22 @@ export class Table implements PlayTable {
    *
    * Never called before the antes are in. The pot it opens with is the two
    * antes, and if that is not true the table has minted chips.
+   *
+   * @param players The two seats the antes actually came off. Passed in rather
+   * than worked out here, because whoever took the antes has already answered
+   * "who is in this duel" and asking it twice is two sources of truth for the
+   * one question the money rests on — taking an ante is an await, and the
+   * table is free to move while it runs.
    */
-  begin(first?: string): void {
-    const playing = this.seats.filter((seat) => !seat.waiting);
+  begin(first?: string, players?: readonly string[]): void {
+    const playing =
+      players ?? this.seats.filter((seat) => !seat.waiting).map((seat) => seat.id);
     const [a, b] = playing;
     if (a === undefined || b === undefined) {
       throw new TableError("A duel needs two people.");
     }
-    const rolls = first ?? this.nextFirst ?? a.id;
-    this.duel = new Duel(a.id, b.id, rolls, this.opening, this.ante, this.passPrice);
+    const rolls = first ?? this.nextFirst ?? a;
+    this.duel = new Duel(a, b, rolls, this.opening, this.ante, this.passPrice);
     this.startedWith = this.duel.toRoll;
     this.shortId = null;
     this.lastEvent = null;
@@ -296,6 +336,15 @@ export class Table implements PlayTable {
     this.startedWith = null;
     this.duel = null;
     this.turnEndsAt = null;
+    /*
+     * And now anybody who asked to go while it was running. Last, after the
+     * felt is clear: the room settles a duel the moment it ends and only
+     * clears it some seconds later, so by here the pot has been paid to a seat
+     * that was still at the table to be paid.
+     */
+    for (const seatId of [...this.leaving]) {
+      this.drop(seatId);
+    }
   }
 
   /** Puts the clock on whoever is to act now, or takes it away. */

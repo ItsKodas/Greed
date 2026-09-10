@@ -184,6 +184,40 @@ describe("standing up", () => {
     expect(table.leavesMidHand).toBe(false);
   });
 
+  it("keeps a seat the room reaps mid-duel until the felt clears", () => {
+    /*
+     * The room reaps a seat a minute and a half after its player drops,
+     * whatever the table is doing, and an absent player burns a whole turn
+     * clock every turn — so a duel outlives that grace as a matter of course.
+     * Honouring it there and then would leave the pot with nobody to pay it
+     * to, which is both antes gone at a table with no bank behind it.
+     */
+    const table = seated();
+    table.begin("ada");
+
+    table.removeSeat("bob");
+
+    expect(table.seats.map((seat) => seat.id)).toEqual(["ada", "bob"]);
+    table.duel?.roll("ada", () => 1);
+    table.finish();
+    expect(table.seats.map((seat) => seat.id)).toEqual(["ada"]);
+  });
+
+  it("keeps somebody who comes back before the duel ends", () => {
+    // The reaping timer has already fired by the time a bad line gets its
+    // socket back; being slow once should not stand you up at the end.
+    const table = seated();
+    table.begin("ada");
+    table.disconnect("bob");
+    table.removeSeat("bob");
+
+    table.reconnect("bob");
+    table.duel?.roll("ada", () => 1);
+    table.finish();
+
+    expect(table.seats.map((seat) => seat.id)).toEqual(["ada", "bob"]);
+  });
+
   it("gives the seat up once the duel is cleared", () => {
     const table = seated();
     table.begin("ada");
