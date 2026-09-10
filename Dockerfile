@@ -10,8 +10,12 @@ FROM node:24-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-# Every workspace, because npm reads the lockfile against the whole set: a
-# manifest missing here is not a smaller install, it is a failed one.
+# Every workspace. A missing manifest here does not fail loudly: `npm ci`
+# succeeds having linked only what it was shown, `COPY . .` brings the rest of
+# the source in behind it with no symlinks, and the build dies much later on an
+# import it cannot resolve, naming a package that is plainly there in the tree.
+# Four games had drifted off this list before anyone ran it, so packaging.test
+# now checks the two against each other.
 COPY packages/core/package.json packages/core/
 COPY packages/economy/package.json packages/economy/
 COPY packages/rules/package.json packages/rules/
@@ -19,6 +23,10 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/ui/package.json packages/ui/
 COPY games/greed/package.json games/greed/
 COPY games/blackjack/package.json games/blackjack/
+COPY games/slots/package.json games/slots/
+COPY games/poker/package.json games/poker/
+COPY games/roulette/package.json games/roulette/
+COPY games/tips/package.json games/tips/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 RUN npm ci
@@ -32,8 +40,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY package.json package-lock.json ./
-# Every workspace, because npm reads the lockfile against the whole set: a
-# manifest missing here is not a smaller install, it is a failed one.
+# Every workspace. A missing manifest here does not fail loudly: `npm ci`
+# succeeds having linked only what it was shown, `COPY . .` brings the rest of
+# the source in behind it with no symlinks, and the build dies much later on an
+# import it cannot resolve, naming a package that is plainly there in the tree.
+# Four games had drifted off this list before anyone ran it, so packaging.test
+# now checks the two against each other.
 COPY packages/core/package.json packages/core/
 COPY packages/economy/package.json packages/economy/
 COPY packages/rules/package.json packages/rules/
@@ -41,6 +53,10 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/ui/package.json packages/ui/
 COPY games/greed/package.json games/greed/
 COPY games/blackjack/package.json games/blackjack/
+COPY games/slots/package.json games/slots/
+COPY games/poker/package.json games/poker/
+COPY games/roulette/package.json games/roulette/
+COPY games/tips/package.json games/tips/
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 RUN npm ci --omit=dev
