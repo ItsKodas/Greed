@@ -936,4 +936,49 @@ describe("the free spins", () => {
     }
     expect(await store.bank("slots")).toBeGreaterThanOrEqual(0);
   });
+
+  it("does not let two pulls at once stretch the run", async () => {
+    /*
+     * `freeSpins` is keyed by account so there is one run rather than two —
+     * which is what its comment claims and is true. What keying by account
+     * does not do is decide who is pulling: the handler reads `owed.left`,
+     * then awaits the bank, the debit, the payout and the record before
+     * writing the decremented count back. Two pulls in flight both read the
+     * same number and both write the same one, and the run outlives its award.
+     *
+     * Two windows is the easy way to arrange that. One window and two presses
+     * is the same arrangement, which is why closing it is a lock rather than a
+     * rule about windows.
+     */
+    const { client } = await openMachine({
+      bank: 5_000_000,
+      chips: 100_000,
+      spinRandom: scatters(3),
+    });
+    const trigger = await spin(client, 10);
+    expect(trigger.ok).toBe(true);
+    if (!trigger.ok) {
+      return;
+    }
+    const owed = trigger.freeLeft;
+    expect(owed).toBeGreaterThan(1);
+
+    // Both emitted before either is answered, which is the whole point.
+    const [a, b] = await Promise.all([spin(client, 10), spin(client, 10)]);
+
+    /*
+     * One of them is a spin and the other is refused, or they are answered in
+     * turn — either is fine. What is not fine is two free spins that between
+     * them cost the run one.
+     */
+    const counts = [a, b]
+      .filter((result) => result.ok && result.wasFree)
+      .map((result) => (result.ok ? result.freeLeft : -1))
+      .sort((one, two) => one - two);
+    if (counts.length === 2) {
+      expect(counts).toEqual([owed - 2, owed - 1]);
+    } else {
+      expect(counts).toEqual([owed - 1]);
+    }
+  });
 });

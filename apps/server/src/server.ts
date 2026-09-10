@@ -49,6 +49,7 @@ import {
   addBotSchema,
   chatSchema,
   createSchema,
+  handshakeSchema,
   joinSchema,
   mintCodeSchema,
   removeSeatSchema,
@@ -180,6 +181,11 @@ export interface SocketIdentity {
   /** Null for a guest, who has no account to be checked against. */
   identity: SeatIdentity | null;
   name: string | null;
+  /**
+   * Which account-and-game claim this socket holds, if it holds one. Kept so
+   * `disconnect` can release exactly the claim this socket took and no other.
+   */
+  atGame: string | null;
 }
 
 /** A table, and the game being played at it. */
@@ -321,6 +327,15 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
    * table nobody else needs.
    */
   const freeSpins = new Map<string, FreeSpins>();
+  /**
+   * Accounts with a pull already in flight.
+   *
+   * The handler above awaits the bank, the debit and the payout between
+   * reading the free-spin count and writing it back, so two pulls that overlap
+   * both read the same number. By account rather than by socket, because two
+   * windows is only the easiest way to overlap them and not the only one.
+   */
+  const spinning = new Set<string>();
   /** Everybody standing at the slot machine, whether or not they are spinning. */
   const SLOTS_ROOM = "slots:floor";
   /*
@@ -1558,6 +1573,88 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
   });
 
   /**
+   * Who has which game open, and from which window.
+   *
+   * Keyed by account and game, so one person may have Slots on the desk and
+   * Blackjack on the phone — that is two games, not two of one.
+   */
+  const openGames = new Map<string, { window: string; socket: string }>();
+
+  // Joined on a character no id can contain, so no pair of them can be made to
+  // spell another pair's key.
+  const openKey = (userId: string, game: string) => `${userId}\u0000${game}`;
+
+  /**
+   * One window per game, per account.
+   *
+   * A middleware for the same reason the one above it is: it settles before the
+   * client's first message is delivered, so a socket refused here never reaches
+   * a room, a lobby or a lever, and there is no second place to remember to
+   * check.
+   *
+   * A window id rather than a socket id, because first-wins is only humane if a
+   * refresh can be told from a rival. A page that reloads is a new socket, and a
+   * socket that died on a train is an old one that has not been noticed yet —
+   * socket.io leaves that one in `io.sockets.sockets` for the best part of a
+   * minute, which is a long time to be locked out of your own machine.
+   *
+   * Not an anti-cheat: the id is the client's own and a script may send any it
+   * likes. It is a rule about windows, enforced honestly for browsers, and
+   * nothing in the economy rests on it.
+   */
+  io.use((socket, next) => {
+    socket.data.atGame = null;
+    /*
+     * Read apart rather than through one `safeParse` on the whole object: a
+     * `window` that fails its own schema (empty, or absurdly long) must not
+     * take a valid `game` down with it. A bad window degrades to the same
+     * socket-id fallback below as a private window that sent none at all; it
+     * must not exempt the socket from the rule entirely.
+     */
+    const auth = (socket.handshake.auth ?? {}) as Record<string, unknown>;
+    const declaredGame = handshakeSchema.shape.game.safeParse(auth.game);
+    const declaredWindow = handshakeSchema.shape.window.safeParse(auth.window);
+    const userId = socket.data.identity?.userId ?? null;
+    const game = declaredGame.success ? (declaredGame.data ?? null) : null;
+    const listing = game === null ? undefined : CATALOGUE.get(game);
+    // A guest has no account to key on, and a socket naming no game — or one the
+    // building does not have — is not at a game to be turned away from.
+    if (userId === null || game === null || listing === undefined) {
+      next();
+      return;
+    }
+    /*
+     * A window that cannot name itself gets its socket id, which matches
+     * nothing. That is the private-window case: it still claims, it just cannot
+     * prove itself across a refresh.
+     */
+    const windowId =
+      declaredWindow.success && declaredWindow.data !== undefined
+        ? declaredWindow.data
+        : socket.id;
+    const key = openKey(userId, game);
+    const held = openGames.get(key);
+    const mine =
+      held === undefined ||
+      held.window === windowId ||
+      /*
+       * Belt-and-braces, and not what saves anybody from the ping timeout:
+       * socket.io drops a socket from this map as it fires the disconnect that
+       * already releases the claim. It is here so a claim cannot outlive its
+       * socket if a release is ever missed — the map heals rather than holding a
+       * game shut for the life of the process.
+       */
+      !io.sockets.sockets.has(held.socket);
+    if (!mine) {
+      next(new Error(`You already have ${listing.name} open in another window.`));
+      return;
+    }
+    openGames.set(key, { window: windowId, socket: socket.id });
+    socket.data.atGame = key;
+    next();
+  });
+
+  /**
    * A pull on a machine playing for nothing.
    *
    * Deliberately the same arithmetic as the real one — same strip, same
@@ -2093,146 +2190,167 @@ export function createBackRoomServer(options: BackRoomServerOptions = {}): BackR
           return;
         }
 
-        /*
-         * A free spin replays the bet that won it. The stake and the line
-         * count come off the server's own record of the trigger, never off
-         * this message — otherwise the play is to trigger the bonus on the
-         * smallest stake the machine takes and claim the eight on the largest.
-         */
-        const owed = freeSpins.get(userId);
-        const wasFree = owed !== undefined && owed.left > 0;
-        const stake = wasFree && owed !== undefined ? owed.stake : asked;
-        const lines = wasFree && owed !== undefined ? owed.lines : askedLines;
-
-        /*
-         * Two caps, and the free one is the stricter. A paid spin's stake is
-         * in the bank by the time anything is owed; a free spin's never was,
-         * so the same worst case has to come out of a bank one stake shallower.
-         */
-        const cap = wasFree ? maxFreeStake(await store.bank("slots")) : maxStake(await store.bank("slots"));
-        if (stake > cap) {
-          if (wasFree) {
-            /*
-             * The bank has been walked down by the run itself and can no
-             * longer cover what is left. The rest are forfeit, which is the
-             * only honest answer: a free spin the bank cannot pay out on is
-             * not a free spin, it is a promise this machine does not keep.
-             */
-            freeSpins.delete(userId);
-            ack({ ok: false, error: "The bank cannot cover the rest of the free spins." });
-            return;
-          }
-          ack({
-            ok: false,
-            error:
-              cap < 1
-                ? "The bank is empty. Nothing to play for yet."
-                : `The bank covers ${cap} a spin at the moment.`,
-          });
+        if (spinning.has(userId)) {
+          ack({ ok: false, error: "One spin at a time." });
           return;
         }
+        spinning.add(userId);
+        try {
+          /*
+           * A free spin replays the bet that won it. The stake and the line
+           * count come off the server's own record of the trigger, never off
+           * this message — otherwise the play is to trigger the bonus on the
+           * smallest stake the machine takes and claim the eight on the largest.
+           */
+          const owed = freeSpins.get(userId);
+          const wasFree = owed !== undefined && owed.left > 0;
+          const stake = wasFree && owed !== undefined ? owed.stake : asked;
+          const lines = wasFree && owed !== undefined ? owed.lines : askedLines;
 
-        /*
-         * Nothing is taken for a free spin and nothing enters the bank — which
-         * is exactly why the free cap above is the stricter one. Every other
-         * step below is identical, deliberately: a free spin is the same spin,
-         * paid for earlier.
-         */
-        if (!wasFree) {
-          if (!(await deps.take(userId, stake))) {
-            ack({ ok: false, error: "Not enough chips." });
+          /*
+           * Two caps, and the free one is the stricter. A paid spin's stake is
+           * in the bank by the time anything is owed; a free spin's never was,
+           * so the same worst case has to come out of a bank one stake shallower.
+           */
+          const cap = wasFree ? maxFreeStake(await store.bank("slots")) : maxStake(await store.bank("slots"));
+          if (stake > cap) {
+            if (wasFree) {
+              /*
+               * The bank has been walked down by the run itself and can no
+               * longer cover what is left. The rest are forfeit, which is the
+               * only honest answer: a free spin the bank cannot pay out on is
+               * not a free spin, it is a promise this machine does not keep.
+               */
+              freeSpins.delete(userId);
+              ack({ ok: false, error: "The bank cannot cover the rest of the free spins." });
+              return;
+            }
+            ack({
+              ok: false,
+              error:
+                cap < 1
+                  ? "The bank is empty. Nothing to play for yet."
+                  : `The bank covers ${cap} a spin at the moment.`,
+            });
             return;
           }
-          await store.bankAdd("slots", stake);
-        }
 
-        const grid = drawGrid(spinRandom);
-        const { lines: paid, fixed, jackpot } = evaluate(grid, stake, lines);
-        const won = fixed + (jackpot ? jackpotPay(await store.bank("slots")) : 0);
-
-        /*
-         * Paid out of the bank, and only if the bank actually has it. The
-         * stake cap means this cannot refuse, which is exactly why it is
-         * checked: the alternative to checking is a bank that goes negative in
-         * silence and a machine that has quietly started minting chips.
-         */
-        if (won > 0 && !(await store.bankTake("slots", won))) {
+          /*
+           * Nothing is taken for a free spin and nothing enters the bank — which
+           * is exactly why the free cap above is the stricter one. Every other
+           * step below is identical, deliberately: a free spin is the same spin,
+           * paid for earlier.
+           */
           if (!wasFree) {
-            await store.bankAdd("slots", -stake);
-            await deps.give(userId, stake);
+            if (!(await deps.take(userId, stake))) {
+              ack({ ok: false, error: "Not enough chips." });
+              return;
+            }
+            await store.bankAdd("slots", stake);
           }
-          ack({ ok: false, error: "The bank is short. Nothing was staked." });
-          return;
+
+          const grid = drawGrid(spinRandom);
+          const { lines: paid, fixed, jackpot } = evaluate(grid, stake, lines);
+          const won = fixed + (jackpot ? jackpotPay(await store.bank("slots")) : 0);
+
+          /*
+           * Paid out of the bank, and only if the bank actually has it. The
+           * stake cap means this cannot refuse, which is exactly why it is
+           * checked: the alternative to checking is a bank that goes negative in
+           * silence and a machine that has quietly started minting chips.
+           */
+          if (won > 0 && !(await store.bankTake("slots", won))) {
+            if (!wasFree) {
+              await store.bankAdd("slots", -stake);
+              await deps.give(userId, stake);
+            }
+            ack({ ok: false, error: "The bank is short. Nothing was staked." });
+            return;
+          }
+          if (won > 0) {
+            await deps.give(userId, won);
+          }
+
+          /*
+           * The bonus. Counted after the lines are paid because it changes
+           * nothing about them — three bonuses anywhere is a run of spins, not a
+           * multiplier — and awarded only on a spin somebody paid for, so a run
+           * of free spins is a run of known length rather than a series.
+           */
+          const scatters = countScatters(grid);
+          const awarded = wasFree ? 0 : freeSpinsFor(scatters);
+          const left = (wasFree && owed !== undefined ? owed.left - 1 : 0) + awarded;
+          if (left > 0) {
+            freeSpins.set(userId, { left, stake, lines });
+          } else {
+            freeSpins.delete(userId);
+          }
+
+          /*
+           * Told to everybody at the machine, spinner included. Only chips
+           * spins: a for-fun purse was never anybody's, and putting its wins on
+           * the wall would advertise a room busier than it is.
+           *
+           * A free spin goes up with a stake of nothing, because that is what it
+           * cost. Reporting the replayed bet would put chips on the wall that
+           * nobody put down.
+           */
+          const news: SpinNews = {
+            id: `${socket.id}-${Date.now()}-${recentSpins.length}`,
+            name: socket.data.name ?? "Someone",
+            avatar: socket.data.identity?.avatar ?? null,
+            stake: wasFree ? 0 : stake,
+            won,
+            jackpot,
+            at: Date.now(),
+          };
+          recentSpins.unshift(news);
+          recentSpins.length = Math.min(recentSpins.length, 24);
+          io.to(SLOTS_ROOM).emit("slots:spun", news);
+
+          const cost = wasFree ? 0 : stake;
+          await deps.record(userId, {
+            shared: { games: 1, wins: won > cost ? 1 : 0, chipsWon: won - cost },
+            game: SLOTS.id,
+            add: { spins: 1, staked: cost, jackpots: jackpot ? 1 : 0 },
+            // A best spin is a maximum, and only the machine knows that.
+            max: { bestSpin: won },
+          });
+
+          ack({
+            ok: true,
+            grid,
+            lines: paid,
+            won,
+            stake,
+            linesPlayed: lines,
+            jackpot,
+            scatters,
+            awarded,
+            freeLeft: left,
+            wasFree,
+            bank: await store.bank("slots"),
+            balance: (await store.get(userId))?.chips ?? 0,
+          });
+        } finally {
+          // In a finally so a throw cannot wedge an account out of its own
+          // machine for the life of the process.
+          spinning.delete(userId);
         }
-        if (won > 0) {
-          await deps.give(userId, won);
-        }
-
-        /*
-         * The bonus. Counted after the lines are paid because it changes
-         * nothing about them — three bonuses anywhere is a run of spins, not a
-         * multiplier — and awarded only on a spin somebody paid for, so a run
-         * of free spins is a run of known length rather than a series.
-         */
-        const scatters = countScatters(grid);
-        const awarded = wasFree ? 0 : freeSpinsFor(scatters);
-        const left = (wasFree && owed !== undefined ? owed.left - 1 : 0) + awarded;
-        if (left > 0) {
-          freeSpins.set(userId, { left, stake, lines });
-        } else {
-          freeSpins.delete(userId);
-        }
-
-        /*
-         * Told to everybody at the machine, spinner included. Only chips
-         * spins: a for-fun purse was never anybody's, and putting its wins on
-         * the wall would advertise a room busier than it is.
-         *
-         * A free spin goes up with a stake of nothing, because that is what it
-         * cost. Reporting the replayed bet would put chips on the wall that
-         * nobody put down.
-         */
-        const news: SpinNews = {
-          id: `${socket.id}-${Date.now()}-${recentSpins.length}`,
-          name: socket.data.name ?? "Someone",
-          avatar: socket.data.identity?.avatar ?? null,
-          stake: wasFree ? 0 : stake,
-          won,
-          jackpot,
-          at: Date.now(),
-        };
-        recentSpins.unshift(news);
-        recentSpins.length = Math.min(recentSpins.length, 24);
-        io.to(SLOTS_ROOM).emit("slots:spun", news);
-
-        const cost = wasFree ? 0 : stake;
-        await deps.record(userId, {
-          shared: { games: 1, wins: won > cost ? 1 : 0, chipsWon: won - cost },
-          game: SLOTS.id,
-          add: { spins: 1, staked: cost, jackpots: jackpot ? 1 : 0 },
-          // A best spin is a maximum, and only the machine knows that.
-          max: { bestSpin: won },
-        });
-
-        ack({
-          ok: true,
-          grid,
-          lines: paid,
-          won,
-          stake,
-          linesPlayed: lines,
-          jackpot,
-          scatters,
-          awarded,
-          freeLeft: left,
-          wasFree,
-          bank: await store.bank("slots"),
-          balance: (await store.get(userId))?.chips ?? 0,
-        });
       })();
     });
 
     socket.on("disconnect", () => {
+      /*
+       * Only if the claim still names this socket. A window that was refused,
+       * or one already replaced by its own refresh, must not be able to
+       * release somebody else's game on its way out.
+       */
+      const claimed = socket.data.atGame;
+      if (claimed !== null && openGames.get(claimed)?.socket === socket.id) {
+        openGames.delete(claimed);
+      }
+
       const seat = sockets.get(socket.id);
       sockets.delete(socket.id);
       // Play money lives at the machine and goes when they do.

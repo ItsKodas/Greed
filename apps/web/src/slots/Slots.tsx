@@ -22,6 +22,8 @@ import { useAccount } from "../game/useAccount.js";
 import { exact } from "../game/money.js";
 import { Navbar } from "../nav/Navbar.js";
 import { Digits } from "../game/Digits.js";
+import { Taken } from "../net/Taken.js";
+import { windowId } from "../net/windowId.js";
 import { Fireworks } from "./Fireworks.js";
 import { RoomFireworks } from "./RoomFireworks.js";
 import { Reel, REEL_STAGGER_MS } from "./Reel.js";
@@ -585,6 +587,11 @@ export default function Slots() {
   /** Something refused. Separate from what a spin paid, and said straight away. */
   const [problem, setProblem] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  /**
+   * The server's reason for turning this window away, or null. Apart from
+   * `connected` on purpose: one says wait, the other says go and close a tab.
+   */
+  const [taken, setTaken] = useState<string | null>(null);
   /*
    * The stake, gone from the shown balance the moment it is pressed.
    *
@@ -613,15 +620,33 @@ export default function Slots() {
   const socketRef = useRef<SpinSocket | null>(null);
 
   useEffect(() => {
-    const socket = io("", { withCredentials: true }) as SpinSocket;
+    const socket = io("", {
+      withCredentials: true,
+      // One machine per account. The server needs the game and the window to
+      // tell a refresh from a second one of these.
+      auth: { game: "slots", window: windowId() },
+    }) as SpinSocket;
     socketRef.current = socket;
     socket.on("connect", () => {
+      setTaken(null);
       setConnected(true);
       // Stand at the machine. The backlog comes back with the ack, so the
       // wall is never briefly blank for somebody who has just walked up.
       socket.emit("slots:watch", {}, (recent) => setNews(recent));
     });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", (error: Error) => {
+      /*
+       * socket.io keeps retrying a transport failure and gives up on a
+       * middleware refusal, so `active` is what tells the two apart. Only the
+       * second is this window being turned away; the first is a connection to
+       * wait out, and dressing it as a refusal would tell somebody to close a
+       * tab they do not have open.
+       */
+      if (!socket.active) {
+        setTaken(error.message);
+      }
+    });
     socket.on("slots:spun", (spun) => {
       /*
        * Held while this machine is still turning.
@@ -1131,112 +1156,122 @@ export default function Slots() {
         connected={connected}
       />
 
-      <div className="slots__floor">
-        <SpinFeed
-          title="At the machine"
-          empty="Nobody has pulled it yet."
-          news={news}
-          side="left"
+      {taken !== null ? (
+        <Taken
+          message={taken}
+          onRetry={() => {
+            setTaken(null);
+            socketRef.current?.connect();
+          }}
         />
+      ) : (
+        <div className="slots__floor">
+          <SpinFeed
+            title="At the machine"
+            empty="Nobody has pulled it yet."
+            news={news}
+            side="left"
+          />
 
-        <div className="slots__cabinet" ref={cabinet}>
-          {/* Behind the page rather than on the machine: the shells leave the
-              sides of the cabinet and burst out in the room either side of
-              it, and only for a win worth turning round for. */}
-          <RoomFireworks fire={fired} shells={roomSize} from={cabinet} />
-          <ModeSwitch forFun={forFun} onChange={changeMachine} busy={settling} />
+          <div className="slots__cabinet" ref={cabinet}>
+            {/* Behind the page rather than on the machine: the shells leave the
+                sides of the cabinet and burst out in the room either side of
+                it, and only for a win worth turning round for. */}
+            <RoomFireworks fire={fired} shells={roomSize} from={cabinet} />
+            <ModeSwitch forFun={forFun} onChange={changeMachine} busy={settling} />
 
-          {/*
-            * The machine itself: a marquee over glass over a belly, with the
-            * handle bolted down the side. Drawn as one object rather than a
-            * stack of panels, because a slot machine is a thing you stand in
-            * front of and everything on this page is part of it.
-            */}
-          <div className="cab">
-            <div className="cab__body">
-              <div className="cab__marquee">
-                {/* Only ever for the jackpot. The glass below celebrates every
-                    win; the top of the machine keeps its powder dry. */}
-                <Fireworks fire={jackpotFired} scale={3} />
-                <Marquee
-                  bank={shown?.bank ?? 0}
-                  jackpot={shown?.jackpot ?? 0}
-                  forFun={forFun}
-                  said={said}
-                  problem={problem}
-                  lines={lines}
-                  wasJackpot={wasJackpot}
-                  showing={lit}
-                  awarded={awarded}
-                  freeLeft={freeLeft}
-                />
-              </div>
-
-              <div className="cab__glass">
-                {/* Over the glass, under nothing: it takes no pointer events
-                    and occupies no space in the layout. */}
-                <Fireworks fire={fired} scale={showSize} />
-                <div className="slots__glass">
-                  <FaceDefs />
-                  {columns.map((column, reel) => (
-                    <Reel
-                      // Five fixed positions; what changes is the faces in one.
-                      key={REEL_NAMES[reel]}
-                      column={column}
-                      spinning={spinning}
-                      index={reel}
-                      resting={ATTRACT[reel]}
-                      holdMs={holds[reel] ?? 0}
-                      won={won[reel]}
-                      onStop={() => reelStopped(reel)}
-                    />
-                  ))}
-                  <PaylineOverlay lines={lit ? lines : []} />
-                </div>
-              </div>
-
-              <div className="cab__belly">
-                {canPlay ? (
-                  <Controls
-                    stake={stake}
-                    onAdd={(amount) => setStake((on) => on + amount)}
-                    onClear={() => setStake(0)}
-                    canAdd={canAdd}
-                    busy={settling}
-                    balance={balance ?? 0}
-                    cap={cap}
+            {/*
+              * The machine itself: a marquee over glass over a belly, with the
+              * handle bolted down the side. Drawn as one object rather than a
+              * stack of panels, because a slot machine is a thing you stand in
+              * front of and everything on this page is part of it.
+              */}
+            <div className="cab">
+              <div className="cab__body">
+                <div className="cab__marquee">
+                  {/* Only ever for the jackpot. The glass below celebrates every
+                      win; the top of the machine keeps its powder dry. */}
+                  <Fireworks fire={jackpotFired} scale={3} />
+                  <Marquee
+                    bank={shown?.bank ?? 0}
+                    jackpot={shown?.jackpot ?? 0}
                     forFun={forFun}
-                    lineCount={lineCount}
-                    onLines={setLineCount}
-                    total={total}
-                    onPull={pull}
-                    canPull={canPull}
+                    said={said}
+                    problem={problem}
+                    lines={lines}
+                    wasJackpot={wasJackpot}
+                    showing={lit}
+                    awarded={awarded}
                     freeLeft={freeLeft}
-                    auto={auto}
-                    onAuto={() => setAuto((on) => !on)}
                   />
-                ) : (
-                  <SignInToPlay available={account.available} />
-                )}
+                </div>
+
+                <div className="cab__glass">
+                  {/* Over the glass, under nothing: it takes no pointer events
+                      and occupies no space in the layout. */}
+                  <Fireworks fire={fired} scale={showSize} />
+                  <div className="slots__glass">
+                    <FaceDefs />
+                    {columns.map((column, reel) => (
+                      <Reel
+                        // Five fixed positions; what changes is the faces in one.
+                        key={REEL_NAMES[reel]}
+                        column={column}
+                        spinning={spinning}
+                        index={reel}
+                        resting={ATTRACT[reel]}
+                        holdMs={holds[reel] ?? 0}
+                        won={won[reel]}
+                        onStop={() => reelStopped(reel)}
+                      />
+                    ))}
+                    <PaylineOverlay lines={lit ? lines : []} />
+                  </div>
+                </div>
+
+                <div className="cab__belly">
+                  {canPlay ? (
+                    <Controls
+                      stake={stake}
+                      onAdd={(amount) => setStake((on) => on + amount)}
+                      onClear={() => setStake(0)}
+                      canAdd={canAdd}
+                      busy={settling}
+                      balance={balance ?? 0}
+                      cap={cap}
+                      forFun={forFun}
+                      lineCount={lineCount}
+                      onLines={setLineCount}
+                      total={total}
+                      onPull={pull}
+                      canPull={canPull}
+                      freeLeft={freeLeft}
+                      auto={auto}
+                      onAuto={() => setAuto((on) => !on)}
+                    />
+                  ) : (
+                    <SignInToPlay available={account.available} />
+                  )}
+                </div>
+
+                {/* Where the coins would land. Empty, and that is the point: it
+                    is the bottom edge of a machine rather than a panel — which
+                    is why it runs to the cabinet's edges rather than sitting
+                    inside them. */}
+                <div className="cab__tray" aria-hidden="true" />
               </div>
 
-              {/* Where the coins would land. Empty, and that is the point: it
-                  is the bottom edge of a machine rather than a panel — which
-                  is why it runs to the cabinet's edges rather than sitting
-                  inside them. */}
-              <div className="cab__tray" aria-hidden="true" />
             </div>
-
           </div>
-        </div>
 
-        <SpinFeed
-          title="Paying out"
-          empty="No wins yet."
-          news={news.filter((spun) => spun.won > 0)}
-          side="right"
-        />
-      </div>
+          <SpinFeed
+            title="Paying out"
+            empty="No wins yet."
+            news={news.filter((spun) => spun.won > 0)}
+            side="right"
+          />
+        </div>
+      )}
     </main>
   );
 }
