@@ -55,6 +55,9 @@ export const createSchema = z.object({
    * minute are different games to sit at — so it belongs to the host, with the
    * rest of the table's shape. Bounded here and snapped to a level the game
    * offers, the same way the buy-in is.
+   *
+   * Not the `window` in the handshake below, which is a browser window's own
+   * id. Same word, unrelated things: this one is a length of time.
    */
   window: z.number().int().min(1_000).max(300_000).optional(),
 });
@@ -166,3 +169,38 @@ export const spinSchema = z.object({
 });
 
 export type SpinPayload = z.infer<typeof spinSchema>;
+
+/**
+ * What a window says about itself as it connects.
+ *
+ * Both optional, and a socket that sends neither is let through: every client
+ * that predates this rule is one of those, and a handshake is not the place to
+ * start refusing people. The window id is the client's own and is trusted only
+ * to tell a refresh from a rival — never as an identity.
+ */
+export const handshakeSchema = z.object({
+  game: z.string().max(24).optional(),
+  window: z.string().min(1).max(64).optional(),
+});
+
+export type HandshakePayload = z.infer<typeof handshakeSchema>;
+
+/**
+ * A tap, and the token it must carry.
+ *
+ * The token is the whole payload because nothing else about a tap is the
+ * client's to decide. What it pays comes off the server's jar; a client that
+ * could name an amount would be a client naming its own wages.
+ */
+export const tapSchema = z.object({
+  token: z.string().min(1).max(64),
+});
+
+export const buySchema = z.object({
+  /** Compared against the ladder, never parsed. */
+  upgrade: z.string().min(1).max(24),
+  token: z.string().min(1).max(64),
+});
+
+export type TapPayload = z.infer<typeof tapSchema>;
+export type BuyPayload = z.infer<typeof buySchema>;

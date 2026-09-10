@@ -222,6 +222,18 @@ export interface ClientToServer {
     payload: { stake: number; lines?: number; forFun?: boolean },
     ack: (result: SpinResult) => void,
   ) => void;
+  /**
+   * Stand at the jar and be told what is in it.
+   *
+   * Its own events rather than game:action, for the same reason the machine
+   * has its own: there is no table for one to act on.
+   */
+  "tips:open": (payload: Record<string, never>, ack: (jar: JarView) => void) => void;
+  "tips:tap": (payload: { token: string }, ack: (result: TapResult) => void) => void;
+  "tips:buy": (
+    payload: { upgrade: string; token: string },
+    ack: (result: TapResult) => void,
+  ) => void;
 }
 
 /**
@@ -310,6 +322,42 @@ export type SpinResult =
       wasFree: boolean;
     }
   | { ok: false; error: string };
+
+/**
+ * The jar, as the player standing at it may see it.
+ *
+ * `level`, `at` and `trickle` travel together rather than a bare level so the
+ * client can draw the jar filling between taps without asking. That is
+ * deriving, not inventing: same arithmetic, same inputs, and every ack
+ * replaces it with the server's answer.
+ */
+export interface JarView {
+  level: number;
+  /** When `level` was true, by the server's clock. */
+  at: number;
+  brim: number;
+  /** Chips per minute. */
+  trickle: number;
+  scoop: number;
+  favours: number;
+  bought: string[];
+  chipsTonight: number;
+  /** When this night's upgrades and favours expire. */
+  nightEndsAt: number;
+  /** What the next tap or buy must carry. */
+  token: string;
+}
+
+/**
+ * What the jar did with a tap.
+ *
+ * The refusal carries a jar too, and that is what makes a refused tap
+ * recoverable rather than terminal: the token in it is fresh, so the client
+ * resyncs instead of wedging.
+ */
+export type TapResult =
+  | { ok: true; paid: number; balance: number; jar: JarView }
+  | { ok: false; error: string; jar: JarView };
 
 export interface ServerToClient {
   /** Somebody at the machine just pulled the lever. */

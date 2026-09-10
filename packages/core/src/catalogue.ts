@@ -26,8 +26,12 @@ export interface GameListing {
    * in turn, it wants a crowd rather than a full table, and it is not played
    * for chips at all. Grouping it with the felt would put a game you play with
    * friends on a shelf next to the ones that take your money.
+   *
+   * A bar game is the fourth: played alone like a machine, but against nobody
+   * and with nothing at risk. It has no bank and no house, so filing it as a
+   * machine would make the sentence above it untrue.
    */
-  shape: "table" | "machine" | "party";
+  shape: "table" | "machine" | "party" | "bar";
   minSeats: number;
   /** Never more than {@link MAX_SEATS}; a game may want fewer. */
   maxSeats: number;

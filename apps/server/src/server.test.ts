@@ -930,6 +930,13 @@ describe("what the room offers", () => {
     expect(greed?.tables).toBe(1);
     expect(greed?.seated).toBe(1);
   });
+
+  it("no longer offers a daily top-up", async () => {
+    await start();
+    const port = (server as BackRoomServer).http.address() as AddressInfo;
+    const response = await fetch(`http://localhost:${port.port}/api/daily`, { method: "POST" });
+    expect(response.status).toBe(404);
+  });
 });
 
 describe("what a link to this place looks like", () => {

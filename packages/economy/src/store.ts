@@ -32,6 +32,14 @@ export interface Profile {
    * game names its own figures; nothing here knows what they mean.
    */
   byGame: Record<string, Record<string, number>>;
+  /**
+   * The tip jar this account is filling.
+   *
+   * Here rather than at the game because it is chips: it has to survive a
+   * restart, and a jar held only in a server's memory would be a jar that
+   * refills itself every deploy.
+   */
+  jar: JarRecord;
 }
 
 /**
@@ -94,16 +102,6 @@ export interface GameRecord {
   endedAt: number;
 }
 
-export interface DailyResult {
-  ok: boolean;
-  /** Why not, when ok is false. */
-  reason?: "not-needed" | "too-soon" | "unknown-player";
-  granted: number;
-  chips: number;
-  /** When they may next claim, in epoch ms. */
-  nextAt?: number;
-}
-
 /**
  * The banks this building keeps, by the game that fills them.
  *
@@ -121,6 +119,47 @@ export interface DailyResult {
  */
 export type BankName = "slots" | "blackjack" | "roulette";
 
+/**
+ * A player's tip jar, structurally identical to `Jar` in
+ * `games/tips/src/jar.ts`.
+ *
+ * Written out here rather than imported, for the same reason `BankName` is:
+ * no package under `packages/` may depend on anything under `games/` — a
+ * jar is chips, and chips belong on the profile whichever game is filling
+ * it. Task 9 adds a compile-time assertion in `apps/server`, where both this
+ * type and `Jar` are visible, that the two stay mutually assignable; that
+ * check cannot live here, because this package cannot see `Jar` at all.
+ */
+export interface JarRecord {
+  level: number;
+  levelAt: number;
+  favours: number;
+  bought: string[];
+  nightStartedAt: number;
+  paidThisNight: number;
+  token: string;
+  rhythm: number[];
+  lastTapAt: number | null;
+}
+
+/**
+ * The zero jar: never touched. A blank token is that state's marker — the
+ * server mints a real one on first contact by swapping against `""`.
+ */
+export function emptyJarRecord(): JarRecord {
+  return {
+    level: 0,
+    levelAt: 0,
+    favours: 0,
+    bought: [],
+    nightStartedAt: 0,
+    paidThisNight: 0,
+    token: "",
+    rhythm: [],
+    lastTapAt: null,
+  };
+}
+
 export interface Store {
   readonly kind: "memory" | "mongo";
   upsertDiscordUser(input: {
@@ -136,7 +175,32 @@ export interface Store {
    * update rather than a read followed by a write.
    */
   adjustChips(id: string, delta: number): Promise<boolean>;
-  claimDaily(id: string): Promise<DailyResult>;
+
+  /** This account's jar and balance, for somebody who has just walked up to it. */
+  jar(id: string): Promise<{ jar: JarRecord; chips: number } | null>;
+
+  /**
+   * Swaps a jar for its successor, and moves chips in the same operation.
+   *
+   * Conditional on `expectedToken` still being the jar's token. The caller
+   * decided what the next jar should be by reading the current one; if
+   * another tap has landed in between, the token has moved, this write does
+   * not match, and the caller is told so rather than paying a second time
+   * from a jar it can no longer see.
+   *
+   * On a failed swap, `ok` is false and the returned `jar`/`chips` are the
+   * current values re-read from the store, so the caller can resync.
+   * `chipDelta` may be zero (a buy) or positive (a tap); this game only ever
+   * credits, and there is no floor on the balance here — a caller that ever
+   * needed to debit would have to add one, the way `adjustChips` does.
+   */
+  applyJar(
+    id: string,
+    expectedToken: string,
+    next: JarRecord,
+    chipDelta: number,
+  ): Promise<{ ok: boolean; chips: number; jar: JarRecord }>;
+
   bumpStats(id: string, bump: StatBump): Promise<void>;
   recordGame(record: GameRecord): Promise<void>;
 
@@ -241,34 +305,9 @@ export interface Store {
 
 /** What a new profile starts with. */
 export const STARTING_CHIPS = 10_000;
-/** Below this, a player may claim the top-up. */
-export const DAILY_FLOOR = 2_000;
-export const DAILY_GRANT = 5_000;
-export const DAILY_INTERVAL_MS = 20 * 60 * 60 * 1000;
 
 export function emptyStats(): ProfileStats {
   return { games: 0, wins: 0, chipsWon: 0 };
-}
-
-/**
- * Decides a daily claim. Shared by both stores so the rule cannot drift
- * between "running with a database" and "running without one".
- */
-export function judgeDaily(profile: Profile, now: number): DailyResult {
-  if (profile.chips >= DAILY_FLOOR) {
-    return { ok: false, reason: "not-needed", granted: 0, chips: profile.chips };
-  }
-  const last = profile.lastDailyClaim;
-  if (last !== null && now - last < DAILY_INTERVAL_MS) {
-    return {
-      ok: false,
-      reason: "too-soon",
-      granted: 0,
-      chips: profile.chips,
-      nextAt: last + DAILY_INTERVAL_MS,
-    };
-  }
-  return { ok: true, granted: DAILY_GRANT, chips: profile.chips + DAILY_GRANT };
 }
 
 export class MemoryStore implements Store {
@@ -337,6 +376,7 @@ export class MemoryStore implements Store {
       lastDailyClaim: null,
       stats: emptyStats(),
       byGame: {},
+      jar: emptyJarRecord(),
     };
     this.people.set(profile.id, profile);
     return profile;
@@ -358,17 +398,33 @@ export class MemoryStore implements Store {
     return true;
   }
 
-  async claimDaily(id: string): Promise<DailyResult> {
+  async jar(id: string): Promise<{ jar: JarRecord; chips: number } | null> {
+    const profile = this.people.get(id);
+    return profile === undefined ? null : { jar: profile.jar, chips: profile.chips };
+  }
+
+  /*
+   * No `await` between the compare and the write. That is the whole
+   * atomicity argument for this store: node runs this to completion before
+   * any other caller gets a turn, so a hundred concurrent swaps queue
+   * rather than race.
+   */
+  async applyJar(
+    id: string,
+    expectedToken: string,
+    next: JarRecord,
+    chipDelta: number,
+  ): Promise<{ ok: boolean; chips: number; jar: JarRecord }> {
     const profile = this.people.get(id);
     if (profile === undefined) {
-      return { ok: false, reason: "unknown-player", granted: 0, chips: 0 };
+      return { ok: false, chips: 0, jar: emptyJarRecord() };
     }
-    const verdict = judgeDaily(profile, Date.now());
-    if (verdict.ok) {
-      profile.chips += verdict.granted;
-      profile.lastDailyClaim = Date.now();
+    if (profile.jar.token !== expectedToken) {
+      return { ok: false, chips: profile.chips, jar: profile.jar };
     }
-    return verdict;
+    profile.jar = next;
+    profile.chips += chipDelta;
+    return { ok: true, chips: profile.chips, jar: profile.jar };
   }
 
   async bumpStats(id: string, bump: StatBump): Promise<void> {

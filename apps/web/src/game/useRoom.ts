@@ -11,6 +11,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
+import { windowId } from "../net/windowId.js";
 import type { PendingRoll } from "./useRollAnimation.js";
 
 /** A pending throw, plus the counter it was asked from so we know when it lands. */
@@ -113,6 +114,16 @@ export interface RoomHook {
   seatId: string | null;
   error: string | null;
   connected: boolean;
+  /**
+   * The server's reason for turning this window away, or null.
+   *
+   * Held apart from `connected` on purpose: a lost connection and a refused
+   * one look nothing alike to a player. One says wait, the other says go and
+   * close a tab.
+   */
+  taken: string | null;
+  /** Asks again. socket.io will not retry a refusal from the middleware. */
+  retry: () => void;
   busy: boolean;
   /** Taunts thrown at this table, oldest first, for whatever is animating them. */
   landed: TauntPlay[];
@@ -139,6 +150,11 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
   const [seatId, setSeatId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  /**
+   * The server's reason for turning this window away, or null. Apart from
+   * `connected` on purpose: one says wait, the other says go and close a tab.
+   */
+  const [taken, setTaken] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   /*
@@ -175,10 +191,15 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
     // cannot open a websocket gives up rather than falling back, and plenty of
     // proxies do not pass an upgrade through. Socket.IO's own default opens on
     // polling and upgrades when it can, which degrades instead of failing.
-    const socket: GameSocket = io(SERVER_URL, { withCredentials: true });
+    const socket: GameSocket = io(SERVER_URL, {
+      withCredentials: true,
+      // One window per game per account, and the server needs both to say so.
+      auth: { game: "greed", window: windowId() },
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setTaken(null);
       setConnected(true);
       // Reclaim the seat this browser was sitting in, if it is still being held.
       const stored = readSeat();
@@ -194,6 +215,20 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
       });
     });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", (error: Error) => {
+      /*
+       * socket.io keeps retrying a transport failure and gives up on a
+       * middleware refusal, so `active` is what tells the two apart. Only the
+       * second is this window being turned away; the first is a connection to
+       * wait out, and dressing it as a refusal would tell somebody to close a
+       * tab they do not have open.
+       */
+      if (!socket.active) {
+        setTaken(error.message);
+      } else {
+        setError("Cannot reach the server. Is it running?");
+      }
+    });
     socket.on("room:state", (raw) => {
       /*
        * One channel now carries every game's state, so what arrives is checked
@@ -240,7 +275,6 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
     socket.on("taunt:play", (one) => {
       setLanded((log) => [...log, one].slice(-12));
     });
-    socket.on("connect_error", () => setError("Cannot reach the server. Is it running?"));
 
     return () => {
       socket.close();
@@ -396,6 +430,11 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
     });
   }, []);
 
+  const retry = useCallback(() => {
+    setTaken(null);
+    socketRef.current?.connect();
+  }, []);
+
   const leave = useCallback(() => {
     writeSeat(null);
     socketRef.current?.emit("lobby:leave");
@@ -419,6 +458,8 @@ export function useRoom(onChips?: (chips: number) => void): RoomHook {
     seatId,
     error,
     connected,
+    taken,
+    retry,
     busy,
     actions: {
       create,

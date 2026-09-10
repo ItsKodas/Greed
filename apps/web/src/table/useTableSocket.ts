@@ -11,6 +11,7 @@ import type {
 } from "@backroom/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { windowId } from "../net/windowId.js";
 
 /**
  * Sitting at a table, whatever is played at it.
@@ -73,6 +74,16 @@ export interface TableSocketHook<TView> {
   seatId: string | null;
   error: string | null;
   connected: boolean;
+  /**
+   * The server's reason for turning this window away, or null.
+   *
+   * Held apart from `connected` on purpose: a lost connection and a refused
+   * one look nothing alike to a player. One says wait, the other says go and
+   * close a tab.
+   */
+  taken: string | null;
+  /** Asks again. socket.io will not retry a refusal from the middleware. */
+  retry: () => void;
   busy: boolean;
   /* Table talk belongs to the building rather than to any game: the server
      reads nothing but the text, and every room has people in it. */
@@ -130,6 +141,7 @@ export function useTableSocket<TView>(
   const [seatId, setSeatId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [taken, setTaken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   /** The room's fact about the table rather than part of the game's view. */
@@ -140,10 +152,16 @@ export function useTableSocket<TView>(
   useEffect(() => {
     // No transports named on purpose: naming one makes it the only one tried,
     // and a browser that cannot open a websocket would simply give up.
-    const socket: TableSocket = io("", { withCredentials: true });
+    const socket: TableSocket = io("", {
+      withCredentials: true,
+      // Which game this window has open, and which window it is. The server
+      // allows one window per game per account and needs both to say so.
+      auth: { game, window: windowId() },
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => {
+      setTaken(null);
       setConnected(true);
       const stored = readSeat(game);
       if (stored === null) {
@@ -158,6 +176,18 @@ export function useTableSocket<TView>(
       });
     });
     socket.on("disconnect", () => setConnected(false));
+    socket.on("connect_error", (error: Error) => {
+      /*
+       * socket.io keeps retrying a transport failure and gives up on a
+       * middleware refusal, so `active` is what tells the two apart. Only the
+       * second is this window being turned away; the first is a connection to
+       * wait out, and dressing it as a refusal would tell somebody to close a
+       * tab they do not have open.
+       */
+      if (!socket.active) {
+        setTaken(error.message);
+      }
+    });
     socket.on("room:state", (raw: TableState) => {
       if (raw.game !== game) {
         return;
@@ -261,6 +291,11 @@ export function useTableSocket<TView>(
     socketRef.current?.emit("game:action", action as { type: string }, done);
   }, []);
 
+  const retry = useCallback(() => {
+    setTaken(null);
+    socketRef.current?.connect();
+  }, []);
+
   const addBot = useCallback((skill: BotSkill) => {
     socketRef.current?.emit("lobby:addBot", { skill });
   }, []);
@@ -304,6 +339,8 @@ export function useTableSocket<TView>(
     stakes,
     taunt,
     connected,
+    taken,
+    retry,
     busy,
     chat,
     addBot,

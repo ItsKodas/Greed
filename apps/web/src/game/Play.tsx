@@ -1,5 +1,6 @@
 import { RULESETS } from "@backroom/rules";
 import { Navbar } from "../nav/Navbar.js";
+import { Taken } from "../net/Taken.js";
 import { PublicTables } from "../table/PublicTables.js";
 import { SeatAvatar } from "./Avatar.js";
 import "@backroom/game-greed/theme.css";
@@ -40,6 +41,8 @@ export function Play() {
     seatId,
     error,
     connected,
+    taken,
+    retry,
     busy,
     landed,
     stakes,
@@ -98,14 +101,13 @@ export function Play() {
       />
 
       {error !== null ? <p className="play__error">{error}</p> : null}
-      {account.dailyMessage !== null ? (
-        <p className="play__event">{account.dailyMessage}</p>
-      ) : null}
       {room?.lastEvent != null && room.status !== "lobby" ? (
         <p className="play__event">{room.lastEvent}</p>
       ) : null}
 
-      {room === null ? (
+      {taken !== null ? (
+        <Taken message={taken} onRetry={retry} />
+      ) : room === null ? (
         <Join
           actions={actions}
           busy={busy}

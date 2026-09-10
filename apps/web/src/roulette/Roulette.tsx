@@ -10,6 +10,7 @@ import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
 import { useCountdown } from "../game/useCountdown.js";
 import { Navbar } from "../nav/Navbar.js";
+import { Taken } from "../net/Taken.js";
 import { PublicTables } from "../table/PublicTables.js";
 import { SeatCount } from "../table/SeatCount.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
@@ -89,7 +90,14 @@ export function Roulette() {
 
       {table.error !== null ? <p className="play__error">{table.error}</p> : null}
 
-      {state === null ? (
+      {/*
+        A second window on the same game is turned away, and says so in its own
+        panel rather than as a disconnection — one wheel per player, because
+        two of them would be one person betting against their own table.
+      */}
+      {table.taken !== null ? (
+        <Taken message={table.taken} onRetry={table.retry} />
+      ) : state === null ? (
         <Sit table={table} invited={urlCode} account={account} />
       ) : (
         <>

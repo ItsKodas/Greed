@@ -1111,6 +1111,25 @@
   background: color-mix(in srgb, var(--gr-color-neon) 8%, transparent);
 }
 
+/*
+ * A link wearing a button.
+ *
+ * .btn was written when every one of them was a <button>, which centres its
+ * own label and never underlines it. An <a> does neither, so the first link
+ * to borrow the class came out underlined and ragged-left with the fill
+ * sitting behind it. Written against `a.btn` rather than folded into `.btn`
+ * itself: every other .btn in the building is a real button already laying
+ * itself out correctly, and changing their display to suit two links is a
+ * wider blast radius than this is worth.
+ */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  text-decoration: none;
+}
+
 .btn--wide {
   width: 100%;
 }

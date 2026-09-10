@@ -1,0 +1,40 @@
+/*
+ * The turned-away panel. Sized for a thumb and legible at 375px, because a
+ * player told to go and close a tab is often the one holding the phone.
+ * A message block, painted the same way as .play__error/.play__event
+ * (game.css) rather than left to the browser's own chrome.
+ */
+.taken {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gr-space-3);
+  max-width: 28rem;
+  margin: 3rem auto;
+  padding: var(--gr-space-5) var(--gr-space-4);
+  border: 1px solid var(--gr-color-neon-dim);
+  border-radius: var(--gr-radius-sm);
+  background: color-mix(in srgb, var(--gr-color-neon) 8%, transparent);
+  color: var(--gr-color-ink);
+  text-align: center;
+}
+
+.taken__what {
+  margin: 0;
+  font-size: var(--gr-text-lg);
+  font-weight: 600;
+  color: var(--gr-color-ink-lit);
+}
+
+.taken__how {
+  margin: 0;
+  color: var(--gr-color-ink-dim);
+}
+
+/*
+ * .btn supplies the building's button chrome; this only adds what .btn
+ * doesn't already guarantee — a thumb-sized hit target at 375px.
+ */
+.taken__retry {
+  min-height: 44px;
+}
