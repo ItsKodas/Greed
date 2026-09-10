@@ -21,6 +21,7 @@ import "./taunt/taunt.css";
  * furniture rather than any one game's.
  */
 import "./net/net.css";
+import "./tips/tips.css";
 
 const container = document.getElementById("root");
 if (container === null) {

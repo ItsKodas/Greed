@@ -101,9 +101,6 @@ export function Play() {
       />
 
       {error !== null ? <p className="play__error">{error}</p> : null}
-      {account.dailyMessage !== null ? (
-        <p className="play__event">{account.dailyMessage}</p>
-      ) : null}
       {room?.lastEvent != null && room.status !== "lobby" ? (
         <p className="play__event">{room.lastEvent}</p>
       ) : null}

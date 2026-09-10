@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import mongoose from "mongoose";
 import { MongoStore } from "./mongo-store.js";
-import { DAILY_GRANT, STARTING_CHIPS } from "./store.js";
+import { STARTING_CHIPS, emptyJarRecord } from "./store.js";
+import type { JarRecord } from "./store.js";
 import { DAILY_SEND_CAP } from "./transfers.js";
 
 /**
@@ -68,23 +69,6 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
     );
     expect(results.filter(Boolean)).toHaveLength(STARTING_CHIPS / 1000);
     expect((await store.get(player.id))?.chips).toBe(0);
-  });
-
-  it("pays the daily top-up once even when claimed concurrently", async () => {
-    const player = await newPlayer();
-    await store.adjustChips(player.id, -(STARTING_CHIPS - 50));
-
-    const claims = await Promise.all(
-      Array.from({ length: 5 }, () => store.claimDaily(player.id)),
-    );
-    expect(claims.filter((claim) => claim.ok)).toHaveLength(1);
-    expect((await store.get(player.id))?.chips).toBe(50 + DAILY_GRANT);
-  });
-
-  it("refuses the top-up to someone who is not short", async () => {
-    const player = await newPlayer();
-    const claim = await store.claimDaily(player.id);
-    expect(claim.ok).toBe(false);
   });
 
   it("holds the best turn as a high-water mark under racing writes", async () => {
@@ -186,6 +170,68 @@ describe.skipIf(url === undefined || url.length === 0)("MongoStore against a rea
 
     expect([first, second].filter(Boolean)).toHaveLength(1);
     expect(await store.bank("slots")).toBe(0);
+  });
+
+  /**
+   * The jar's token as a compare-and-swap key, against a real database.
+   *
+   * MemoryStore keeps this promise by accident, being single-threaded — the
+   * atomicity argument there is "no await between the read and the write".
+   * Mongo's is a different argument, a conditional `findOneAndUpdate`, and
+   * only a real database run concurrently can show it actually holds.
+   */
+  describe("a jar on the profile", () => {
+    it("pays exactly one of a hundred concurrent swaps carrying the same token", async () => {
+      const player = await newPlayer();
+      const before = (await store.get(player.id))?.chips ?? 0;
+      const held = await store.jar(player.id);
+      const token = held?.jar.token ?? "";
+      const next: JarRecord = { ...emptyJarRecord(), level: 1, token: "after-swap" };
+
+      const results = await Promise.all(
+        Array.from({ length: 100 }, () => store.applyJar(player.id, token, next, 25)),
+      );
+
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      expect((await store.get(player.id))?.chips).toBe(before + 25);
+    });
+
+    /*
+     * A profile from before the jar existed: no `jar` field at all, the way
+     * every account written before this feature looks. `jar()` reads through
+     * mongoose, which hydrates the schema default and hands back a blank
+     * token — but `applyJar`'s filter is a raw query that a missing path
+     * never matches on its own. Without the `$exists: false` branch this
+     * swap fails forever, and the client resyncs into a token that can never
+     * be spent.
+     */
+    it("lets a profile with no jar field swap against the blank token", async () => {
+      const player = await newPlayer();
+      store ??= await MongoStore.connect(url as string);
+      const direct = await mongoose.createConnection(url as string).asPromise();
+      await direct.collection("users").updateOne(
+        { _id: new mongoose.Types.ObjectId(player.id) },
+        { $unset: { jar: "" } },
+      );
+      const raw = await direct.collection("users").findOne({
+        _id: new mongoose.Types.ObjectId(player.id),
+      });
+      await direct.close();
+      // Asserts the fixture is actually jar-less, so this test cannot pass
+      // by silently exercising the ordinary path instead.
+      expect(raw).not.toHaveProperty("jar");
+
+      const held = await store.jar(player.id);
+      expect(held?.jar.token).toBe("");
+
+      const before = held?.chips ?? 0;
+      const next: JarRecord = { ...emptyJarRecord(), level: 1, token: "first-token" };
+      const applied = await store.applyJar(player.id, "", next, 25);
+
+      expect(applied.ok).toBe(true);
+      expect(applied.chips).toBe(before + 25);
+      expect(applied.jar.token).toBe("first-token");
+    });
   });
 
   /**

@@ -223,6 +223,32 @@
   height: 100%;
 }
 
+/*
+ * The room's own show, for a win big enough to spill off the machine.
+ *
+ * Fixed to the window and on the same layer as the haze — z-index 0, with the
+ * page above it at 1 — so the shells vanish behind the cabinet and reappear
+ * out in the room. That is what a firework going off behind something does,
+ * and it is the whole reason this is not simply drawn over the top.
+ *
+ * Zero rather than a negative index, for the reason set out over the haze in
+ * global.css: a fixed layer taken out of the painting order altogether is one
+ * the browser stops repainting, and what that looks like is the last page's
+ * pixels left behind under this one.
+ */
+.room-fireworks {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.room-fireworks canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .cab__belly {
   display: flex;
   flex-direction: column;

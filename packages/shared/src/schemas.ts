@@ -171,3 +171,23 @@ export const handshakeSchema = z.object({
 });
 
 export type HandshakePayload = z.infer<typeof handshakeSchema>;
+
+/**
+ * A tap, and the token it must carry.
+ *
+ * The token is the whole payload because nothing else about a tap is the
+ * client's to decide. What it pays comes off the server's jar; a client that
+ * could name an amount would be a client naming its own wages.
+ */
+export const tapSchema = z.object({
+  token: z.string().min(1).max(64),
+});
+
+export const buySchema = z.object({
+  /** Compared against the ladder, never parsed. */
+  upgrade: z.string().min(1).max(24),
+  token: z.string().min(1).max(64),
+});
+
+export type TapPayload = z.infer<typeof tapSchema>;
+export type BuyPayload = z.infer<typeof buySchema>;
