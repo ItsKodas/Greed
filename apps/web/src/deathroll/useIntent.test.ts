@@ -2,7 +2,7 @@
 import type { TableView } from "@backroom/game-death-roll";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { GRACE_MS, PATIENCE_MS, useIntent } from "./useIntent.js";
+import { PATIENCE_MS, useIntent } from "./useIntent.js";
 
 /**
  * The bargain in CLAUDE.md, tested on a clock rather than by eye.
@@ -60,66 +60,73 @@ afterEach(() => {
 describe("pressing roll", () => {
   it("starts the number tumbling before the server has answered", () => {
     const act_ = vi.fn();
-    const { result } = renderHook(() => useIntent(dueling(), "ada", act_));
+    const { result } = renderHook(() => useIntent(dueling(), "ada", act_, null));
 
     act(() => result.current.roll());
 
     // Tumbling is not a guessed result — the digits are visibly unresolved.
     // What must never happen is a number appearing and then changing.
     expect(result.current.rolling).toBe(true);
-    expect(act_).toHaveBeenCalledWith({ type: "roll" }, expect.any(Function));
+    expect(act_).toHaveBeenCalledWith({ type: "roll" });
   });
 
   it("settles when the table speaks, and not before", () => {
-    let done = () => {};
-    const act_ = vi.fn((_: unknown, cb: () => void) => {
-      done = cb;
-    });
+    const act_ = vi.fn();
     const { result, rerender } = renderHook(
-      ({ state }) => useIntent(state, "ada", act_),
+      ({ state }: { state: TableView }) => useIntent(state, "ada", act_, null),
       { initialProps: { state: dueling() } },
     );
 
     act(() => result.current.roll());
     expect(result.current.rolling).toBe(true);
 
-    act(() => done());
     rerender({ state: dueling({ ceiling: 743 }) });
 
     expect(result.current.rolling).toBe(false);
   });
 
-  it("gives up on it if the table refuses", () => {
-    // A refusal still acknowledges — the ack fires whether a move was taken
-    // or turned down — but nothing about the felt ever moves to explain it,
-    // because a refusal never sends a state of its own. So this only clears
-    // once the ack's own short grace has run out, not the instant it fires.
-    vi.useFakeTimers();
-    let done = () => {};
-    const act_ = vi.fn((_: unknown, cb: () => void) => {
-      done = cb;
-    });
-    const { result } = renderHook(() => useIntent(dueling(), "ada", act_));
+  it("gives up on it the instant the table refuses, not on a timer", () => {
+    /*
+     * A refusal never sends a state of its own — the felt never moves to
+     * explain it — so the only honest signal is the table's own `error`,
+     * caught the moment it arrives rather than inferred from how long the
+     * ack took to come back.
+     */
+    const act_ = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ error }: { error: string | null }) => useIntent(dueling(), "ada", act_, error),
+      { initialProps: { error: null as string | null } },
+    );
 
     act(() => result.current.roll());
     expect(result.current.rolling).toBe(true);
 
-    act(() => done());
-    // Short of the grace period: still trusted, because the answer to an
-    // accepted roll has not had time to arrive either.
-    act(() => vi.advanceTimersByTime(GRACE_MS - 50));
+    rerender({ error: "Not your roll." });
+    expect(result.current.rolling).toBe(false);
+  });
+
+  it("does not give up on a slow-but-successful roll — only on a refusal or an answer", () => {
+    // A roll's own gap between ack and broadcast is a microtask in practice,
+    // but nothing here should depend on that: sitting well past where the
+    // old ack-plus-grace timer would have fired must change nothing.
+    vi.useFakeTimers();
+    const act_ = vi.fn();
+    const { result } = renderHook(() => useIntent(dueling(), "ada", act_, null));
+
+    act(() => result.current.roll());
     expect(result.current.rolling).toBe(true);
 
-    act(() => vi.advanceTimersByTime(100));
-    expect(result.current.rolling).toBe(false);
+    act(() => vi.advanceTimersByTime(500));
+    expect(result.current.rolling).toBe(true);
   });
 
   it("gives up on it if the answer never comes", () => {
     // Held past the timeout with fake timers; rolling must go back to false
-    // rather than spinning for ever.
+    // rather than spinning for ever. The one legitimate use of a timer here:
+    // a reply that never arrives at all, not a refusal.
     vi.useFakeTimers();
     const act_ = vi.fn();
-    const { result } = renderHook(() => useIntent(dueling(), "ada", act_));
+    const { result } = renderHook(() => useIntent(dueling(), "ada", act_, null));
 
     act(() => result.current.roll());
     expect(result.current.rolling).toBe(true);
@@ -135,28 +142,50 @@ describe("pressing pass", () => {
     // The stake is the player's own number, so it may be shown at once —
     // unlike a roll, which is the server's to know.
     const act_ = vi.fn();
-    const { result } = renderHook(() => useIntent(dueling(), "ada", act_));
+    const { result } = renderHook(() => useIntent(dueling(), "ada", act_, null));
 
     act(() => result.current.pass());
 
     expect(result.current.pending).toBe(50);
   });
 
-  it("takes them back if the table refuses", () => {
-    // Anything shown early is given up on if it is refused.
+  it("does not give up on a slow-but-successful write, only on a refusal or an answer", () => {
+    /*
+     * `pass` does a real economy write between the ack and the broadcast —
+     * unlike `roll`, where the gap is a microtask. The ack fires the instant
+     * the server has dealt with the message, refused or not, strictly before
+     * the state that actually answers it. A grace timer started from the ack
+     * cannot tell "refused" from "still writing", so it must not exist: this
+     * sits well past where the old 400ms grace timer would have fired, with
+     * nothing else having happened, and the pot must still be sitting there.
+     */
     vi.useFakeTimers();
-    let done = () => {};
-    const act_ = vi.fn((_: unknown, cb: () => void) => {
-      done = cb;
-    });
-    const { result } = renderHook(() => useIntent(dueling(), "ada", act_));
+    const act_ = vi.fn();
+    const { result } = renderHook(() => useIntent(dueling(), "ada", act_, null));
 
     act(() => result.current.pass());
     expect(result.current.pending).toBe(50);
 
-    act(() => done());
-    act(() => vi.advanceTimersByTime(GRACE_MS + 1));
+    // Well past the old grace period, with no refusal and no new state —
+    // exactly what a slow-but-accepted write looks like from here.
+    act(() => vi.advanceTimersByTime(500));
 
+    expect(result.current.pending).toBe(50);
+  });
+
+  it("takes them back the instant the table refuses, not on a timer", () => {
+    // Anything shown early is given up on if it is refused — the moment the
+    // table says so, whatever a slow write elsewhere might otherwise suggest.
+    const act_ = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ error }: { error: string | null }) => useIntent(dueling(), "ada", act_, error),
+      { initialProps: { error: null as string | null } },
+    );
+
+    act(() => result.current.pass());
+    expect(result.current.pending).toBe(50);
+
+    rerender({ error: "Already passed." });
     expect(result.current.pending).toBe(0);
   });
 });

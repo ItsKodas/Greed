@@ -12,29 +12,25 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * has already landed.
  *
  * Modelled on poker's and blackjack's own `useIntent`, which both watch the
- * turn moving to know an answer landed. A duel's turn does the same on every
- * real roll or pass — except the one roll that ends the duel on a 1, which
- * leaves the ceiling exactly where it was. So the ceiling is watched too, for
- * that one case where the turn is the only thing a roll actually moves.
+ * turn moving to know an answer landed, and both take the table's own
+ * `error` rather than guess a refusal from a timer — a refusal is an event,
+ * not a duration, and the one thing that can be said about how long an
+ * accepted move takes to answer is that it varies: `roll` settles inside a
+ * microtask, but `pass` does a real economy write first, and a write is not
+ * bounded by how fast a socket round trip usually is. A duel's turn moves on
+ * every real roll or pass — except the one roll that ends the duel on a 1,
+ * which leaves the ceiling exactly where it was. So the ceiling is watched
+ * too, for that one case where the turn is the only thing a roll actually
+ * moves.
  */
 
 /**
  * How long an unanswered ask is trusted before the table's own word wins,
- * timed from the moment it was sent. The fallback for a reply that never
- * arrives at all — a dropped connection, not a refusal.
+ * timed from the moment it was sent. The last resort for a reply that never
+ * arrives at all — a dropped connection, not a refusal, which is caught the
+ * instant it happens via `error` instead of by waiting this out.
  */
 export const PATIENCE_MS = 1600;
-
-/**
- * How much longer an ask is trusted once the table has acknowledged it.
- *
- * The ack fires whether the move was taken or refused, and says nothing about
- * which — a refusal is never announced, only inferred from nothing turning up
- * to explain it. Short, because the round trip to the table is already paid
- * for by the time the ack is back; what is left for an accepted move is only
- * its own answer catching that same trip up, and a refusal never sends one.
- */
-export const GRACE_MS = 400;
 
 type Sent =
   | { kind: "roll"; toRoll: string | null; ceiling: number }
@@ -52,7 +48,8 @@ export interface Intent {
 export function useIntent(
   state: TableView | null,
   seatId: string | null,
-  act: (action: Record<string, unknown>, done?: () => void) => void,
+  act: (action: Record<string, unknown>) => void,
+  error: string | null,
 ): Intent {
   const [sent, setSent] = useState<Sent | null>(null);
   const timers = useRef<number[]>([]);
@@ -76,7 +73,7 @@ export function useIntent(
     (next: Sent, action: Record<string, unknown>) => {
       setSent(next);
       wind(PATIENCE_MS);
-      act(action, () => wind(GRACE_MS));
+      act(action);
     },
     [act, wind],
   );
@@ -113,6 +110,19 @@ export function useIntent(
       setSent(null);
     }
   }, [state, sent]);
+
+  /*
+   * A refusal never sends a state of its own, so it cannot be caught by the
+   * effect above — it is caught here instead, the instant the table says so,
+   * rather than inferred from a timer that cannot tell "refused" from
+   * "still writing". This is what lets `pass`'s economy write take however
+   * long it takes without the pot dropping back and then jumping up again.
+   */
+  useEffect(() => {
+    if (error !== null) {
+      setSent(null);
+    }
+  }, [error]);
 
   return {
     rolling: sent?.kind === "roll",
