@@ -1,9 +1,10 @@
 import type { TableView } from "@backroom/game-death-roll";
 import { CEILINGS, lossOdds, STAKES } from "@backroom/game-death-roll";
 import { CODE_ALPHABET, CODE_LENGTH } from "@backroom/shared";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
+import { play, preload, unlock } from "../game/audio.js";
 import { Chat } from "../game/Chat.js";
 import type { Account } from "../game/useAccount.js";
 import { useAccount } from "../game/useAccount.js";
@@ -12,6 +13,9 @@ import { Taken } from "../net/Taken.js";
 import { PublicTables } from "../table/PublicTables.js";
 import type { TableSocketHook } from "../table/useTableSocket.js";
 import { useTableSocket } from "../table/useTableSocket.js";
+import { Falling } from "./Falling.js";
+import type { Intent } from "./useIntent.js";
+import { useIntent } from "./useIntent.js";
 import "@backroom/game-death-roll/theme.css";
 import "./deathroll.css";
 
@@ -107,15 +111,32 @@ export function Felt({
 }) {
   const mine = state.you;
   const myTurn = state.phase === "dueling" && seatId !== null && state.toRoll === seatId;
+  const intent = useIntent(state, seatId, table.act);
+  useDuelSound(state, seatId);
+  // A pass's chips only ever need to land once, right as they are pressed —
+  // not for as long as the ask stays outstanding, which is what watching
+  // `pending` itself would do.
+  const justPaid = usePaidFlourish(intent.pending > 0);
+
+  /*
+   * What the big number ought to show. The ceiling everywhere but the one
+   * moment a duel ends on a 1 — the table leaves the ceiling exactly where it
+   * was for that roll rather than setting it to the number that killed it, so
+   * showing it here instead is the only way the felt ever says "1" at all.
+   */
+  const shown =
+    state.phase === "over" && state.lastRoll !== null ? state.lastRoll.result : state.ceiling;
 
   return (
     <section className="dr" data-game="death-roll">
       <Seats state={state} seatId={seatId} />
 
       <div className="dr__stage">
-        <p className="dr__number" aria-hidden={state.phase !== "dueling"}>
-          {state.ceiling}
-        </p>
+        {/* Hidden from assistive tech only between duels: once one is running
+            or has just ended, this number is the one fact worth announcing. */}
+        <div aria-hidden={state.phase === "waiting"}>
+          <Falling value={shown} rolling={intent.rolling} />
+        </div>
 
         {state.phase === "dueling" ? (
           <p className="dr__odds">
@@ -128,12 +149,18 @@ export function Felt({
         {/*
           Not shown once a duel is over: the felt already says who takes it,
           and a second line repeating the same figure is a place for a stray
-          number to disagree with the sentence beside it.
+          number to disagree with the sentence beside it. `pending` is added in
+          rather than waited for, so a pass lands on the pot the moment it is
+          pressed.
         */}
-        {state.phase === "dueling" && state.pot > 0 ? (
+        {state.phase === "dueling" && state.pot + intent.pending > 0 ? (
           <p className="dr__pot">
-            <span className={`dr__pot-figure${state.forFun ? "" : " dr__pot-figure--chip"}`}>
-              {fmt(state.pot)}
+            <span
+              className={`dr__pot-figure${state.forFun ? "" : " dr__pot-figure--chip"}${
+                justPaid ? " dr__pot-figure--paid" : ""
+              }`}
+            >
+              {fmt(state.pot + intent.pending)}
             </span>{" "}
             in the pot
           </p>
@@ -141,12 +168,81 @@ export function Felt({
       </div>
 
       {mine === null || !myTurn ? null : (
-        <Controls table={table} state={state} passed={mine.passed} />
+        <Controls state={state} intent={intent} passed={mine.passed} />
       )}
 
       <History rolls={state.history} seatName={(id) => nameOf(state, id)} />
     </section>
   );
+}
+
+/**
+ * Turns a change in the duel into sound, the same way every other table's
+ * follows a comparison rather than an event: an opponent's throw earns the
+ * same rattle this seat's own got on the press, and a table that only ever
+ * made a noise for you would be a table you were playing alone.
+ */
+function useDuelSound(state: TableView, seatId: string | null): void {
+  const previous = useRef<TableView | null>(null);
+
+  // Fetching needs nothing from the browser; playing does. So the files are
+  // pulled straight away and the context waits for a touch.
+  useEffect(() => {
+    void preload();
+  }, []);
+
+  useEffect(() => {
+    const wake = () => unlock();
+    window.addEventListener("pointerdown", wake, { once: true });
+    window.addEventListener("keydown", wake, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", wake);
+      window.removeEventListener("keydown", wake);
+    };
+  }, []);
+
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = state;
+    if (before === null) {
+      return;
+    }
+    const rolled = state.lastRoll;
+    if (rolled === null || rolled === before.lastRoll) {
+      return;
+    }
+    // This seat's own throw was already sounded on the press; an opponent's
+    // is heard from nothing at all, so it gets the throw as well as the land.
+    if (rolled.seatId !== seatId) {
+      play("shake");
+    }
+    // The closest sound in the building to a die coming up a 1: Greed's own
+    // bust, short and low, which is exactly what this roll is for this seat.
+    play(rolled.result === 1 ? "farkle" : "land");
+  }, [state, seatId]);
+}
+
+/**
+ * True for a moment right after `active` turns true, and false again on its
+ * own. For a class that has to restart a CSS animation exactly once per press
+ * rather than for as long as the thing it marks stays true.
+ */
+function usePaidFlourish(active: boolean, ms = 380): boolean {
+  const [flourish, setFlourish] = useState(false);
+  const was = useRef(active);
+
+  useEffect(() => {
+    const rose = active && !was.current;
+    was.current = active;
+    if (!rose) {
+      return;
+    }
+    setFlourish(true);
+    const id = window.setTimeout(() => setFlourish(false), ms);
+    return () => window.clearTimeout(id);
+  }, [active, ms]);
+
+  return flourish;
 }
 
 /** Somebody's name from their seat id, for a roll history that only kept ids. */
@@ -203,21 +299,30 @@ function Standing({ state }: { state: TableView }) {
 
 /** Roll, or hand the roll back at a price. Only ever shown on your turn. */
 function Controls({
-  table,
   state,
+  intent,
   passed,
 }: {
-  table: Table;
   state: TableView;
+  intent: Intent;
   passed: boolean;
 }) {
+  // Busy the moment either press lands, not only while the socket itself is —
+  // a second click before the table has caught up would ask it something it
+  // has already been asked.
+  const busy = intent.rolling || intent.pending > 0;
   return (
     <div className="dr__controls">
       <button
         type="button"
         className="btn dr__roll"
-        disabled={table.busy}
-        onClick={() => table.act({ type: "roll" })}
+        disabled={busy}
+        onClick={() => {
+          // The rattle of the throw, the instant it leaves this seat's hand —
+          // sounded here rather than waited for, the same as the tumble itself.
+          play("shake");
+          intent.roll();
+        }}
       >
         Roll
       </button>
@@ -231,8 +336,11 @@ function Controls({
           type="button"
           className="btn btn--ghost dr__pass"
           aria-label={`Pass the roll back for ${fmt(state.passPrice)}`}
-          disabled={table.busy}
-          onClick={() => table.act({ type: "pass" })}
+          disabled={busy}
+          onClick={() => {
+            play("bet");
+            intent.pass();
+          }}
         >
           <span className="dr__pass-name">Pass</span>
           <span className="dr__pass-price">{fmt(state.passPrice)}</span>

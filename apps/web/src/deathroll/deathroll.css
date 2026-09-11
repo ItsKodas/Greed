@@ -110,6 +110,7 @@
  */
 .dr__number {
   margin: 0;
+  min-height: 1em;
   font-family: var(--gr-font-display);
   font-size: clamp(4.5rem, 26cqi, 10rem);
   line-height: 1;
@@ -119,6 +120,74 @@
     0 0 18px var(--gr-color-neon),
     0 0 46px var(--gr-color-neon),
     0 0 90px var(--gr-color-neon-deep);
+}
+
+/*
+ * Tumbling: visibly unresolved rather than a value the client is guessing at.
+ * Genuinely still happening for as long as it runs — a die held in the air —
+ * which is the one thing in this building allowed to loop, because it stops
+ * the moment the table actually answers.
+ */
+@keyframes dr-tumble {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-4%) scale(0.97);
+    filter: blur(1.5px);
+    opacity: 0.65;
+  }
+}
+
+.dr__number--rolling {
+  animation: dr-tumble 0.55s ease-in-out infinite;
+}
+
+/*
+ * Settling: the answer arriving from above with a little overshoot, the way
+ * anything falling onto felt actually comes to rest. Once, not looped — the
+ * one motion this number gets for having landed.
+ */
+@keyframes dr-settle {
+  0% {
+    transform: translateY(-35%) scale(0.82);
+    opacity: 0;
+    filter: blur(3px);
+  }
+  65% {
+    transform: translateY(4%) scale(1.04);
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dr__number--settled {
+  animation: dr-settle 0.34s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/*
+ * The 1: short and hard, no flourish. A snap rather than a fall, and the one
+ * moment this number wears the building's bad colour instead of its own neon.
+ */
+@keyframes dr-hit {
+  0% {
+    transform: scale(1.3);
+    color: var(--gr-color-bad);
+  }
+  100% {
+    transform: scale(1);
+    color: var(--gr-color-bad);
+  }
+}
+
+.dr__number--hit {
+  animation: dr-hit 0.16s ease-out;
 }
 
 .dr__odds {
@@ -150,6 +219,30 @@
    one colour in the building that means somebody's balance. */
 .dr__pot-figure--chip {
   color: var(--gr-color-chip);
+}
+
+/*
+ * Chips landing on the pot, the moment a pass is pressed rather than when the
+ * table agrees — the figure they land on is this seat's own price, shown at
+ * once for the same reason the price itself is.
+ */
+@keyframes dr-chip-in {
+  0% {
+    transform: translateY(-30%) scale(0.9);
+    opacity: 0.4;
+  }
+  60% {
+    transform: translateY(8%) scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dr__pot-figure--paid {
+  display: inline-block;
+  animation: dr-chip-in 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ------------------------------------------------------------ the controls */
@@ -293,9 +386,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Nothing here animates yet — Task 11 — but the off switch is written in
-     up front so a keyframe never lands here without one. */
-  .dr__number {
+  /*
+   * Every keyframe above, off. Nothing here is load-bearing for what the felt
+   * says: the number still changes the instant the table does, the odds still
+   * tick, and a pass still lands — this only stops any of it moving to say so.
+   */
+  .dr__number,
+  .dr__number--rolling,
+  .dr__number--settled,
+  .dr__number--hit,
+  .dr__pot-figure--paid {
+    animation: none;
     transition: none;
   }
 }
