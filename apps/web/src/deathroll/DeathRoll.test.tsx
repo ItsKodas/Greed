@@ -54,9 +54,11 @@ const view = (over: Partial<TableView> = {}): TableView => ({
 
 const stub = () => {
   const act = vi.fn();
+  const addBot = vi.fn();
   return {
-    table: { act, busy: false } as unknown as TableSocketHook<TableView>,
+    table: { act, addBot, busy: false } as unknown as TableSocketHook<TableView>,
     act,
+    addBot,
   };
 };
 
@@ -124,5 +126,63 @@ describe("the death roll felt", () => {
     // A player must never be unsure whether they are spending real chips or
     // not, which means the word this table never uses is "chips" itself.
     expect(screen.queryByText(/\bchips\b/i)).toBeNull();
+  });
+
+  it("offers to deal a bot in at a for-fun table with a seat free", () => {
+    /*
+     * The reason bots exist at all: a for-fun table is meant to be worth
+     * sitting at on your own, and a duel needs two. Without this control the
+     * one player who opened it waits for an opponent for ever.
+     */
+    const stubbed = stub();
+    const state = view({
+      forFun: true,
+      phase: "waiting",
+      waitingFor: "opponent",
+      pot: 0,
+      toRoll: null,
+      seats: [seat({ id: "s1", name: "Ada", purse: 10_000 })],
+      you: seat({ id: "s1", name: "Ada", purse: 10_000 }),
+    });
+    render(<Felt table={stubbed.table} state={state} seatId="s1" />);
+
+    const normal = screen.getByRole("button", { name: /normal/i });
+    normal.click();
+
+    expect(stubbed.addBot).toHaveBeenCalledWith("normal");
+  });
+
+  it("offers no bot at a table playing for chips", () => {
+    /*
+     * Chips are only won from real people. The table refuses a bot whatever
+     * the browser shows and that is the rule — this only stops the felt
+     * offering something it knows would be turned down.
+     */
+    const state = view({
+      phase: "waiting",
+      waitingFor: "opponent",
+      pot: 0,
+      toRoll: null,
+      seats: [seat({ id: "s1", name: "Ada" })],
+      you: seat({ id: "s1", name: "Ada" }),
+    });
+    render(<Felt table={stub().table} state={state} seatId="s1" />);
+
+    expect(screen.queryByText(/deal somebody in/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /normal/i })).toBeNull();
+  });
+
+  it("says which of the two is a bot", () => {
+    const state = view({
+      forFun: true,
+      seats: [
+        seat({ id: "s1", name: "Ada", purse: 10_000 }),
+        seat({ id: "s2", name: "Bram", isBot: true, purse: 10_000 }),
+      ],
+      you: seat({ id: "s1", name: "Ada", purse: 10_000 }),
+    });
+    render(<Felt table={stub().table} state={state} seatId="s1" />);
+
+    expect(screen.getByText(/^bot$/i)).toBeTruthy();
   });
 });

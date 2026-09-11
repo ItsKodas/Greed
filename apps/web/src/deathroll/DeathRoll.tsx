@@ -130,6 +130,7 @@ export function Felt({
   return (
     <section className="dr" data-game="death-roll">
       <Seats state={state} seatId={seatId} />
+      <Bots table={table} state={state} />
 
       <div className="dr__stage">
         {/* Hidden from assistive tech only between duels: once one is running
@@ -350,6 +351,41 @@ function Controls({
   );
 }
 
+/**
+ * Somebody to duel, when there is nobody.
+ *
+ * A duel needs two and this table has no lobby to wait in, so a for-fun table
+ * opened on your own would otherwise sit there for ever — which is the whole
+ * reason bots exist in this building. Shown right under the empty seat,
+ * because that seat is the thing it fills.
+ *
+ * Only at a table playing for nothing: chips are only won from real people,
+ * and a bot has no account to take them from or pay them to. The table
+ * refuses one either way — hiding the control is the courtesy, refusing the
+ * message is the rule.
+ */
+function Bots({ table, state }: { table: Table; state: TableView }) {
+  if (!state.forFun || state.seats.length >= state.maxSeats) {
+    return null;
+  }
+  return (
+    <div className="dr__bots">
+      <span className="dr__bots-label">Deal somebody in</span>
+      {(["easy", "normal", "hard"] as const).map((skill) => (
+        <button
+          key={skill}
+          type="button"
+          className="dr__bot"
+          disabled={table.busy}
+          onClick={() => table.addBot(skill)}
+        >
+          {skill}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The two seats in the duel, whichever of them have arrived yet. */
 function Seats({ state, seatId }: { state: TableView; seatId: string | null }) {
   const slots: (TableView["seats"][number] | null)[] = [...state.seats];
@@ -376,6 +412,9 @@ function Seats({ state, seatId }: { state: TableView; seatId: string | null }) {
               {seat.name}
               {seat.id === seatId ? " (you)" : ""}
             </span>
+            {/* Who you are actually duelling, said on the seat rather than
+                left to be guessed from how fast the other side rolls. */}
+            {seat.isBot ? <span className="dr__seat-bot">bot</span> : null}
             {seat.passed ? <span className="dr__seat-passed">Passed</span> : null}
             {state.forFun && seat.purse !== null ? (
               <span className="dr__seat-purse">{fmt(seat.purse)} play money</span>

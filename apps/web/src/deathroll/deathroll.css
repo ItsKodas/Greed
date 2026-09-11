@@ -92,6 +92,69 @@
   white-space: nowrap;
 }
 
+/* Beside the name rather than out at the edge: it is part of who this seat
+   is, not another figure about them. */
+.dr__seat-bot {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.12);
+  color: var(--gr-color-ink-faint);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ----------------------------------------------------------- dealing a bot */
+
+/*
+ * Somebody to duel, under the empty seat it fills. Its own row rather than
+ * anything among the controls: it is a thing you do to the table, not a move
+ * in the duel — and a duel is not running while it is on screen anyway.
+ */
+.dr__bots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--gr-space-2);
+}
+
+.dr__bots-label {
+  font-size: var(--gr-text-xs);
+  color: var(--gr-color-ink-dim);
+}
+
+.dr__bot {
+  /* Thumb-sized, like every other control on a felt that gets played on a
+     phone. */
+  min-height: 44px;
+  padding: var(--gr-space-2) var(--gr-space-4);
+  border-radius: 999px;
+  border: var(--gr-edge-soft);
+  background: rgb(0 0 0 / 0.28);
+  color: var(--gr-color-ink-dim);
+  font: inherit;
+  font-size: var(--gr-text-sm);
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.dr__bot:hover:not(:disabled) {
+  border-color: var(--gr-color-neon-dim);
+  color: var(--gr-color-ink);
+}
+
+.dr__bot:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dr__bot:focus-visible {
+  outline: 2px solid var(--gr-color-neon-hi);
+  outline-offset: 2px;
+}
+
 /* --------------------------------------------------------------- the stage */
 
 .dr__stage {
