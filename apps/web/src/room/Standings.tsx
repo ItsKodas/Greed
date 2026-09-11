@@ -2,7 +2,16 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Avatar } from "../game/Avatar.js";
 import { compact, exact } from "../game/money.js";
-import type { Board } from "../leaderboard/board.js";
+import { type Board, ranked } from "../leaderboard/board.js";
+
+/**
+ * Whether the first answer from the server has been heard from yet, and if
+ * so what it was. "loading" is not "signed out" — it is the state a slow
+ * connection sits in for however long the round trip takes, and the one
+ * fact the card is never allowed to guess at is somebody's own sign-in
+ * status.
+ */
+type Phase = "loading" | "out" | "in";
 
 /**
  * Who is ahead, from the front door.
@@ -10,11 +19,12 @@ import type { Board } from "../leaderboard/board.js";
  * The top three and your own place, which is the whole of what somebody wants
  * to know without opening the board. Signed out it says so and still links
  * through: a page you cannot see yet is better than a page you never learn is
- * there.
+ * there. While still waiting on the first reply it says nothing at all,
+ * rather than guessing "signed out" and taking it back a moment later.
  */
 export function Standings() {
   const [board, setBoard] = useState<Board | null>(null);
-  const [shut, setShut] = useState(false);
+  const [phase, setPhase] = useState<Phase>("loading");
 
   useEffect(() => {
     let live = true;
@@ -25,13 +35,15 @@ export function Standings() {
             return;
           }
           if (response.status === 401) {
-            setShut(true);
+            setPhase("out");
             return;
           }
           if (response.ok) {
-            setShut(false);
             setBoard((await response.json()) as Board);
+            setPhase("in");
           }
+          // Any other status is neither an answer nor a refusal: keep
+          // whatever the last poll established rather than inventing one.
         })
         .catch(() => {
           // The last answer is better than an error nobody can act on.
@@ -48,26 +60,30 @@ export function Standings() {
 
   return (
     <Link className="standings" to="/leaderboard">
-      {shut || board === null ? (
+      {phase === "out" ? (
         <span className="standings__note">Sign in to see who's ahead.</span>
-      ) : (
+      ) : phase === "in" && board !== null ? (
         <>
           <ol className="standings__top">
-            {board.rows.slice(0, 3).map((row, index) => (
-              <li key={row.id} className="standings__place">
-                <b>{index + 1}</b>
-                <Avatar
-                  name={row.name}
-                  avatar={row.avatar}
-                  accentColor={row.accentColor}
-                  className="standings__face"
-                />
-                <span className="standings__name">{row.name}</span>
-                <span className="standings__chips" title={`${exact(row.chips)} chips`}>
-                  {compact(row.chips)}
-                </span>
-              </li>
-            ))}
+            {/* Ranked the same way the board ranks: ties share a place there,
+                so they have to share one here or the two pages disagree. */}
+            {ranked(board.rows, board.sort)
+              .slice(0, 3)
+              .map(({ row, rank }) => (
+                <li key={row.id} className="standings__place">
+                  <b>{rank}</b>
+                  <Avatar
+                    name={row.name}
+                    avatar={row.avatar}
+                    accentColor={row.accentColor}
+                    className="standings__face"
+                  />
+                  <span className="standings__name">{row.name}</span>
+                  <span className="standings__chips" title={`${exact(row.chips)} chips`}>
+                    {compact(row.chips)}
+                  </span>
+                </li>
+              ))}
           </ol>
           {board.you === null ? null : (
             <p className="standings__you">
@@ -75,7 +91,7 @@ export function Standings() {
             </p>
           )}
         </>
-      )}
+      ) : null}
     </Link>
   );
 }
