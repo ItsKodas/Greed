@@ -66,6 +66,7 @@ subtraction, so in every case it is a figure the adapter is already holding:
 | blackjack | `seat.back - seat.out` | `seat.out` |
 | roulette | `paid.back - paid.staked` | `paid.staked` |
 | slots | `won - cost` | `cost` |
+| death roll | `duel.netFor(seat)` | `duel.ante + duel.spentBy(seat)` |
 | the tip jar | *(writes no `shared` bump)* | *(nothing)* |
 | poker | *(writes no `shared` bump)* | *(nothing)* |
 

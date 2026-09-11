@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import { Admin } from "./admin/Admin.js";
 import { Haze } from "./atmosphere/Haze.js";
 import { Blackjack } from "./blackjack/Blackjack.js";
+import { DeathRoll } from "./deathroll/DeathRoll.js";
 import { Leaderboard } from "./leaderboard/Leaderboard.js";
 import { Poker } from "./poker/Poker.js";
 import { Roulette } from "./roulette/Roulette.js";
@@ -39,6 +40,8 @@ export default function App() {
       <Route path="/greed" element={<Play />} />
       <Route path="/greed/:code" element={<Play />} />
       <Route path="/blackjack" element={<Blackjack />} />
+      <Route path="/death-roll" element={<DeathRoll />} />
+      <Route path="/death-roll/:code" element={<DeathRoll />} />
       <Route path="/poker" element={<Poker />} />
       <Route path="/poker/:code" element={<Poker />} />
       <Route path="/roulette" element={<Roulette />} />
