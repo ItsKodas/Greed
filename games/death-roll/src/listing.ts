@@ -86,7 +86,15 @@ export function passPrice(ante: number): number {
   return Math.max(1, Math.round(ante / PASS_DIVISOR));
 }
 
-/** The nearest level to a number, or the default for anything unusable. */
+/**
+ * The nearest level to a number, or the default for anything unusable.
+ *
+ * A number exactly between two levels goes to the lower one: the comparison is
+ * strict and the lists are ascending, so the first level at the winning
+ * distance is the one that keeps it. Deliberate — a host who asks for
+ * something between two stakes is put on the cheaper of them rather than
+ * charged up to the dearer, and it is the same answer every time.
+ */
 function snap(asked: unknown, levels: readonly number[], fallback: number): number {
   const want = typeof asked === "number" && Number.isFinite(asked) ? asked : fallback;
   let best = levels[0] as number;

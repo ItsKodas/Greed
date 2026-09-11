@@ -9,11 +9,24 @@ describe("opening a table", () => {
     expect(parsed.success && parsed.data.ceiling).toBe(1_000);
   });
 
-  it("refuses a ceiling outside what any table offers", () => {
-    // Bounded here and snapped by the game. This only stops a nonsense number
-    // reaching that arithmetic at all.
+  /*
+   * Bounded here and snapped by the game. This only stops a nonsense number
+   * reaching that arithmetic at all.
+   *
+   * One bound to a test, because `expect` stops at the first one that fails:
+   * asserting all three together means a regression in any but the earliest is
+   * reported as the earliest, and a bound that quietly stopped being checked
+   * would never show up at all.
+   */
+  it("refuses a ceiling under the smallest table's", () => {
     expect(createSchema.safeParse({ name: "Ada", ceiling: 0 }).success).toBe(false);
+  });
+
+  it("refuses a ceiling over the largest table's", () => {
     expect(createSchema.safeParse({ name: "Ada", ceiling: 10_000_000 }).success).toBe(false);
+  });
+
+  it("refuses a ceiling that is not a whole number", () => {
     expect(createSchema.safeParse({ name: "Ada", ceiling: 1.5 }).success).toBe(false);
   });
 

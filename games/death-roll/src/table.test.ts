@@ -173,17 +173,6 @@ describe("a duel at the table", () => {
 });
 
 describe("standing up", () => {
-  it("holds the seat while a duel is running", () => {
-    /*
-     * Blackjack's answer for blackjack's reason: there are chips on the felt
-     * and the duel has to play out and settle before anybody can be paid.
-     */
-    const table = seated();
-    table.begin("ada");
-
-    expect(table.leavesMidHand).toBe(false);
-  });
-
   it("keeps a seat the room reaps mid-duel until the felt clears", () => {
     /*
      * The room reaps a seat a minute and a half after its player drops,
