@@ -21,8 +21,9 @@ import type { GameListing } from "./catalogue.js";
  * goes into a pot and one of the players takes it, so the chips never leave
  * the table and there is nothing for a bank to do.
  *
- * Poker was on this list and has been built; its listing lives in its own
- * package now, beside the rules, the way the other three do.
+ * Poker and Death Rolling were on this list and have been built; their
+ * listings live in their own packages now, beside the rules, the way the
+ * others do.
  */
 export const COMING: readonly GameListing[] = [
   {
@@ -39,27 +40,12 @@ export const COMING: readonly GameListing[] = [
     /*
      * The other one here that needs no bank. Players stake against each other
      * and one of them takes it, so the chips never leave the table — which
-     * puts it beside Poker as the cheap half of this list to make honest.
+     * puts it beside Poker and Death Rolling as the cheap half of this list to
+     * make honest.
      */
     open: false,
     mark: { text: "LIAR'S DICE", accentAt: 0 },
     theme: { wall: "#13181a", felt: "#1d3336", accent: "#2f8f92", accentHi: "#7fdde0" },
-  },
-  {
-    id: "death-roll",
-    name: "Death Rolling",
-    blurb: "Halve the number or pay. Last one to roll a one loses.",
-    shape: "table",
-    /*
-     * Two, and it cannot be fewer. A death roll is a duel — the whole game is
-     * the number coming down between two people — so this is the one here that
-     * would refuse a lone player rather than build a bank for them.
-     */
-    minSeats: 2,
-    maxSeats: 2,
-    open: false,
-    mark: { text: "DEATH ROLL", accentAt: 0 },
-    theme: { wall: "#16141c", felt: "#241f33", accent: "#6b4bd6", accentHi: "#b39cff" },
   },
   {
     id: "baccarat",
