@@ -67,6 +67,7 @@ subtraction, so in every case it is a figure the adapter is already holding:
 | roulette | `paid.back - paid.staked` | `paid.staked` |
 | slots | `won - cost` | `cost` |
 | the tip jar | *(writes no `shared` bump)* | *(nothing)* |
+| poker | *(writes no `shared` bump)* | *(nothing)* |
 
 No new call sites, no new plumbing, and no new judgement about what counts as
 a stake — each game is already deciding that, once, in the line above.
@@ -87,6 +88,15 @@ here rather than anywhere else:
 The tip jar stays out. It writes no `shared` bump today, with a comment saying
 `games`/`wins`/`chipsWon` are about playing against somebody. A tap is not a
 stake and tipping is not wagering.
+
+**Poker is out too, and that one is an omission rather than a decision.** It
+plays for chips — an entry stake and a buy-in — but its adapter calls
+`deps.record` nowhere, so it has never written `games`, `wins` or `chipsWon`
+either. This board does not cause that; it makes it visible, because a poker
+regular now appears in public with nothing against their name. Fixing it means
+deciding what a poker "game" and a poker "win" are and then changing what every
+existing player's record means, which is a larger decision than a leaderboard
+and belongs to whoever owns the game rather than to this design.
 
 ### What it costs to be honest about it
 
