@@ -152,6 +152,122 @@ describe("getting a duel started", () => {
     expect(table.view(null).waitingFor).toBe("funds");
   });
 
+  it("gives the first ante back when the second one throws", async () => {
+    /*
+     * `deps.take` is a real write to a real store: it can reject outright as
+     * well as answer no. The refused answer was always handed back — a thrown
+     * one is the same stake held for a game that never happened, and there is
+     * no bank here for it to be held out of.
+     */
+    const game = deathRollAdapter({ roll: () => 500 });
+    const table = seated(game);
+    const gave = vi.fn(async () => {});
+    const deps = {
+      take: vi
+        .fn<(userId: string, amount: number) => Promise<boolean>>()
+        .mockResolvedValueOnce(true)
+        .mockRejectedValueOnce(new Error("the store is down")),
+      give: gave,
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    await expect(deal(game, table, deps)).rejects.toThrow("the store is down");
+
+    expect(gave).toHaveBeenCalledWith("u1", 500);
+    expect(table.phase).toBe("waiting");
+    expect(table.view(null).pot).toBe(0);
+  });
+
+  it("deals nobody in who left while the antes were in flight", async () => {
+    /*
+     * The worst of the lot. A seat asked to go is dropped there and then while
+     * no duel is running, which is the state for the whole of `payOut` — so a
+     * player can be debited after leaving, and a duel opened on a seat that is
+     * gone. The clock then rolls for the ghost, and if it wins there is nobody
+     * to pay: the entire pot disappears.
+     */
+    const game = deathRollAdapter({ roll: () => 500 });
+    const table = seated(game);
+    const gave = vi.fn(async () => {});
+    const deps = {
+      take: vi.fn(async (userId: string) => {
+        if (userId === "u2") {
+          table.removeSeat("ada");
+        }
+        return true;
+      }),
+      give: gave,
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    await deal(game, table, deps);
+
+    expect(table.duel).toBeNull();
+    expect(table.phase).toBe("waiting");
+    expect(gave).toHaveBeenCalledWith("u1", 500);
+    expect(gave).toHaveBeenCalledWith("u2", 500);
+  });
+
+  it("does not arm a second deal while the antes are in flight", async () => {
+    /*
+     * `payOut` is unlatched and runs on every broadcast, and for the whole of
+     * its awaits the table looks exactly like one with nothing pending. A deal
+     * timer armed in that window fires into a second `payOut`, which takes two
+     * more antes and opens a duel the first one then throws away — four antes
+     * off accounts for a pot of two.
+     */
+    const game = deathRollAdapter({ roll: () => 500 });
+    const table = seated(game);
+    let armed: string | undefined;
+    const deps = {
+      take: vi.fn(async () => {
+        armed = game.pause?.(table)?.key;
+        return true;
+      }),
+      give: vi.fn(async () => {}),
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    await deal(game, table, deps);
+
+    expect(armed).toBeUndefined();
+  });
+
+  it("asks the seat that was short last time before anybody else's chips move", async () => {
+    /*
+     * A table whose second player cannot cover the ante retries every ten
+     * seconds for as long as they sit there, and in plain seat order that
+     * means the first player is debited and refunded every single time — two
+     * real writes against a real balance, either of which can fail, for a duel
+     * that was never going to start. Asking the one who cannot pay first
+     * refuses the attempt before anybody is out of pocket.
+     */
+    const game = deathRollAdapter({ roll: () => 500 });
+    const table = seated(game);
+    const took = vi.fn(async (userId: string) => userId !== "u2");
+    const gave = vi.fn(async () => {});
+    const deps = {
+      take: took,
+      give: gave,
+      record: vi.fn(async () => {}),
+      finished: vi.fn(async () => {}),
+    } as unknown as GameDeps;
+
+    await deal(game, table, deps);
+    expect(table.view(null).shortId).toBe("bob");
+    took.mockClear();
+    gave.mockClear();
+
+    await deal(game, table, deps);
+
+    expect(took).toHaveBeenCalledTimes(1);
+    expect(took).toHaveBeenCalledWith("u2", 500);
+    expect(gave).not.toHaveBeenCalled();
+  });
+
   it("deals the duel to exactly the two seats that paid for it", async () => {
     /*
      * `payOut` takes the antes from the seats it was handed, and `begin` used

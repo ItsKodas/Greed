@@ -262,6 +262,19 @@ export class Table implements PlayTable {
   }
 
   /**
+   * Whether somebody is taking the antes right now.
+   *
+   * Draining the queue is what stops one request being answered twice, but it
+   * leaves a window it cannot cover on its own: for the whole of the taking —
+   * two real writes to a real store, on somebody else's connection — the table
+   * looks exactly like one with nothing pending and two people sat at it, so
+   * the deal clock arms again and a second attempt takes two more antes for a
+   * duel that only ever holds one pair of them. This is how the table says the
+   * work has been handed over but is not finished.
+   */
+  draining = false;
+
+  /**
    * Takes the request off the queue.
    *
    * Called before the adapter's first await, so that asking often is
@@ -270,6 +283,9 @@ export class Table implements PlayTable {
   takePending(): string[] | null {
     const wanted = this.wanted;
     this.wanted = null;
+    if (wanted !== null) {
+      this.draining = true;
+    }
     return wanted;
   }
 
@@ -290,6 +306,20 @@ export class Table implements PlayTable {
         ? null
         : `${this.seating.find(seatId)?.name ?? "Somebody"} is short of the ante.`;
     return true;
+  }
+
+  /**
+   * Notes a duel abandoned because one of its two seats went while the antes
+   * were being taken.
+   *
+   * Not a short ante, so it clears that note rather than adding to it: both
+   * players covered their stake and both have it back. What the table is
+   * waiting for now is the player itself, which `waitingFor` works out on its
+   * own — this only says why the felt went quiet.
+   */
+  noteLeft(name: string): void {
+    this.shortId = null;
+    this.lastEvent = `${name} left before the duel began.`;
   }
 
   /**

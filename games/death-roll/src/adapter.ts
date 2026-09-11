@@ -99,6 +99,121 @@ export function deathRollAdapter(
     }
   };
 
+  /**
+   * Both antes in, and a duel dealt if they both landed.
+   *
+   * Split out of `payOut` so that draining the queue and clearing the flag
+   * that says so can sit either side of every way this has of failing.
+   */
+  const antesIn = async (
+    table: Table,
+    wanted: readonly string[],
+    deps: GameDeps,
+  ): Promise<boolean> => {
+    const [first, second] = wanted;
+    if (first === undefined || second === undefined) {
+      return false;
+    }
+    /*
+     * Whoever was short last time is asked first, rather than whoever happens
+     * to sit in seat one. A table waiting on somebody who cannot cover the
+     * ante retries every ten seconds for as long as they sit there, and in
+     * plain seat order every one of those retries debits the other player and
+     * hands it straight back — two real writes against a real balance, either
+     * of which can fail, for a duel that was never going to start. Asking the
+     * one who cannot pay first means the attempt is refused before anybody
+     * else's chips have moved at all.
+     */
+    const order = table.shortId === second ? [second, first] : [first, second];
+    const seats = order.map((id) => table.seats.find((one) => one.id === id));
+    const [one, two] = seats;
+    if (one === undefined || two === undefined) {
+      return false;
+    }
+
+    /*
+     * Play money is topped back up rather than allowed to stop the table.
+     * Nothing is at stake, so running dry should cost somebody a moment
+     * rather than their evening.
+     */
+    table.topUp(one.id);
+    table.topUp(two.id);
+
+    if (!(await take(table, one, table.ante, deps))) {
+      /*
+       * Only worth sending if it is news. The table retries on a timer, and
+       * a player who is still short is not a new fact — telling everybody
+       * again on every retry would be a table talking to itself.
+       */
+      return table.noteShort(one.id);
+    }
+
+    /*
+     * The second ante, and the first one handed back however that goes wrong.
+     * `deps.take` is a write to a real store: it answers no when the balance
+     * is short, and it rejects when the store itself blips — and a stake held
+     * for a game that never happened is the same stake either way. Only the
+     * refused answer used to be caught, which left a store hiccup between the
+     * two antes costing somebody their ante with no duel to show for it and
+     * nothing on the felt to say so.
+     */
+    let paid = false;
+    try {
+      paid = await take(table, two, table.ante, deps);
+    } catch (error) {
+      /*
+       * Noted before the refund is attempted rather than after it, because a
+       * refund that throws takes the rest of this with it. Without the note
+       * the table goes round again on the fast deal clock and takes that same
+       * ante afresh every couple of seconds; with it the felt says why it
+       * stopped and the retry is on the slow clock.
+       */
+      table.noteShort(two.id);
+      await give(table, one, table.ante, deps);
+      throw error;
+    }
+    if (!paid) {
+      /*
+       * Straight back, before anything else happens. A duel that took one
+       * ante and failed the second would be a table holding somebody's stake
+       * for a game that never happened.
+       */
+      let news = false;
+      try {
+        await give(table, one, table.ante, deps);
+      } finally {
+        /* Noted whatever the refund did, for the reason above. */
+        news = table.noteShort(two.id);
+      }
+      return news;
+    }
+
+    /*
+     * And only now is it safe to ask who is still here. A seat asked to go is
+     * dropped there and then whenever no duel is running, which is the state
+     * for every await above — so a player's leave can land between the two
+     * antes, and dealing to the pair that paid would open a duel on a seat
+     * that no longer exists. The turn clock would roll for the ghost, and a
+     * ghost that won would take a pot nobody could be paid: the whole thing
+     * gone at a table with no bank behind it. Both antes go back instead.
+     */
+    const gone = [one, two].find((seat) => !table.seats.some((here) => here.id === seat.id));
+    if (gone !== undefined) {
+      await give(table, one, table.ante, deps);
+      await give(table, two, table.ante, deps);
+      table.noteLeft(gone.name);
+      return true;
+    }
+
+    /*
+     * Dealt to the two seats the antes actually came off, named rather than
+     * looked up again. The chips are already gone from these two people, so
+     * they are who the duel is between.
+     */
+    table.begin(undefined, [one.id, two.id]);
+    return true;
+  };
+
   return {
     listing: DEATH_ROLL,
 
@@ -180,62 +295,16 @@ export function deathRollAdapter(
       if (wanted === null) {
         return false;
       }
-      const [first, second] = wanted;
-      if (first === undefined || second === undefined) {
-        return false;
-      }
-      const seats = [first, second].map((id) => table.seats.find((one) => one.id === id));
-      const [one, two] = seats;
-      if (one === undefined || two === undefined) {
-        return false;
-      }
-
-      /*
-       * Play money is topped back up rather than allowed to stop the table.
-       * Nothing is at stake, so running dry should cost somebody a moment
-       * rather than their evening.
-       */
-      table.topUp(one.id);
-      table.topUp(two.id);
-
-      if (!(await take(table, one, table.ante, deps))) {
+      try {
+        return await antesIn(table, wanted, deps);
+      } finally {
         /*
-         * Only worth sending if it is news. The table retries on a timer, and
-         * a player who is still short is not a new fact — telling everybody
-         * again on every retry would be a table talking to itself.
+         * Whatever happened, the attempt is over. Only `pause` reads this, and
+         * a table left draining for good is one that never deals again — so it
+         * is cleared here rather than on any of the ways out below.
          */
-        return table.noteShort(one.id);
+        table.draining = false;
       }
-      if (!(await take(table, two, table.ante, deps))) {
-        /*
-         * Straight back, before anything else happens. A duel that took one
-         * ante and failed the second would be a table holding somebody's stake
-         * for a game that never happened.
-         */
-        let news = false;
-        try {
-          await give(table, one, table.ante, deps);
-        } finally {
-          /*
-           * Noted whatever the refund did, and this is the half that matters
-           * when it throws. The failure itself goes up to the room, which logs
-           * it — but a table that had not also recorded who was short would go
-           * round again on the fast deal clock and take that same ante again
-           * every couple of seconds, running the risk afresh each time. The
-           * note is what puts it on the slow one, and what lets the felt say
-           * why it stopped.
-           */
-          news = table.noteShort(two.id);
-        }
-        return news;
-      }
-      /*
-       * Dealt to the two seats the antes actually came off, named rather than
-       * looked up again. The chips are already gone from these two people, so
-       * they are who the duel is between.
-       */
-      table.begin(undefined, [one.id, two.id]);
-      return true;
     },
 
     isSettled(table) {
@@ -404,7 +473,14 @@ export function deathRollAdapter(
       if (table.phase === "over") {
         return { key: "result", ms: resultMs, run: () => table.finish() };
       }
-      if (table.phase === "waiting" && table.ready && !table.pending) {
+      /*
+       * `draining` is the half `pending` cannot cover. The queue is emptied
+       * before the first await, so for the whole of the taking the table looks
+       * idle — and a deal armed in that window fires into a second `payOut`,
+       * which takes two more antes and opens a duel the first attempt then
+       * discards. Four antes off accounts for a pot holding two.
+       */
+      if (table.phase === "waiting" && table.ready && !table.pending && !table.draining) {
         if (table.shortId !== null) {
           return { key: "short", ms: shortRetryMs, run: () => table.askForDuel() };
         }
