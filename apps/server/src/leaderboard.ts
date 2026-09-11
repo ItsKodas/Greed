@@ -18,11 +18,15 @@ export const BOARD_LIMIT = 100;
 /**
  * How often one account may ask.
  *
- * The page polls every ten seconds, six a minute, so this has to sit well
- * clear of that — it is here to stop the route being hammered, not to stop
- * somebody pressing the sort headers.
+ * Two permanent pollers hit this route, not one: the board page and the
+ * front door's "Who's ahead" card each poll every ten seconds, six a minute,
+ * and either can be open in any number of tabs at once. An ordinary handful
+ * of tabs — four or five, some on the room and some on the board — already
+ * asks 24-30 times a minute before anybody presses a sort header, and every
+ * press adds an immediate ask on top of that tab's own poll. Budgeted for
+ * ten such pollers (60/min) plus headroom for sort presses, not for one.
  */
-const BOARD_TRIES = 30;
+const BOARD_TRIES = 90;
 const BOARD_WINDOW_MS = 60_000;
 
 export interface LeaderboardRoutes {

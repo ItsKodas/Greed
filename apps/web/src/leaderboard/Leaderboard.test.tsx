@@ -118,6 +118,43 @@ describe("the leaderboard page", () => {
     expect(screen.getByText("Ada", inRow)).toBeTruthy();
   });
 
+  it("never says a negative number are still to come", async () => {
+    // `total` is estimated document count and can be stale under the exact
+    // row count the page actually holds — here fewer rows than the estimate
+    // says exist, which without a floor would print "…-1 more".
+    stubFetch({
+      sort: "chips",
+      total: 1,
+      rows: [row("u9", "Someone", 900), row("u8", "Other", 800)],
+      you: { row: row("u1", "Ada", 5), rank: 340 },
+    });
+    render(
+      <MemoryRouter>
+        <Leaderboard />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("…0 more")).toBeTruthy();
+  });
+
+  it("keeps the full net and staked figures reachable when they are shortened", async () => {
+    stubFetch({
+      sort: "chips",
+      total: 1,
+      rows: [row("u1", "Ada", 900, { games: 4, wins: 3, chipsWon: 1_234_567, chipsStaked: 2_345_678 })],
+      you: null,
+    });
+    render(
+      <MemoryRouter>
+        <Leaderboard />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Ada", inRow);
+    expect(screen.getByText("+1.23M").getAttribute("title")).toBe("+1,234,567 chips");
+    expect(screen.getByText("2.35M").getAttribute("title")).toBe("2,345,678 chips");
+  });
+
   it("asks again on a clock, and shows the new order without being reloaded", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let answer = {

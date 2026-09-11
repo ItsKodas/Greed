@@ -26,25 +26,43 @@ export function useSlide(rows: Array<{ id: string }>): RefObject<HTMLDivElement>
     }
     const quiet = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     const now = new Map<string, number>();
+    const children = [...element.querySelectorAll<HTMLElement>("[data-id]")];
 
-    for (const child of element.querySelectorAll<HTMLElement>("[data-id]")) {
+    // offsetTop, not getBoundingClientRect().top: the rect is relative to the
+    // viewport, so a scroll or a resize between one poll and the next shifts
+    // every row by the same amount and reads as a reorder that never
+    // happened. offsetTop is relative to the shared offsetParent instead, so
+    // it is scroll- and resize-invariant while still forcing the layout the
+    // FLIP needs.
+    //
+    // Read every row's position before writing any of them: a read
+    // interleaved with each row's own write-then-read would force one
+    // synchronous reflow per row on a full reshuffle instead of one for the
+    // whole board.
+    for (const child of children) {
       const id = child.dataset["id"] as string;
-      const top = child.getBoundingClientRect().top;
-      now.set(id, top);
-      if (quiet) {
-        continue;
+      now.set(id, child.offsetTop);
+    }
+
+    if (!quiet) {
+      for (const child of children) {
+        const id = child.dataset["id"] as string;
+        const top = now.get(id) as number;
+        const before = was.current.get(id);
+        if (before === undefined || before === top) {
+          continue;
+        }
+        // Back to where it was, with no transition, then forward to where it is.
+        child.style.transition = "none";
+        child.style.transform = `translateY(${before - top}px)`;
       }
-      const before = was.current.get(id);
-      if (before === undefined || before === top) {
-        continue;
+      // Read, once for the batch, so the browser takes every jump before any
+      // transition is put back.
+      void element.offsetHeight;
+      for (const child of children) {
+        child.style.transition = "";
+        child.style.transform = "";
       }
-      // Back to where it was, with no transition, then forward to where it is.
-      child.style.transition = "none";
-      child.style.transform = `translateY(${before - top}px)`;
-      // Read, so the browser takes the jump before the transition is put back.
-      void child.offsetHeight;
-      child.style.transition = "";
-      child.style.transform = "";
     }
     was.current = now;
   }, [rows]);

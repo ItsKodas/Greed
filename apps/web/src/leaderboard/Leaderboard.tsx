@@ -101,8 +101,10 @@ function BoardTable({
       {below === null ? null : (
         <>
           {/* The distance said out loud rather than closed up: a board that
-              quietly renumbers you into the last place on the page is lying. */}
-          <p className="board__gap">…{exact(board.total - board.rows.length)} more</p>
+              quietly renumbers you into the last place on the page is lying.
+              `total` is an estimate and can lag `rows.length`, which would
+              otherwise print a negative gap. */}
+          <p className="board__gap">…{exact(Math.max(0, board.total - board.rows.length))} more</p>
           <Row row={below.row} rank={below.rank} mine />
         </>
       )}
@@ -144,14 +146,17 @@ function Row({ row, rank, mine }: { row: BoardRow; rank: number; mine: boolean }
           <small>W–L</small>
         </span>
         <span className="board__figure">
-          <b className={row.stats.chipsWon < 0 ? "board__down" : "board__up"}>
+          <b
+            className={row.stats.chipsWon < 0 ? "board__down" : "board__up"}
+            title={`${row.stats.chipsWon >= 0 ? "+" : ""}${exact(row.stats.chipsWon)} chips`}
+          >
             {row.stats.chipsWon >= 0 ? "+" : ""}
             {compact(row.stats.chipsWon)}
           </b>
           <small>net</small>
         </span>
         <span className="board__figure">
-          <b>{compact(row.stats.chipsStaked)}</b>
+          <b title={`${exact(row.stats.chipsStaked)} chips`}>{compact(row.stats.chipsStaked)}</b>
           <small>staked</small>
         </span>
       </span>

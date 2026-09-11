@@ -19,8 +19,9 @@ type Phase = "loading" | "out" | "in";
  * The top three and your own place, which is the whole of what somebody wants
  * to know without opening the board. Signed out it says so and still links
  * through: a page you cannot see yet is better than a page you never learn is
- * there. While still waiting on the first reply it says nothing at all,
- * rather than guessing "signed out" and taking it back a moment later.
+ * there. While still waiting on the first reply it says only that it is
+ * waiting, rather than guessing "signed out" and taking it back a moment
+ * later, or leaving an empty card under the heading.
  */
 export function Standings() {
   const [board, setBoard] = useState<Board | null>(null);
@@ -60,7 +61,11 @@ export function Standings() {
 
   return (
     <Link className="standings" to="/leaderboard">
-      {phase === "out" ? (
+      {phase === "loading" ? (
+        // Asked, heard nothing back yet: a fact about sign-in the card is not
+        // allowed to guess at, so this is a wait rather than an empty card.
+        <span className="standings__note">Counting.</span>
+      ) : phase === "out" ? (
         <span className="standings__note">Sign in to see who's ahead.</span>
       ) : phase === "in" && board !== null ? (
         <>
@@ -87,7 +92,9 @@ export function Standings() {
           </ol>
           {board.you === null ? null : (
             <p className="standings__you">
-              You are {board.you.rank} of {exact(board.total)}
+              {/* `total` is an estimate and can lag your own exact rank; a
+                  reader's own standing must never be able to say "12 of 8". */}
+              You are {board.you.rank} of {exact(Math.max(board.total, board.you.rank))}
             </p>
           )}
         </>

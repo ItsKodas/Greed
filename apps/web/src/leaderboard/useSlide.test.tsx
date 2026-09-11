@@ -10,11 +10,14 @@ import { useSlide } from "./useSlide.js";
  * it, on the elements it was given, and that it does neither when the reader
  * has asked for less motion.
  */
-function Harness({ ids, reduced }: { ids: string[]; reduced: boolean }) {
+function stubMatchMedia(reduced: boolean) {
   vi.stubGlobal(
     "matchMedia",
     vi.fn(() => ({ matches: reduced, addEventListener() {}, removeEventListener() {} })),
   );
+}
+
+function Harness({ ids }: { ids: string[] }) {
   const ref = useSlide(ids.map((id) => ({ id })));
   return (
     <div ref={ref}>
@@ -27,15 +30,17 @@ function Harness({ ids, reduced }: { ids: string[]; reduced: boolean }) {
 
 describe("sliding a row to its new rank", () => {
   it("moves nothing when nothing has moved", () => {
-    const { container, rerender } = render(<Harness ids={["a", "b"]} reduced={false} />);
-    rerender(<Harness ids={["a", "b"]} reduced={false} />);
+    stubMatchMedia(false);
+    const { container, rerender } = render(<Harness ids={["a", "b"]} />);
+    rerender(<Harness ids={["a", "b"]} />);
     const first = container.querySelector('[data-id="a"]') as HTMLElement;
     expect(first.style.transform === "" || first.style.transform === "none").toBe(true);
   });
 
   it("touches nothing at all when the reader has asked for less motion", () => {
-    const { container, rerender } = render(<Harness ids={["a", "b"]} reduced />);
-    rerender(<Harness ids={["b", "a"]} reduced />);
+    stubMatchMedia(true);
+    const { container, rerender } = render(<Harness ids={["a", "b"]} />);
+    rerender(<Harness ids={["b", "a"]} />);
     const first = container.querySelector('[data-id="a"]') as HTMLElement;
     expect(first.style.transform).toBe("");
   });

@@ -30,9 +30,11 @@ describe("the board's stylesheet", () => {
     expect(off).toMatch(/transition:\s*none/);
   });
 
-  it("lets a wide row reflow rather than pushing the page sideways", () => {
-    // The row is a grid at width and a wrapped card below the breakpoint; what
-    // must never appear is a fixed width or a horizontal scroller on the page.
+  it("declares a narrow-width rule and does not force the board to scroll sideways", () => {
+    // This only checks the sheet's text, not laid-out geometry: it cannot
+    // prove a row never overflows at 375px, only that there is a breakpoint
+    // and no `.board { overflow-x: scroll }` telling it to cope by scrolling.
+    // The actual reflow was checked by hand in a browser at that width.
     expect(css).toContain("@media (max-width:");
     expect(css).not.toMatch(/\.board\s*\{[^}]*overflow-x:\s*scroll/);
   });

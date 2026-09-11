@@ -155,4 +155,67 @@ describe("who's ahead, from the front door", () => {
     expect(screen.queryByText(/sign in/i)).toBeNull();
     expect(screen.getByRole("link").getAttribute("href")).toBe("/leaderboard");
   });
+
+  it("says it is still asking rather than leaving an empty card on the first load", () => {
+    // Same never-resolving fetch as above: this is the state a first load sits
+    // in before anything is known, and it must say something rather than
+    // render an empty bordered box under the "Who's ahead" heading.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
+
+    render(
+      <MemoryRouter>
+        <Standings />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link").textContent?.trim()).not.toBe("");
+  });
+
+  it("cannot say a total smaller than your own rank", async () => {
+    // `total` is estimated and can lag the exact rank computed for `you`; the
+    // reader's own standing must never contradict itself like "12 of 8".
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          sort: "chips",
+          total: 8,
+          rows: [
+            {
+              id: "a",
+              name: "Ada",
+              avatar: null,
+              accentColor: null,
+              chips: 900,
+              stats: { games: 0, wins: 0, chipsWon: 0, chipsStaked: 0 },
+            },
+          ],
+          you: {
+            row: {
+              id: "z",
+              name: "You",
+              avatar: null,
+              accentColor: null,
+              chips: 5,
+              stats: { games: 0, wins: 0, chipsWon: 0, chipsStaked: 0 },
+            },
+            rank: 12,
+          },
+        }),
+      })),
+    );
+
+    const { container } = render(
+      <MemoryRouter>
+        <Standings />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Ada");
+    expect(container.querySelector(".standings__you")?.textContent).toBe("You are 12 of 12");
+  });
 });

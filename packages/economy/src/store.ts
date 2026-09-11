@@ -644,7 +644,11 @@ export class MemoryStore implements Store {
       const apart = leaderValue(b, sort) - leaderValue(a, sort);
       // Id as the tiebreak, so two players on the same figure do not swap
       // places between one poll and the next and make the board animate a
-      // reorder that never happened.
+      // reorder that never happened. This only has to be stable within this
+      // store, not match Mongo's `_id: 1` tiebreak row for row — the design's
+      // Stability clause is about the rank number the two stores agree on,
+      // and a rank is shared by everyone tied on it, so which of them sits
+      // first inside a tie is not a fact either store promises the other.
       return apart !== 0 ? apart : a.id.localeCompare(b.id);
     });
     const mine = you === null ? null : (everyone.find((row) => row.id === you) ?? null);
